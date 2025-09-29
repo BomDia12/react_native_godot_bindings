@@ -1,0 +1,4 @@
+#include "modules/register_module_types.h"
+
+void initialize_react_native_bindings_module(ModuleInitializationLevel p_level);
+void uninitialize_react_native_bindings_module(ModuleInitializationLevel p_level);
