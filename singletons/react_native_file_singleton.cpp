@@ -23,13 +23,9 @@ ReactNativeFileSingleton::ReactNativeFileSingleton() {
 	if (project_settings) {
 
         configured_path = "res://test.txt";
-
-        poll_interval_msec = 500;
 	}
 
 	force_refresh();
-
-	SceneTree::add_idle_callback(_idle_callback);
 }
 
 ReactNativeFileSingleton::~ReactNativeFileSingleton() {
@@ -55,7 +51,6 @@ void ReactNativeFileSingleton::set_monitored_file(const String &p_path) {
 
 	configured_path = p_path;
 	last_modified_time = 0;
-	last_poll_msec = 0;
 
 	_reload_content(true);
 }
@@ -74,42 +69,6 @@ bool ReactNativeFileSingleton::has_file() const {
 
 void ReactNativeFileSingleton::force_refresh() {
 	_reload_content(true);
-}
-
-void ReactNativeFileSingleton::_idle_callback() {
-	if (singleton) {
-		singleton->_poll();
-	}
-}
-
-void ReactNativeFileSingleton::_poll() {
-	if (configured_path.is_empty()) {
-		return;
-	}
-
-	OS *os = OS::get_singleton();
-	uint64_t now = os ? os->get_ticks_msec() : 0;
-	if (poll_interval_msec > 0 && now > 0 && last_poll_msec > 0) {
-		uint64_t elapsed = now - last_poll_msec;
-		if (elapsed < poll_interval_msec) {
-			return;
-		}
-	}
-	last_poll_msec = now;
-
-	bool exists = FileAccess::exists(configured_path);
-	uint64_t modified_time = exists ? FileAccess::get_modified_time(configured_path) : 0;
-
-	if (!exists) {
-		if (file_exists || !cached_content.is_empty()) {
-			_reload_content(false);
-		}
-		return;
-	}
-
-	if (!file_exists || modified_time != last_modified_time) {
-		_reload_content(false);
-	}
 }
 
 Error ReactNativeFileSingleton::_reload_content(bool p_force_emit) {

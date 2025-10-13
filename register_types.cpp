@@ -3,6 +3,10 @@
 #include "base_node/base_node.h"
 #include "singletons/react_native_file_singleton.h"
 
+#ifdef TOOLS_ENABLED
+#include "editor/react_native_file_editor_plugin.h"
+#endif
+
 #include "core/config/engine.h"
 #include "core/error/error_macros.h"
 #include "core/object/class_db.h"
@@ -20,7 +24,14 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 
         return;
     }
-    
+
+#ifdef TOOLS_ENABLED
+    if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
+        EditorPlugins::add_by_type<ReactNativeFileEditorPlugin>();
+        return;
+    }
+#endif
+
     return;
 }
 

@@ -16,12 +16,7 @@ class ReactNativeFileSingleton : public Object {
 	String cached_content;
 	uint64_t last_modified_time = 0;
 	bool file_exists = false;
-	uint64_t last_poll_msec = 0;
-	uint64_t poll_interval_msec = 500;
 
-	static void _idle_callback();
-
-	void _poll();
 	Error _reload_content(bool p_force_emit);
 	void _emit_change();
 
