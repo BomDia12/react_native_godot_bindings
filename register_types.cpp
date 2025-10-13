@@ -1,29 +1,35 @@
 #include "register_types.h"
 
-#include "core/object/class_db.h"
 #include "base_node/base_node.h"
-#include "editor/file_watcher.h"
+#include "singletons/react_native_file_singleton.h"
 
-static FileWatcher * file_watcher = nullptr;
+#include "core/config/engine.h"
+#include "core/error/error_macros.h"
+#include "core/object/class_db.h"
+
+static ReactNativeFileSingleton *react_native_file_singleton = nullptr;
 
 void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
     if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
         ClassDB::register_class<BaseNode>();
-        return;
-    }
+        ClassDB::register_class<ReactNativeFileSingleton>();
 
-    if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
-        file_watcher = memnew(FileWatcher);
-        #ifdef TOOLS_ENABLED
-            EditorPlugins::add_by_type<FileWatcher>(file_watcher);
-        #endif
+        ERR_FAIL_COND(react_native_file_singleton != nullptr);
+        react_native_file_singleton = memnew(ReactNativeFileSingleton);
+        Engine::get_singleton()->add_singleton(Engine::Singleton("ReactNativeFileSingleton", ReactNativeFileSingleton::get_singleton(), "ReactNativeFileSingleton"));
+
         return;
     }
+    
+    return;
 }
 
 void uninitialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
-    if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR && file_watcher) {
-        memdelete(file_watcher);
-        file_watcher = nullptr;
+    if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+        if (react_native_file_singleton) {
+            Engine::get_singleton()->remove_singleton("ReactNativeFileSingleton");
+            memdelete(react_native_file_singleton);
+            react_native_file_singleton = nullptr;
+        }
     }
 }

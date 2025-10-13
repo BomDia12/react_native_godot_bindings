@@ -1,11 +1,31 @@
 #include "base_node.h"
 
+#include "../singletons/react_native_file_singleton.h"
+
 BaseNode::BaseNode() {
 	label_text = "Bom Dia";
 
 	label = memnew(Label);
 	label->set_text(label_text);
 	add_child(label);
+
+	ReactNativeFileSingleton *file_singleton = ReactNativeFileSingleton::get_singleton();
+	if (file_singleton) {
+		if (!file_singleton->is_connected("react_native_file_changed", callable_mp(this, &BaseNode::_on_watched_file_changed))) {
+			file_singleton->connect("react_native_file_changed", callable_mp(this, &BaseNode::_on_watched_file_changed));
+		}
+
+		if (file_singleton->has_file()) {
+			set_label_text(file_singleton->get_file_content());
+		}
+	}
+}
+
+BaseNode::~BaseNode() {
+	ReactNativeFileSingleton *file_singleton = ReactNativeFileSingleton::get_singleton();
+	if (file_singleton && file_singleton->is_connected("react_native_file_changed", callable_mp(this, &BaseNode::_on_watched_file_changed))) {
+		file_singleton->disconnect("react_native_file_changed", callable_mp(this, &BaseNode::_on_watched_file_changed));
+	}
 }
 
 void BaseNode::_bind_methods() {
@@ -22,4 +42,14 @@ String BaseNode::get_label_text() const {
 void BaseNode::set_label_text(const String &p_text) {
 	label_text = p_text;
 	label->set_text(label_text);
+}
+
+void BaseNode::_on_watched_file_changed(const String &p_path, const String &p_content, bool p_exists) {
+	(void)p_path;
+
+	if (!p_exists) {
+		return;
+	}
+
+	set_label_text(p_content);
 }
