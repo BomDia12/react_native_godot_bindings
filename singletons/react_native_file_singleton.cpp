@@ -21,7 +21,6 @@ ReactNativeFileSingleton::ReactNativeFileSingleton() {
 
 	ProjectSettings *project_settings = ProjectSettings::get_singleton();
 	if (project_settings) {
-
         configured_path = "res://test.txt";
 	}
 

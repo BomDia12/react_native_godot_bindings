@@ -3,10 +3,8 @@
 #include "../singletons/react_native_file_singleton.h"
 
 BaseNode::BaseNode() {
-	label_text = "Bom Dia";
-
 	label = memnew(Label);
-	label->set_text(label_text);
+	label->set_text("Bom dia");
 	add_child(label);
 
 	ReactNativeFileSingleton *file_singleton = ReactNativeFileSingleton::get_singleton();
@@ -19,6 +17,8 @@ BaseNode::BaseNode() {
 			set_label_text(file_singleton->get_file_content());
 		}
 	}
+
+	hermes_runtime_singleton = HermesRuntimeSingleton::get_singleton();
 }
 
 BaseNode::~BaseNode() {
@@ -41,13 +41,25 @@ String BaseNode::get_label_text() const {
 
 void BaseNode::set_label_text(const String &p_text) {
 	label_text = p_text;
-	label->set_text(label_text);
+	if (p_text.is_empty()) {
+		label->set_text("Bom Dia");
+		return;
+	}
+	Variant res = hermes_runtime_singleton->evaluate(p_text);
+	if (res.get_type() != Variant::STRING) {
+		res = p_text;
+	}
+	label->set_text(res);
 }
 
 void BaseNode::_on_watched_file_changed(const String &p_path, const String &p_content, bool p_exists) {
 	(void)p_path;
 
 	if (!p_exists) {
+		return;
+	}
+
+	if (p_content.is_empty()) {
 		return;
 	}
 

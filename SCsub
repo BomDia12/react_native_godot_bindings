@@ -1,4 +1,51 @@
-Import('env')
+#!/usr/bin/env python
+from misc.utility.scons_hints import *
+from SCons.Script import Copy, Default
 
-env.add_source_files(env.modules_sources, "**/*.cpp") # Add all cpp files to the build
-env.add_source_files(env.modules_sources, "*.cpp") # Add all cpp files to the build
+Import("env")
+Import("env_modules")
+
+import os
+
+env_rn = env_modules.Clone()
+
+hermes_api_dir = env.Dir("#/modules/react_native_bindings/engines/hermes/API").abspath
+hermes_jsi_dir = env.Dir("#/modules/react_native_bindings/engines/hermes/API/jsi").abspath
+hermes_public_dir = env.Dir("#/modules/react_native_bindings/engines/hermes/public").abspath
+hermes_include_dir = env.Dir("#/modules/react_native_bindings/engines/hermes/include").abspath
+hermes_lib_dir = env.Dir("#/modules/react_native_bindings/engines/build_release/lib").abspath
+hermes_jsi_lib_dir = env.Dir("#/modules/react_native_bindings/engines/build_release/jsi").abspath
+hermes_lib = os.path.join(hermes_lib_dir, "libhermesvm.so")
+
+if not os.path.exists(hermes_lib):
+	print("Warning: Hermes runtime library not found at %s" % hermes_lib)
+
+env_rn.Prepend(CPPPATH=[
+	hermes_api_dir,
+	hermes_jsi_dir,
+	hermes_public_dir,
+	hermes_include_dir,
+])
+
+env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
+env.AppendUnique(LIBS=["hermesvm", "jsi"])
+env.AppendUnique(LINKFLAGS=["-Wl,-rpath,\\$$ORIGIN"])
+
+env_rn.Append(CXXFLAGS=["-fexceptions"], CCFLAGS=["-fexceptions"])
+
+env_rn.add_source_files(env.modules_sources, "*.cpp")
+env_rn.add_source_files(env.modules_sources, "**/*.cpp")
+
+shared_libs = [hermes_lib, os.path.join(hermes_jsi_lib_dir, "libjsi.so")]
+bin_dir = env.Dir("#bin").abspath
+copy_targets = []
+
+for lib_path in shared_libs:
+	if os.path.exists(lib_path):
+		target_path = os.path.join(bin_dir, os.path.basename(lib_path))
+		target_node = env.Command(target_path, lib_path, Copy("$TARGET", "$SOURCE"))
+		env.AlwaysBuild(target_node)
+		copy_targets.append(target_node)
+
+if copy_targets:
+	Default(copy_targets)
