@@ -7,7 +7,6 @@
 class BaseNode : public Control {
     GDCLASS(BaseNode, Control);
 
-    String label_text;
     Label * label;
     HermesRuntimeSingleton *hermes_runtime_singleton = nullptr;
 

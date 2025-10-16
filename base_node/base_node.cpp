@@ -36,11 +36,10 @@ void BaseNode::_bind_methods() {
 }
 
 String BaseNode::get_label_text() const {
-	return label_text;
+	return label->get_text();
 }
 
 void BaseNode::set_label_text(const String &p_text) {
-	label_text = p_text;
 	if (p_text.is_empty()) {
 		label->set_text("Bom Dia");
 		return;
