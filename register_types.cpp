@@ -16,34 +16,38 @@ static ReactNativeFileSingleton *react_native_file_singleton = nullptr;
 static HermesRuntimeSingleton *hermes_runtime_singleton = nullptr;
 
 void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
-    if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
-        ClassDB::register_class<BaseNode>();
-        ClassDB::register_class<ReactNativeFileSingleton>();
+    if (p_level == MODULE_INITIALIZATION_LEVEL_CORE) {
         ClassDB::register_class<HermesRuntimeSingleton>();
-
-        ERR_FAIL_COND(react_native_file_singleton != nullptr);
-        react_native_file_singleton = memnew(ReactNativeFileSingleton);
-        Engine::get_singleton()->add_singleton(Engine::Singleton("ReactNativeFileSingleton", ReactNativeFileSingleton::get_singleton(), "ReactNativeFileSingleton"));
+        ClassDB::register_class<ReactNativeFileSingleton>();
 
         ERR_FAIL_COND(hermes_runtime_singleton != nullptr);
         hermes_runtime_singleton = memnew(HermesRuntimeSingleton);
         Engine::get_singleton()->add_singleton(Engine::Singleton("HermesRuntime", HermesRuntimeSingleton::get_singleton(), "HermesRuntimeSingleton"));
 
+        ERR_FAIL_COND(react_native_file_singleton != nullptr);
+        react_native_file_singleton = memnew(ReactNativeFileSingleton);
+        Engine::get_singleton()->add_singleton(Engine::Singleton("ReactNativeFileSingleton", ReactNativeFileSingleton::get_singleton(), "ReactNativeFileSingleton"));
         return;
     }
 
-#ifdef TOOLS_ENABLED
-    if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
-        EditorPlugins::add_by_type<ReactNativeFileEditorPlugin>();
+    if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+        ClassDB::register_class<BaseNode>();
+
         return;
     }
-#endif
+
+    #ifdef TOOLS_ENABLED
+        if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
+            EditorPlugins::add_by_type<ReactNativeFileEditorPlugin>();
+            return;
+        }
+    #endif
 
     return;
 }
 
 void uninitialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
-    if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+    if (p_level == MODULE_INITIALIZATION_LEVEL_CORE) {
         if (hermes_runtime_singleton) {
             Engine::get_singleton()->remove_singleton("HermesRuntime");
             memdelete(hermes_runtime_singleton);

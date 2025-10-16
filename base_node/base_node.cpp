@@ -17,8 +17,6 @@ BaseNode::BaseNode() {
 			set_label_text(file_singleton->get_file_content());
 		}
 	}
-
-	hermes_runtime_singleton = HermesRuntimeSingleton::get_singleton();
 }
 
 BaseNode::~BaseNode() {
@@ -44,7 +42,7 @@ void BaseNode::set_label_text(const String &p_text) {
 		label->set_text("Bom Dia");
 		return;
 	}
-	Variant res = hermes_runtime_singleton->evaluate(p_text);
+	Variant res = HermesRuntimeSingleton::get_singleton()->evaluate(p_text);
 	if (res.get_type() != Variant::STRING) {
 		res = p_text;
 	}
