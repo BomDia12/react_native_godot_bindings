@@ -3,10 +3,8 @@
 #include "../singletons/react_native_file_singleton.h"
 
 BaseNode::BaseNode() {
-	label_text = "Bom Dia";
-
 	label = memnew(Label);
-	label->set_text(label_text);
+	label->set_text("Bom dia");
 	add_child(label);
 
 	ReactNativeFileSingleton *file_singleton = ReactNativeFileSingleton::get_singleton();
@@ -36,12 +34,11 @@ void BaseNode::_bind_methods() {
 }
 
 String BaseNode::get_label_text() const {
-	return label_text;
+	return label->get_text();
 }
 
 void BaseNode::set_label_text(const String &p_text) {
-	label_text = p_text;
-	label->set_text(label_text);
+	label->set_text(p_text);
 }
 
 void BaseNode::_on_watched_file_changed(const String &p_path, const String &p_content, bool p_exists) {
