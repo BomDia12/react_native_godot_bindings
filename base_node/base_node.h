@@ -2,6 +2,7 @@
 
 #include "scene/gui/control.h"
 #include "scene/gui/label.h"
+#include "../singletons/hermes_runtime_singleton.h"
 
 class BaseNode : public Control {
     GDCLASS(BaseNode, Control);

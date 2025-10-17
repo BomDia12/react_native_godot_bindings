@@ -38,13 +38,25 @@ String BaseNode::get_label_text() const {
 }
 
 void BaseNode::set_label_text(const String &p_text) {
-	label->set_text(p_text);
+	if (p_text.is_empty()) {
+		label->set_text("Bom Dia");
+		return;
+	}
+	Variant res = HermesRuntimeSingleton::get_singleton()->evaluate(p_text);
+	if (res.get_type() != Variant::STRING) {
+		res = HermesRuntimeSingleton::get_singleton()->get_last_error();
+	}
+	label->set_text(res);
 }
 
 void BaseNode::_on_watched_file_changed(const String &p_path, const String &p_content, bool p_exists) {
 	(void)p_path;
 
 	if (!p_exists) {
+		return;
+	}
+
+	if (p_content.is_empty()) {
 		return;
 	}
 
