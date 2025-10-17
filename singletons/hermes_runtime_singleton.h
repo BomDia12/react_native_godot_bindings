@@ -5,6 +5,7 @@
 #include "core/string/ustring.h"
 #include "core/variant/array.h"
 #include "core/variant/dictionary.h"
+#include "core/variant/callable.h"
 #include "core/variant/variant.h"
 
 #include <memory>
@@ -33,6 +34,7 @@ class HermesRuntimeSingleton : public Object {
 	std::unique_ptr<facebook::hermes::HermesRuntime> runtime;
 	mutable std::mutex runtime_mutex;
 	String last_error;
+	Callable import_resolver;
 
 	Variant evaluate_locked(const String &code, const String &source);
 	Variant call_function_locked(const String &function_name, const Array &args);
@@ -42,6 +44,9 @@ class HermesRuntimeSingleton : public Object {
 	Variant object_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Object &object, int depth);
 	facebook::jsi::Value variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &value, int depth);
 	void ensure_runtime_locked();
+	void install_import_function_locked();
+	facebook::jsi::Value handle_import_module(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
+ 	Variant filesystem_import_resolver(const String &path);
 
 protected:
 	static void _bind_methods();
@@ -59,4 +64,7 @@ public:
 	void reset();
 	bool is_ready() const;
 	String get_last_error() const;
+	void set_import_resolver(const Callable &resolver);
+	Callable get_import_resolver() const;
+ 	void use_filesystem_import_resolver();
 };

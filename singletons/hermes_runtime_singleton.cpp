@@ -1,7 +1,10 @@
 #include "hermes_runtime_singleton.h"
 
 #include "core/error/error_macros.h"
+#include "core/io/file_access.h"
+#include "core/object/callable_method_pointer.h"
 #include "core/string/print_string.h"
+#include "core/string/string_name.h"
 
 #include <hermes/hermes.h>
 #include <jsi/jsi.h>
@@ -23,6 +26,7 @@ namespace {
 		const CharString utf8 = p_value.utf8();
 		return std::string(utf8.get_data(), utf8.length());
 	}
+	static constexpr const char *IMPORT_FUNCTION_NAME = "importModule";
 }
 
 HermesRuntimeSingleton::HermesRuntimeSingleton() {
@@ -31,6 +35,8 @@ HermesRuntimeSingleton::HermesRuntimeSingleton() {
 
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	runtime = makeHermesRuntime();
+	import_resolver = callable_mp(this, &HermesRuntimeSingleton::filesystem_import_resolver);
+	install_import_function_locked();
 }
 
 HermesRuntimeSingleton::~HermesRuntimeSingleton() {
@@ -53,6 +59,9 @@ void HermesRuntimeSingleton::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("reset"), &HermesRuntimeSingleton::reset);
 	ClassDB::bind_method(D_METHOD("is_ready"), &HermesRuntimeSingleton::is_ready);
 	ClassDB::bind_method(D_METHOD("get_last_error"), &HermesRuntimeSingleton::get_last_error);
+	ClassDB::bind_method(D_METHOD("set_import_resolver", "resolver"), &HermesRuntimeSingleton::set_import_resolver);
+	ClassDB::bind_method(D_METHOD("get_import_resolver"), &HermesRuntimeSingleton::get_import_resolver);
+	ClassDB::bind_method(D_METHOD("use_filesystem_import_resolver"), &HermesRuntimeSingleton::use_filesystem_import_resolver);
 }
 
 Variant HermesRuntimeSingleton::evaluate(const String &p_code, const String &p_source) {
@@ -95,6 +104,10 @@ String HermesRuntimeSingleton::get_last_error() const {
 void HermesRuntimeSingleton::ensure_runtime_locked() {
 	if (!runtime) {
 		runtime = makeHermesRuntime();
+		if (import_resolver.is_null()) {
+			import_resolver = callable_mp(this, &HermesRuntimeSingleton::filesystem_import_resolver);
+		}
+		install_import_function_locked();
 	}
 }
 
@@ -113,8 +126,7 @@ Variant HermesRuntimeSingleton::evaluate_locked(const String &p_code, const Stri
 	facebook::jsi::Runtime &rt = *runtime;
 
 	try {
-		auto prepared = runtime->prepareJavaScript(buffer, source_utf8);
-		facebook::jsi::Value result = runtime->evaluatePreparedJavaScript(prepared);
+		facebook::jsi::Value result = runtime->evaluateJavaScript(buffer, source_utf8);
 		return jsi_value_to_variant(rt, result, 0);
 	} catch (const facebook::jsi::JSIException &p_error) {
 		last_error = _string_from_utf8(std::string(p_error.what()));
@@ -341,4 +353,136 @@ facebook::jsi::Value HermesRuntimeSingleton::variant_to_jsi(facebook::jsi::Runti
 			return facebook::jsi::Value(rt, js_str);
 		}
 	}
+}
+
+void HermesRuntimeSingleton::install_import_function_locked() {
+	if (!runtime) {
+		return;
+	}
+
+	facebook::jsi::Runtime &rt = *runtime;
+	facebook::jsi::Function host_import = facebook::jsi::Function::createFromHostFunction(
+			rt,
+			facebook::jsi::PropNameID::forAscii(rt, IMPORT_FUNCTION_NAME),
+			1,
+			[this](facebook::jsi::Runtime &rt_inner, const facebook::jsi::Value &, const facebook::jsi::Value *args, size_t argc) -> facebook::jsi::Value {
+				return handle_import_module(rt_inner, args, argc);
+			});
+
+	facebook::jsi::Object global = runtime->global();
+	global.setProperty(rt, IMPORT_FUNCTION_NAME, std::move(host_import));
+}
+
+facebook::jsi::Value HermesRuntimeSingleton::handle_import_module(facebook::jsi::Runtime &rt, const facebook::jsi::Value *p_args, size_t p_argc) {
+	if (!import_resolver.is_valid()) {
+		throw facebook::jsi::JSError(rt, std::string("HermesRuntime: import resolver is not set."));
+	}
+
+	if (p_argc < 1 || p_args == nullptr || !p_args[0].isString()) {
+		throw facebook::jsi::JSError(rt, std::string("HermesRuntime: importModule expects a module specifier string."));
+	}
+
+	String module_specifier = _string_from_utf8(p_args[0].getString(rt).utf8(rt));
+	Variant spec_variant = module_specifier;
+	const Variant *call_args[1] = { &spec_variant };
+	Callable::CallError call_error;
+	Variant resolver_result;
+	import_resolver.callp(call_args, 1, resolver_result, call_error);
+
+	if (call_error.error != Callable::CallError::CALL_OK) {
+		String err_msg = String("HermesRuntime: import resolver failed (error code ") + String::num_int64(call_error.error) + ").";
+		throw facebook::jsi::JSError(rt, _to_utf8(err_msg));
+	}
+
+	String module_code;
+	String module_source_name = module_specifier;
+
+	switch (resolver_result.get_type()) {
+		case Variant::STRING:
+			module_code = resolver_result;
+			break;
+		case Variant::DICTIONARY: {
+			Dictionary dict = resolver_result;
+			if (dict.has(SNAME("error"))) {
+				String err_msg = dict[SNAME("error")];
+				throw facebook::jsi::JSError(rt, _to_utf8(err_msg));
+			}
+			if (dict.has(StringName("code"))) {
+				module_code = dict[StringName("code")];
+			}
+			if (dict.has(StringName("path"))) {
+				module_source_name = dict[StringName("path")];
+			}
+			break;
+		}
+		default:
+			break;
+	}
+
+	if (module_code.is_empty()) {
+		String err_msg = last_error.is_empty() ? String("HermesRuntime: import resolver did not return source code.") : last_error;
+		throw facebook::jsi::JSError(rt, _to_utf8(err_msg));
+	}
+
+	std::string code_utf8 = _to_utf8(module_code);
+	std::string source_utf8 = _to_utf8(module_source_name.is_empty() ? module_specifier : module_source_name);
+	auto buffer = std::make_shared<facebook::jsi::StringBuffer>(code_utf8);
+	last_error = String();
+
+	std::string module_utf8 = _to_utf8(module_specifier);
+	std::string wrapped_source = "(function(){\n" + code_utf8 + "\n})";
+	auto wrapped_buffer = std::make_shared<facebook::jsi::StringBuffer>(wrapped_source);
+
+	facebook::jsi::Value factory_value = rt.evaluateJavaScript(wrapped_buffer, source_utf8);
+	if (!factory_value.isObject() || !factory_value.getObject(rt).isFunction(rt)) {
+		throw facebook::jsi::JSError(rt, std::string("HermesRuntime: module resolver did not provide a callable factory."));
+	}
+
+	facebook::jsi::Function factory = factory_value.getObject(rt).getFunction(rt);
+	facebook::jsi::Object global = rt.global();
+	global.setProperty(rt, module_utf8.c_str(), facebook::jsi::Value(rt, factory));
+
+	return facebook::jsi::Value(rt, factory);
+}
+
+void HermesRuntimeSingleton::set_import_resolver(const Callable &p_resolver) {
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	import_resolver = p_resolver;
+	install_import_function_locked();
+}
+
+Callable HermesRuntimeSingleton::get_import_resolver() const {
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	return import_resolver;
+}
+
+void HermesRuntimeSingleton::use_filesystem_import_resolver() {
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	import_resolver = callable_mp(this, &HermesRuntimeSingleton::filesystem_import_resolver);
+	install_import_function_locked();
+}
+
+Variant HermesRuntimeSingleton::filesystem_import_resolver(const String &p_path) {
+	if (p_path.is_empty()) {
+		last_error = String("HermesRuntime: import path is empty.");
+		Dictionary result;
+		result[SNAME("error")] = last_error;
+		return result;
+	}
+
+	Error err = OK;
+	String code = FileAccess::get_file_as_string(p_path, &err);
+	if (err != OK) {
+		last_error = vformat("HermesRuntime: failed to read module '%s': %s", p_path, err);
+		Dictionary result;
+		result[SNAME("error")] = last_error;
+		result[SNAME("path")] = p_path;
+		return result;
+	}
+
+	last_error = String();
+	Dictionary result;
+	result[SNAME("code")] = code;
+	result[SNAME("path")] = p_path;
+	return result;
 }

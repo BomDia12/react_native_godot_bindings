@@ -44,7 +44,7 @@ void BaseNode::set_label_text(const String &p_text) {
 	}
 	Variant res = HermesRuntimeSingleton::get_singleton()->evaluate(p_text);
 	if (res.get_type() != Variant::STRING) {
-		res = p_text;
+		res = HermesRuntimeSingleton::get_singleton()->get_last_error();
 	}
 	label->set_text(res);
 }
