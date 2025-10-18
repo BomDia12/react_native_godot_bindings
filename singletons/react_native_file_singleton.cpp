@@ -63,6 +63,7 @@ void ReactNativeFileSingleton::remove_file_from_monitor(const String &p_path) {
 			if (monitored_files[i]->processed_result != nullptr) {
 				memdelete(monitored_files[i]->processed_result);
 			}
+			memdelete(monitored_files[i]);
 			monitored_files.remove_at(i);
 			return;
 		}
