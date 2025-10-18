@@ -8,6 +8,8 @@
 
 #include <jsi/jsi.h>
 
+#include "hermes_runtime_singleton.h"
+
 class Object;
 
 namespace facebook {

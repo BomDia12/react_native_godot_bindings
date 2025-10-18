@@ -21,7 +21,7 @@ ReactNativeFileSingleton::ReactNativeFileSingleton() {
 		new file_monitor_data{ "index.js", 0, nullptr }
 	});
 
-	force_refresh();
+	refresh(true);
 }
 
 ReactNativeFileSingleton::~ReactNativeFileSingleton() {
@@ -110,7 +110,9 @@ Error ReactNativeFileSingleton::_update_file_data(file_monitor_data * p_data, bo
 		return ERR_FILE_NOT_FOUND;
 	}
 
-	bool should_update = p_force_emit;
+	uint64_t modified_time = OS::get_singleton()->get_unix_time();
+	bool should_update = p_force_emit || (modified_time > p_data->last_modified_time);
+
 
 	Error err = OK;
 	String raw_file = FileAccess::get_file_as_string(path, &err);
@@ -124,7 +126,23 @@ Error ReactNativeFileSingleton::_update_file_data(file_monitor_data * p_data, bo
 		return err;
 	}
 
+	facebook::jsi::Object result = HermesRuntimeSingleton::get_singleton()->run_file(raw_file, path, err);
+	if (err != OK) {
+		if (p_data->processed_result != nullptr) {
+			memdelete(p_data->processed_result);
+			p_data->processed_result = nullptr;
+		}
+		p_data->last_modified_time = 0;
+		return err;
+	}
 
+	p_data->last_modified_time = modified_time;
+	if (p_data->processed_result != nullptr) {
+		memdelete(p_data->processed_result);
+	}
+	p_data->processed_result = memnew(facebook::jsi::Object(std::move(result)));
+
+	return OK;
 }
 
 bool ReactNativeFileSingleton::file_watched(const String &p_path) const {
