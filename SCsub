@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from misc.utility.scons_hints import *
-from SCons.Script import Copy, Default
+from SCons.Script import Alias, Copy
 
 Import("env")
 Import("env_modules")
@@ -48,4 +48,6 @@ for lib_path in shared_libs:
 		copy_targets.append(target_node)
 
 if copy_targets:
-	Default(copy_targets)
+	Alias("react_native_bindings_runtime", copy_targets)
+	if env["library_type"] == "executable":
+		env.Depends(os.path.join(bin_dir, "godot" + env["PROGSUFFIX"]), copy_targets)
