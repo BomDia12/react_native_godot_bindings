@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "helpers/js_parser.h"
+
 using facebook::hermes::makeHermesRuntime;
 
 HermesRuntimeSingleton *HermesRuntimeSingleton::singleton = nullptr;
@@ -484,5 +486,38 @@ Variant HermesRuntimeSingleton::filesystem_import_resolver(const String &p_path)
 	Dictionary result;
 	result[SNAME("code")] = code;
 	result[SNAME("path")] = p_path;
+	return result;
+}
+
+facebook::jsi::Object HermesRuntimeSingleton::run_file(const String &p_file, const String &p_path, Error &err) {
+	Vector<parsed_block> blocks = parse_code(p_file, err);
+
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	facebook::jsi::Runtime &rt = *runtime;
+	if (err != OK) {
+		return facebook::jsi::Object::create(rt, {});
+	}
+
+	facebook::jsi::Object result = facebook::jsi::Object::create(rt, {});
+	for (parsed_block &block : blocks) {
+		facebook::jsi::Value res;
+		if (block.type == "function") {
+			block.code = "(function" + block.code + ")";
+		} else {
+			block.code = "(" + block.code + ")";
+		}
+		std::shared_ptr<facebook::jsi::Buffer> buffer = std::make_shared<facebook::jsi::StringBuffer>(block.code);
+
+		try {
+			res = runtime->evaluateJavaScript(buffer, _to_utf8(p_path));
+		} catch (const facebook::jsi::JSIException &p_error) {
+			last_error = _string_from_utf8(std::string(p_error.what()));
+			WARN_PRINT(last_error);
+			err = Error::FAILED;
+			return result;
+		}
+		result.setProperty(rt, _to_utf8(block.name).c_str(), res);
+	}
+
 	return result;
 }

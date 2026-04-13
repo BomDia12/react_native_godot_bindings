@@ -1,22 +1,12 @@
 #include "base_node.h"
 
 #include "../singletons/react_native_file_singleton.h"
+#include "../singletons/hermes_runtime_singleton.h"
 
 BaseNode::BaseNode() {
 	label = memnew(Label);
 	label->set_text("Bom dia");
 	add_child(label);
-
-	ReactNativeFileSingleton *file_singleton = ReactNativeFileSingleton::get_singleton();
-	if (file_singleton) {
-		if (!file_singleton->is_connected("react_native_file_changed", callable_mp(this, &BaseNode::_on_watched_file_changed))) {
-			file_singleton->connect("react_native_file_changed", callable_mp(this, &BaseNode::_on_watched_file_changed));
-		}
-
-		if (file_singleton->has_file()) {
-			set_label_text(file_singleton->get_file_content());
-		}
-	}
 }
 
 BaseNode::~BaseNode() {

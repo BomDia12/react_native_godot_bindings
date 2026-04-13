@@ -67,4 +67,5 @@ public:
 	void set_import_resolver(const Callable &resolver);
 	Callable get_import_resolver() const;
  	void use_filesystem_import_resolver();
+	facebook::jsi::Object run_file(const String &p_file, const String &p_path, Error &err);
 };
