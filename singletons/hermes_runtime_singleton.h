@@ -3,6 +3,7 @@
 #include "core/object/class_db.h"
 #include "core/object/object.h"
 #include "core/string/ustring.h"
+#include "core/templates/hash_map.h"
 #include "core/variant/array.h"
 #include "core/variant/dictionary.h"
 #include "core/variant/callable.h"
@@ -20,6 +21,7 @@ namespace facebook {
 		class Runtime;
 		class Value;
 		class Object;
+		class HostObject;
 	} // namespace jsi
 } // namespace facebook
 
@@ -35,6 +37,7 @@ class HermesRuntimeSingleton : public Object {
 	mutable std::mutex runtime_mutex;
 	String last_error;
 	Callable import_resolver;
+	HashMap<String, std::shared_ptr<facebook::jsi::HostObject>> host_objects;
 
 	Variant evaluate_locked(const String &code, const String &source);
 	Variant call_function_locked(const String &function_name, const Array &args);
@@ -45,6 +48,7 @@ class HermesRuntimeSingleton : public Object {
 	facebook::jsi::Value variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &value, int depth);
 	void ensure_runtime_locked();
 	void install_import_function_locked();
+	void install_host_objects_locked();
 	facebook::jsi::Value handle_import_module(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
  	Variant filesystem_import_resolver(const String &path);
 
@@ -67,4 +71,10 @@ public:
 	void set_import_resolver(const Callable &resolver);
 	Callable get_import_resolver() const;
  	void use_filesystem_import_resolver();
+
+	// Registers a jsi::HostObject as a global. The object is retained and reinstalled
+	// automatically on reset(), so callers do not have to reinstall after a reload.
+	// Host functions on it must never call back into this singleton's public API:
+	// they run inside evaluate_locked() with runtime_mutex held and would self-deadlock.
+	void install_host_object(const String &name, std::shared_ptr<facebook::jsi::HostObject> object);
 };

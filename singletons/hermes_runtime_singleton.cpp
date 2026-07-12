@@ -2,7 +2,7 @@
 
 #include "core/error/error_macros.h"
 #include "core/io/file_access.h"
-#include "core/object/callable_method_pointer.h"
+#include "core/object/callable_mp.h"
 #include "core/string/print_string.h"
 #include "core/string/string_name.h"
 
@@ -108,6 +108,45 @@ void HermesRuntimeSingleton::ensure_runtime_locked() {
 			import_resolver = callable_mp(this, &HermesRuntimeSingleton::filesystem_import_resolver);
 		}
 		install_import_function_locked();
+		install_host_objects_locked();
+	}
+}
+
+void HermesRuntimeSingleton::install_host_object(const String &p_name, std::shared_ptr<facebook::jsi::HostObject> p_object) {
+	ERR_FAIL_COND_MSG(p_name.is_empty(), "HermesRuntime: host object name is empty.");
+	ERR_FAIL_COND_MSG(p_object == nullptr, "HermesRuntime: host object is null.");
+
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	host_objects[p_name] = p_object;
+	ensure_runtime_locked();
+
+	facebook::jsi::Runtime &rt = *runtime;
+	try {
+		facebook::jsi::Object js_object = facebook::jsi::Object::createFromHostObject(rt, p_object);
+		rt.global().setProperty(rt, _to_utf8(p_name).c_str(), js_object);
+	} catch (const facebook::jsi::JSIException &p_error) {
+		last_error = _string_from_utf8(std::string(p_error.what()));
+		WARN_PRINT(last_error);
+	}
+}
+
+void HermesRuntimeSingleton::install_host_objects_locked() {
+	if (!runtime) {
+		return;
+	}
+
+	facebook::jsi::Runtime &rt = *runtime;
+	for (const KeyValue<String, std::shared_ptr<facebook::jsi::HostObject>> &entry : host_objects) {
+		if (entry.value == nullptr) {
+			continue;
+		}
+		try {
+			facebook::jsi::Object js_object = facebook::jsi::Object::createFromHostObject(rt, entry.value);
+			rt.global().setProperty(rt, _to_utf8(entry.key).c_str(), js_object);
+		} catch (const facebook::jsi::JSIException &p_error) {
+			last_error = _string_from_utf8(std::string(p_error.what()));
+			WARN_PRINT(last_error);
+		}
 	}
 }
 
