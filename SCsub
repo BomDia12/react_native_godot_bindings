@@ -20,11 +20,14 @@ hermes_lib = os.path.join(hermes_lib_dir, "libhermesvm.so")
 if not os.path.exists(hermes_lib):
 	print("Warning: Hermes runtime library not found at %s" % hermes_lib)
 
+yoga_dir = env.Dir("#/modules/react_native_bindings/thirdparty/yoga").abspath
+
 env_rn.Prepend(CPPPATH=[
 	hermes_api_dir,
 	hermes_jsi_dir,
 	hermes_public_dir,
 	hermes_include_dir,
+	yoga_dir,
 ])
 
 env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
@@ -33,8 +36,32 @@ env.AppendUnique(LINKFLAGS=["-Wl,-rpath,\\$$ORIGIN"])
 
 env_rn.Append(CXXFLAGS=["-fexceptions"], CCFLAGS=["-fexceptions"])
 
+# Module sources. Listed explicitly: SCons' Glob has no recursive "**", so the old
+# "**/*.cpp" only ever matched one directory deep. An explicit list is what keeps
+# engines/hermes out of the build and lets nested sources in. Add new folders here.
 env_rn.add_source_files(env.modules_sources, "*.cpp")
-env_rn.add_source_files(env.modules_sources, "**/*.cpp")
+
+module_source_dirs = [
+	"base_node",
+	"editor",
+	"fabric",
+	"root_view",
+	"singletons",
+]
+
+for subdir in module_source_dirs:
+	env_rn.add_source_files(env.modules_sources, "%s/*.cpp" % subdir)
+
+# Yoga (vendored from react-native/ReactCommon/yoga). Built in its own cloned env so
+# its warnings stay out of the module build. Header-only: style/, enums/, numeric/.
+env_yoga = env_modules.Clone()
+env_yoga.disable_warnings()
+env_yoga.Prepend(CPPPATH=[yoga_dir])
+env_yoga.Append(CXXFLAGS=["-fexceptions", "-std=c++20"], CCFLAGS=["-fexceptions"])
+env_yoga.add_source_files(env.modules_sources, "thirdparty/yoga/yoga/*.cpp")
+
+for subdir in ["algorithm", "config", "debug", "event", "node"]:
+	env_yoga.add_source_files(env.modules_sources, "thirdparty/yoga/yoga/%s/*.cpp" % subdir)
 
 shared_libs = [hermes_lib, os.path.join(hermes_jsi_lib_dir, "libjsi.so")]
 bin_dir = env.Dir("#bin").abspath

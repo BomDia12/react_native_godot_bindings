@@ -2,6 +2,8 @@
 
 #include "../singletons/react_native_file_singleton.h"
 
+#include "core/object/callable_mp.h"
+
 BaseNode::BaseNode() {
 	label = memnew(Label);
 	label->set_text("Bom dia");
