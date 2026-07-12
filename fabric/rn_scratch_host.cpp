@@ -50,8 +50,7 @@ namespace {
 	}
 } //namespace
 
-RNScratchHost::RNScratchHost(ObjectID p_root_view_id) :
-		root_view_id(p_root_view_id) {
+RNScratchHost::RNScratchHost(ObjectID p_root_view_id) : root_view_id(p_root_view_id) {
 }
 
 void RNScratchHost::reset_state() {
