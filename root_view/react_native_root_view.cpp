@@ -1,6 +1,7 @@
 #include "react_native_root_view.h"
 
-#include "../fabric/rn_scratch_host.h"
+#include "../fabric/fabric_ui_manager.h"
+#include "../fabric/rn_layout.h"
 #include "../singletons/hermes_runtime_singleton.h"
 #include "../singletons/react_native_file_singleton.h"
 
@@ -21,13 +22,13 @@ ReactNativeRootView::~ReactNativeRootView() {
 		file_singleton->disconnect("react_native_file_changed", callable_mp(this, &ReactNativeRootView::_on_react_native_file_changed));
 	}
 
-	// The host object outlives this node inside the runtime; make sure nothing it holds
+	// The UI manager outlives this node inside the runtime; make sure nothing it holds
 	// can reach a freed node.
 	registry.clear();
 }
 
 void ReactNativeRootView::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("mount_scratch_tree", "tree"), &ReactNativeRootView::mount_scratch_tree);
+	ClassDB::bind_method(D_METHOD("mount", "tree"), &ReactNativeRootView::mount);
 	ClassDB::bind_method(D_METHOD("get_root_tag"), &ReactNativeRootView::get_root_tag);
 }
 
@@ -35,6 +36,13 @@ void ReactNativeRootView::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_READY: {
 			_boot();
+		} break;
+
+		case NOTIFICATION_RESIZED: {
+			// Flexbox depends on the available size, so a resize is a relayout.
+			if (committed_tree.is_valid()) {
+				_layout_and_mount();
+			}
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
@@ -52,8 +60,8 @@ void ReactNativeRootView::_boot() {
 	ERR_FAIL_NULL_MSG(hermes, "ReactNativeRootView: HermesRuntime singleton is missing.");
 
 	root_tag = registry.allocate_tag();
-	scratch_host = std::make_shared<RNScratchHost>(get_instance_id());
-	hermes->install_host_object(RNScratchHost::GLOBAL_NAME, scratch_host);
+	ui_manager = std::make_shared<FabricUIManager>(get_instance_id());
+	hermes->install_host_object(FabricUIManager::GLOBAL_NAME, ui_manager);
 	booted = true;
 
 	ReactNativeFileSingleton *file_singleton = ReactNativeFileSingleton::get_singleton();
@@ -71,16 +79,13 @@ void ReactNativeRootView::_reload_from_source(const String &p_source) {
 	ERR_FAIL_NULL(hermes);
 
 	// A full reset is simpler than an incremental reload and leaves no stale host
-	// functions behind. install_host_object() reinstalls the scratch host for us.
+	// functions behind. install_host_object() reinstalls the UI manager for us.
 	hermes->reset();
-	if (scratch_host) {
-		scratch_host->reset_state();
-	}
 	registry.clear();
+	committed_tree.unref();
 	_clear_children();
-	root_tag = registry.allocate_tag();
 
-	hermes->evaluate(String::utf8(RNScratchHost::JS_SHIM), "godot://scratch_shim.js");
+	hermes->set_global("__godotRootTag", root_tag);
 	hermes->evaluate(p_source, "godot://bundle.js");
 
 	const String error = hermes->get_last_error();
@@ -107,47 +112,41 @@ void ReactNativeRootView::_on_react_native_file_changed(const String &p_path, co
 	_reload_from_source(p_content);
 }
 
-String ReactNativeRootView::_collect_text(const Dictionary &p_node) {
-	String result;
-
-	const String view_name = p_node.get("viewName", String());
-	if (view_name == "RCTRawText") {
-		result += String(p_node.get("text", String()));
-	}
-
-	const Array children = p_node.get("children", Array());
-	for (int i = 0; i < children.size(); ++i) {
-		result += _collect_text(children[i]);
-	}
-
-	return result;
+void ReactNativeRootView::mount(const Ref<RNShadowNode> &p_tree) {
+	committed_tree = p_tree;
+	_layout_and_mount();
 }
 
-void ReactNativeRootView::_build_node(const Dictionary &p_node, float &r_offset_y) {
-	const String view_name = p_node.get("viewName", String());
-
-	if (view_name == "RCTText") {
-		Label *label = memnew(Label);
-		label->set_text(_collect_text(p_node));
-		label->set_position(Vector2(0, r_offset_y));
-		add_child(label);
-
-		// Yoga owns positioning from Phase 4 on; this stacking is a placeholder.
-		r_offset_y += label->get_minimum_size().y;
-
-		registry.register_node(p_node.get("tag", 0), label);
+void ReactNativeRootView::_layout_and_mount() {
+	if (committed_tree.is_null()) {
 		return;
 	}
 
-	const Array children = p_node.get("children", Array());
-	for (int i = 0; i < children.size(); ++i) {
-		_build_node(children[i], r_offset_y);
-	}
+	RNLayout::calculate(committed_tree, get_size());
+
+	// Rebuild rather than diff. Correctness first: incremental reconciliation is a
+	// later slice and is invisible at this scale.
+	registry.clear();
+	_clear_children();
+	_build_children(committed_tree);
 }
 
-void ReactNativeRootView::mount_scratch_tree(const Dictionary &p_tree) {
-	_clear_children();
+void ReactNativeRootView::_build_children(const Ref<RNShadowNode> &p_node) {
+	if (p_node.is_null()) {
+		return;
+	}
 
-	float offset_y = 0.0f;
-	_build_node(p_tree, offset_y);
+	if (p_node->view_name == "RCTText") {
+		Label *label = memnew(Label);
+		label->set_text(p_node->collect_text());
+		label->set_position(p_node->layout.position);
+		label->set_size(p_node->layout.size);
+		add_child(label);
+		registry.register_node(p_node->tag, label);
+		return; // Its children are text, folded into the label above.
+	}
+
+	for (const Ref<RNShadowNode> &child : p_node->children) {
+		_build_children(child);
+	}
 }

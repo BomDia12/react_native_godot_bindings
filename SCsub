@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from misc.utility.scons_hints import *
-from SCons.Script import Alias, Copy
+from SCons.Script import Alias, Copy, Requires
 
 Import("env")
 Import("env_modules")
@@ -71,10 +71,9 @@ for lib_path in shared_libs:
 	if os.path.exists(lib_path):
 		target_path = os.path.join(bin_dir, os.path.basename(lib_path))
 		target_node = env.Command(target_path, lib_path, Copy("$TARGET", "$SOURCE"))
-		env.AlwaysBuild(target_node)
 		copy_targets.append(target_node)
 
 if copy_targets:
 	Alias("react_native_bindings_runtime", copy_targets)
 	if env["library_type"] == "executable":
-		env.Depends(os.path.join(bin_dir, "godot" + env["PROGSUFFIX"]), copy_targets)
+		Requires(os.path.join(bin_dir, "godot" + env["PROGSUFFIX"]), copy_targets)
