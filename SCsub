@@ -34,6 +34,9 @@ env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
 env.AppendUnique(LIBS=["hermesvm", "jsi"])
 env.AppendUnique(LINKFLAGS=["-Wl,-rpath,\\$$ORIGIN"])
 
+if env["platform"] == "linuxbsd" and env["library_type"] == "executable":
+	env["LINKCOM"] = env["LINKCOM"].replace("$_LIBFLAGS", "-Wl,--start-group $_LIBFLAGS -Wl,--end-group")
+
 env_rn.Append(CXXFLAGS=["-fexceptions"], CCFLAGS=["-fexceptions"])
 
 # Module sources. Listed explicitly: SCons' Glob has no recursive "**", so the old

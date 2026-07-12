@@ -21,7 +21,7 @@ ReactNativeFileSingleton::ReactNativeFileSingleton() {
 
 	ProjectSettings *project_settings = ProjectSettings::get_singleton();
 	if (project_settings) {
-        configured_path = "res://test.txt";
+		configured_path = GLOBAL_DEF(PropertyInfo(Variant::STRING, "react_native/bundle/path", PROPERTY_HINT_FILE, "*.js,*.txt"), "res://dist/godot.bundle.js");
 	}
 
 	force_refresh();

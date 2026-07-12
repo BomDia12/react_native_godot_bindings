@@ -9,6 +9,11 @@
 #include "core/string/print_string.h"
 #include "scene/gui/label.h"
 
+namespace {
+constexpr const char *RUN_APPLICATION_FUNCTION = "__godotRunApplication";
+constexpr const char *FLUSH_TIMERS_FUNCTION = "__godotFlushTimers";
+} //namespace
+
 ReactNativeRootView::ReactNativeRootView() {
 	ReactNativeFileSingleton *file_singleton = ReactNativeFileSingleton::get_singleton();
 	if (file_singleton && !file_singleton->is_connected("react_native_file_changed", callable_mp(this, &ReactNativeRootView::_on_react_native_file_changed))) {
@@ -36,6 +41,18 @@ void ReactNativeRootView::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_READY: {
 			_boot();
+		} break;
+
+		case NOTIFICATION_PROCESS: {
+			// JS timers are a host facility, not a language one: the bundle queues them
+			// and we drain the queue once per frame. Anything React schedules — effects,
+			// the Promise microtask that follows a render — arrives through here.
+			if (has_timers) {
+				HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton();
+				if (hermes) {
+					hermes->call_function(FLUSH_TIMERS_FUNCTION);
+				}
+			}
 		} break;
 
 		case NOTIFICATION_RESIZED: {
@@ -91,6 +108,23 @@ void ReactNativeRootView::_reload_from_source(const String &p_source) {
 	const String error = hermes->get_last_error();
 	if (!error.is_empty()) {
 		ERR_PRINT("ReactNativeRootView: " + error);
+		return;
+	}
+
+	has_timers = hermes->get_global(FLUSH_TIMERS_FUNCTION).get_type() != Variant::NIL;
+	set_process(has_timers);
+
+	// A React Native bundle registers this and renders nothing until we call it.
+	// Hand-written Fabric scripts do their own commit and never define it.
+	if (hermes->get_global(RUN_APPLICATION_FUNCTION).get_type() != Variant::NIL) {
+		Array args;
+		args.push_back(root_tag);
+		hermes->call_function(RUN_APPLICATION_FUNCTION, args);
+
+		const String run_error = hermes->get_last_error();
+		if (!run_error.is_empty()) {
+			ERR_PRINT("ReactNativeRootView: " + run_error);
+		}
 	}
 }
 

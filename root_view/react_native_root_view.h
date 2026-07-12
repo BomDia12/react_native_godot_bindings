@@ -19,6 +19,7 @@ class ReactNativeRootView : public Control {
 	std::shared_ptr<FabricUIManager> ui_manager;
 	Ref<RNShadowNode> committed_tree;
 	bool booted = false;
+	bool has_timers = false;
 
 	void _boot();
 	void _reload_from_source(const String &p_source);
