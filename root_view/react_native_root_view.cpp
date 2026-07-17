@@ -2,12 +2,14 @@
 
 #include "../fabric/fabric_ui_manager.h"
 #include "../fabric/rn_layout.h"
+#include "../fabric/rn_view_style.h"
 #include "../singletons/hermes_runtime_singleton.h"
 #include "../singletons/react_native_file_singleton.h"
 
 #include "core/object/callable_mp.h"
 #include "core/string/print_string.h"
 #include "scene/gui/label.h"
+#include "scene/gui/panel.h"
 
 namespace {
 constexpr const char *RUN_APPLICATION_FUNCTION = "__godotRunApplication";
@@ -162,25 +164,73 @@ void ReactNativeRootView::_layout_and_mount() {
 	// later slice and is invisible at this scale.
 	registry.clear();
 	_clear_children();
-	_build_children(committed_tree);
+	_build_node(committed_tree, this);
 }
 
-void ReactNativeRootView::_build_children(const Ref<RNShadowNode> &p_node) {
-	if (p_node.is_null()) {
-		return;
+Control *ReactNativeRootView::_build_node(const Ref<RNShadowNode> &p_node, Control *p_parent) {
+	if (p_node.is_null() || p_node->view_name == "RCTRawText") {
+		return nullptr; // Raw text is folded into its owning Label; a stray one is defensive.
+	}
+
+	// completeRoot's synthetic wrapper. It is not a visual node: mount its children
+	// directly under the surface (p_parent), not under a Control of its own.
+	if (p_node->view_name == "RCTRootView") {
+		for (const Ref<RNShadowNode> &child : p_node->children) {
+			_build_node(child, p_parent);
+		}
+		return nullptr;
 	}
 
 	if (p_node->view_name == "RCTText") {
 		Label *label = memnew(Label);
-		label->set_text(p_node->collect_text());
 		label->set_position(p_node->layout.position);
 		label->set_size(p_node->layout.size);
-		add_child(label);
+		label->set_text(p_node->collect_text());
+
+		float font_size = 0.0f;
+		if (RNViewStyle::font_size_of(p_node->props, font_size)) {
+			label->add_theme_font_size_override("font_size", int(font_size));
+		}
+		Color color;
+		if (RNViewStyle::color_of(p_node->props, "color", color)) {
+			label->add_theme_color_override("font_color", color);
+		}
+		// Opacity affects the whole subtree; a Label has no children, but modulate keeps
+		// it consistent with the View path below.
+		label->set_modulate(Color(1, 1, 1, RNViewStyle::opacity_of(p_node->props)));
+
+		p_parent->add_child(label);
 		registry.register_node(p_node->tag, label);
-		return; // Its children are text, folded into the label above.
+		return label; // Its children are text, folded into the label above.
 	}
 
-	for (const Ref<RNShadowNode> &child : p_node->children) {
-		_build_children(child);
+	// RCTView, and anything else we don't recognize yet. A Panel is a reasonable default
+	// for an unknown host component, but say so — the same "loud stub" convention the
+	// Fabric UI manager uses for unimplemented spec methods. Don't silently invent
+	// semantics for an unknown view by treating it as a plain box without a word.
+	if (p_node->view_name != "RCTView") {
+		WARN_PRINT(vformat("Mounting unrecognized view \"%s\" as a plain View.", p_node->view_name));
 	}
+
+	Panel *panel = memnew(Panel);
+	panel->set_position(p_node->layout.position);
+	panel->set_size(p_node->layout.size);
+	// Unconditional: build_stylebox() returns a transparent box when unstyled, and a bare
+	// Panel would otherwise draw Godot's default gray theme panel. Never early-return
+	// before this line.
+	panel->add_theme_style_override("panel", RNViewStyle::build_stylebox(p_node->props));
+	// set_modulate (not set_self_modulate) so opacity cascades to descendants like RN.
+	panel->set_modulate(Color(1, 1, 1, RNViewStyle::opacity_of(p_node->props)));
+	panel->set_clip_contents(RNViewStyle::clips_contents(p_node->props));
+	// No touch/gesture dispatch exists yet; IGNORE keeps a styled box from silently
+	// eating input. Flip to STOP/PASS in the event-dispatch phase, not before.
+	panel->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
+
+	p_parent->add_child(panel);
+	registry.register_node(p_node->tag, panel);
+
+	for (const Ref<RNShadowNode> &child : p_node->children) {
+		_build_node(child, panel);
+	}
+	return panel;
 }

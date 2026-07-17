@@ -73,6 +73,42 @@ void apply_edge(const Dictionary &p_style, const String &p_prefix, YGNodeRef p_n
 	}
 }
 
+// borderWidth cannot reuse apply_edge: that helper appends its suffix directly to the
+// prefix (forming "borderWidthTop"), but RN emits "borderTopWidth". Yoga must be told
+// about border width so it reserves box-model space like padding, otherwise a bordered
+// container's children overlap the border. Uniform "borderWidth" first so the explicit
+// per-edge keys override it.
+void apply_border_width(const Dictionary &p_style, YGNodeRef p_node) {
+	struct BorderEdge {
+		const char *key;
+		YGEdge edge;
+	};
+
+	static const BorderEdge EDGES[] = {
+		{ "borderWidth", YGEdgeAll },
+		{ "borderTopWidth", YGEdgeTop },
+		{ "borderBottomWidth", YGEdgeBottom },
+		{ "borderLeftWidth", YGEdgeLeft },
+		{ "borderRightWidth", YGEdgeRight },
+	};
+
+	for (const BorderEdge &entry : EDGES) {
+		if (is_number(p_style.get(entry.key, Variant()))) {
+			YGNodeStyleSetBorder(p_node, entry.edge, float(p_style[entry.key]));
+		}
+	}
+}
+
+YGWrap parse_flex_wrap(const String &p_value) {
+	if (p_value == "wrap") {
+		return YGWrapWrap;
+	}
+	if (p_value == "wrap-reverse") {
+		return YGWrapWrapReverse;
+	}
+	return YGWrapNoWrap;
+}
+
 YGFlexDirection parse_flex_direction(const String &p_value) {
 	if (p_value == "row") {
 		return YGFlexDirectionRow;
@@ -128,12 +164,11 @@ YGAlign parse_align(const String &p_value, YGAlign p_default) {
 }
 
 void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
-	const Variant style_variant = p_props.get("style", Variant());
-	if (style_variant.get_type() != Variant::DICTIONARY) {
-		return;
-	}
-
-	const Dictionary style = style_variant;
+	// Fabric delivers a *flat* props payload: RN's attribute processing hoists every
+	// style key (width, backgroundColor, flexDirection, ...) to the top level of props
+	// rather than nesting them under a "style" key. So the props dictionary *is* the
+	// style dictionary.
+	const Dictionary &style = p_props;
 
 	if (style.has("flexDirection")) {
 		YGNodeStyleSetFlexDirection(p_node, parse_flex_direction(style["flexDirection"]));
@@ -147,6 +182,12 @@ void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
 	if (style.has("alignSelf")) {
 		YGNodeStyleSetAlignSelf(p_node, parse_align(style["alignSelf"], YGAlignAuto));
 	}
+	if (style.has("alignContent")) {
+		YGNodeStyleSetAlignContent(p_node, parse_align(style["alignContent"], YGAlignFlexStart));
+	}
+	if (style.has("flexWrap")) {
+		YGNodeStyleSetFlexWrap(p_node, parse_flex_wrap(style["flexWrap"]));
+	}
 
 	if (is_number(style.get("flex", Variant()))) {
 		YGNodeStyleSetFlex(p_node, float(style["flex"]));
@@ -156,6 +197,12 @@ void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
 	}
 	if (is_number(style.get("flexShrink", Variant()))) {
 		YGNodeStyleSetFlexShrink(p_node, float(style["flexShrink"]));
+	}
+	if (style.has("flexBasis")) {
+		apply_dimension(style["flexBasis"], p_node, YGNodeStyleSetFlexBasis, YGNodeStyleSetFlexBasisPercent, YGNodeStyleSetFlexBasisAuto);
+	}
+	if (is_number(style.get("aspectRatio", Variant()))) {
+		YGNodeStyleSetAspectRatio(p_node, float(style["aspectRatio"]));
 	}
 
 	if (style.has("width")) {
@@ -179,6 +226,22 @@ void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
 
 	apply_edge(style, "margin", p_node, YGNodeStyleSetMargin, YGNodeStyleSetMarginPercent);
 	apply_edge(style, "padding", p_node, YGNodeStyleSetPadding, YGNodeStyleSetPaddingPercent);
+	apply_border_width(style, p_node);
+
+	if (is_number(style.get("gap", Variant()))) {
+		YGNodeStyleSetGap(p_node, YGGutterAll, float(style["gap"]));
+	}
+	if (is_number(style.get("rowGap", Variant()))) {
+		YGNodeStyleSetGap(p_node, YGGutterRow, float(style["rowGap"]));
+	}
+	if (is_number(style.get("columnGap", Variant()))) {
+		YGNodeStyleSetGap(p_node, YGGutterColumn, float(style["columnGap"]));
+	}
+
+	if (style.has("display")) {
+		const String display = style["display"];
+		YGNodeStyleSetDisplay(p_node, display == "none" ? YGDisplayNone : YGDisplayFlex);
+	}
 
 	if (style.has("position")) {
 		const String position = style["position"];
@@ -204,12 +267,9 @@ void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
 }
 
 float font_size_of(const Dictionary &p_props) {
-	const Variant style_variant = p_props.get("style", Variant());
-	if (style_variant.get_type() == Variant::DICTIONARY) {
-		const Dictionary style = style_variant;
-		if (is_number(style.get("fontSize", Variant()))) {
-			return float(style["fontSize"]);
-		}
+	// Flat payload: fontSize is a top-level prop (see apply_style).
+	if (is_number(p_props.get("fontSize", Variant()))) {
+		return float(p_props["fontSize"]);
 	}
 	return ThemeDB::get_singleton()->get_fallback_font_size();
 }
@@ -270,18 +330,21 @@ YGNodeRef build_yoga_tree(const Ref<RNShadowNode> &p_node) {
 	return yoga_node;
 }
 
-void write_layout(YGNodeRef p_yoga_node, const Point2 &p_parent_origin) {
+// Stores each node's rect relative to its own Yoga parent (not accumulated to the root):
+// Control::position is parent-relative, so the stored rect matches its one consumer and
+// there is no parent origin left to forget to subtract at mount time.
+void write_layout(YGNodeRef p_yoga_node) {
 	RNShadowNode *shadow = static_cast<RNShadowNode *>(YGNodeGetContext(p_yoga_node));
 
-	const Point2 origin = p_parent_origin + Point2(YGNodeLayoutGetLeft(p_yoga_node), YGNodeLayoutGetTop(p_yoga_node));
-	const Size2 size = Size2(YGNodeLayoutGetWidth(p_yoga_node), YGNodeLayoutGetHeight(p_yoga_node));
+	const Point2 origin(YGNodeLayoutGetLeft(p_yoga_node), YGNodeLayoutGetTop(p_yoga_node));
+	const Size2 size(YGNodeLayoutGetWidth(p_yoga_node), YGNodeLayoutGetHeight(p_yoga_node));
 
 	if (shadow) {
 		shadow->layout = Rect2(origin, size);
 	}
 
 	for (size_t i = 0; i < YGNodeGetChildCount(p_yoga_node); ++i) {
-		write_layout(YGNodeGetChild(p_yoga_node, i), origin);
+		write_layout(YGNodeGetChild(p_yoga_node, i));
 	}
 }
 
@@ -294,6 +357,6 @@ void RNLayout::calculate(const Ref<RNShadowNode> &p_root, const Size2 &p_availab
 
 	YGNodeRef yoga_root = build_yoga_tree(p_root);
 	YGNodeCalculateLayout(yoga_root, float(p_available.width), float(p_available.height), YGDirectionLTR);
-	write_layout(yoga_root, Point2());
+	write_layout(yoga_root);
 	YGNodeFreeRecursive(yoga_root);
 }
