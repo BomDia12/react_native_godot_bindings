@@ -1,0 +1,21 @@
+{
+  "name": "react-native-godot-view-text",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build:godot": "mkdir -p dist && metro build godot.entry.js --config metro.config.godot.js --out dist/godot.bundle.js --platform android --dev false --minify false"
+  },
+  "dependencies": {
+    "react": "19.2.3",
+    "react-native": "0.84.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@react-native/babel-preset": "0.84.1",
+    "@react-native/metro-config": "0.84.1",
+    "metro": "0.83.5"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  }
+}
