@@ -45,7 +45,6 @@ env_rn.Append(CXXFLAGS=["-fexceptions"], CCFLAGS=["-fexceptions"])
 env_rn.add_source_files(env.modules_sources, "*.cpp")
 
 module_source_dirs = [
-	"base_node",
 	"editor",
 	"fabric",
 	"root_view",

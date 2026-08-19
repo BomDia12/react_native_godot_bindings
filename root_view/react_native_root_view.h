@@ -27,7 +27,10 @@ class ReactNativeRootView : public Control {
 	void _on_react_native_file_changed(const String &p_path, const String &p_content, bool p_exists);
 
 	void _layout_and_mount();
-	void _build_children(const Ref<RNShadowNode> &p_node);
+	// Builds a Godot Control for p_node, attaches it under p_parent, and recurses.
+	// Returns the created Control (or nullptr for nodes that mount nothing, e.g. the
+	// synthetic RCTRootView wrapper and stray raw text).
+	Control *_build_node(const Ref<RNShadowNode> &p_node, Control *p_parent);
 
 protected:
 	static void _bind_methods();

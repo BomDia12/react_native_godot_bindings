@@ -21,7 +21,9 @@ public:
 	Dictionary props;
 	Vector<Ref<RNShadowNode>> children;
 
-	// Absolute layout, filled in by RNLayout::calculate(). Not part of the JS contract.
+	// Layout relative to this node's Yoga parent, filled in by RNLayout::calculate().
+	// Matches what Control::set_position() expects from a Godot child. Not part of the
+	// JS contract.
 	Rect2 layout;
 
 	Ref<RNShadowNode> clone(bool p_new_children, const Dictionary *p_new_props) const;

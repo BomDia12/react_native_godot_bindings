@@ -1,6 +1,5 @@
 #include "register_types.h"
 
-#include "base_node/base_node.h"
 #include "fabric/rn_shadow_node.h"
 #include "root_view/react_native_root_view.h"
 #include "singletons/hermes_runtime_singleton.h"
@@ -33,7 +32,6 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
     }
 
     if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
-        ClassDB::register_class<BaseNode>();
         ClassDB::register_class<ReactNativeRootView>();
 
         // Not meant to be instantiated from script: registered so a Ref<RNShadowNode>
