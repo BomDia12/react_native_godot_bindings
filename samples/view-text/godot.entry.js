@@ -1,6 +1,4 @@
-// The preamble is imported here only so it lands in Metro's module graph; Metro
-// drops a getModulesRunBeforeMainModule entry that nothing else pulls in. What
-// actually makes it run *before* InitializeCore is metro.config.godot.js.
+// Metro config schedules this import before InitializeCore.
 import './godot.preamble';
 
 import React from 'react';
@@ -27,10 +25,7 @@ const App = () => (
 
 AppRegistry.registerComponent('GodotApp', () => App);
 
-// ReactNativeRootView calls this after evaluating the bundle, with its root tag.
-// fabric: true is what selects the ReactFabric renderer — the one that talks to
-// global.nativeFabricUIManager. Without it RN falls back to the legacy Paper renderer
-// and calls UIManager.createView, which does not exist here.
+// ReactNativeRootView calls this after evaluating the bundle.
 global.__godotRunApplication = rootTag =>
   AppRegistry.runApplication('GodotApp', {
     rootTag,

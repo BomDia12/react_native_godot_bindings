@@ -1,32 +1,18 @@
-// Runs before any react-native module is evaluated (godot.entry.js imports it first),
-// because RN reads these globals at module-init time.
+// React Native reads these globals during module initialization.
 
-// Bridgeless short-circuits most of RN's native surface before we have to implement it:
-// the batched bridge (setUpBatchedBridge.js), the native Timing module (setUpTimers.js),
-// UIManager (UIManager.js) and Text's hasViewManagerConfig round-trip
-// (TextNativeComponent.js) all become no-ops or JS-only paths.
 global.RN$Bridgeless = true;
 global.RN$useAlwaysAvailableJSErrorHandling = true;
 
-// TurboModuleRegistry imports the legacy BatchedBridge/NativeModules unconditionally,
-// and that module asserts on __fbBatchedBridgeConfig at init even in bridgeless mode.
-// An empty config makes NativeModules an empty object, which is exactly what we want:
-// every lookup then falls through to __turboModuleProxy below.
+// NativeModules requires this object even in bridgeless mode.
 global.__fbBatchedBridgeConfig = {remoteModuleConfig: []};
 
-// In bridgeless mode the native runtime installs this; it is how JS modules make
-// themselves callable from native (AppRegistry, RCTEventEmitter, ...). We keep the
-// registry on the JS side so the native half can reach it once it needs to.
 const CALLABLE_MODULES = {};
 global.RN$registerCallableModule = (name, moduleOrFactory) => {
   CALLABLE_MODULES[name] = moduleOrFactory;
 };
 global.__godotCallableModules = CALLABLE_MODULES;
 
-// Bare Hermes has no timers — they are part of the host, not the language — and
-// bridgeless RN (setUpTimers.js) expects the runtime to have installed them already.
-// This queue is drained once per frame by ReactNativeRootView, which calls
-// __godotFlushTimers from _process.
+// ReactNativeRootView drains this host timer queue once per frame.
 const TIMERS = new Map();
 let nextTimerId = 1;
 
@@ -36,9 +22,7 @@ function schedule(fn, delayMs, repeatMs, args) {
   return id;
 }
 
-// Kept as a direct handle on the queue: RN's setUpTimers replaces global.setImmediate
-// with one that routes through the microtask module, so anything *implementing* that
-// module must not call the global, or it recurses into itself.
+// Keep the original function because React Native replaces global.setImmediate.
 const enqueueImmediate = (fn, ...args) => schedule(fn, 0, null, args);
 
 global.setTimeout = (fn, ms, ...args) => schedule(fn, ms, null, args);
@@ -68,7 +52,6 @@ global.__godotFlushTimers = () => {
   }
 };
 
-// What is left of the native surface is small enough to fake in pure JS. No extra C++.
 const MODULES = {
   PlatformConstants: {
     getConstants: () => ({
@@ -76,8 +59,7 @@ const MODULES = {
       reactNativeVersion: {major: 0, minor: 84, patch: 1},
     }),
   },
-  // Not optional: AppRegistry -> renderApplication wraps the app in AppContainer,
-  // which reads Dimensions. Constants for now; feed it DisplayServer later.
+  // AppContainer reads these values during startup.
   DeviceInfo: {
     getConstants: () => ({
       Dimensions: {
@@ -87,12 +69,7 @@ const MODULES = {
     }),
   },
   SourceCode: {getConstants: () => ({scriptURL: null})},
-  // Hermes has no host microtask queue of its own; the frame queue is close enough
-  // for a static render, and React only needs the callback to eventually run.
   NativeMicrotasksCxx: {queueMicrotask: callback => enqueueImmediate(callback)},
-  // RN's DOM web-APIs (ReactNativeDocument, refs, getBoundingClientRect...). A static
-  // render only needs linkRootNode to hand back *something* for the root; the rest is
-  // reached through refs, which we do not support yet.
   NativeDOMCxx: {
     linkRootNode: rootTag => ({rootTag}),
     getParentNode: () => null,
