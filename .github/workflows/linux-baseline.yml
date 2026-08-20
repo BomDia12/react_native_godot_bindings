@@ -29,9 +29,18 @@ jobs:
           cache-dependency-path: requirements-ci.txt
 
       - name: Install native toolchain
+        timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes ccache cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip
+          APT_OPTIONS=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o Acquire::ForceIPv4=true
+          )
+          sudo apt-get "${APT_OPTIONS[@]}" update
+          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip
           python -m pip install --requirement requirements-ci.txt
 
       - uses: actions/cache@v5
