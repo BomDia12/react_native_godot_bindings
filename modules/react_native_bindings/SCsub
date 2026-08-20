@@ -9,26 +9,31 @@ import os
 
 env_rn = env_modules.Clone()
 
-hermes_api_dir = env.Dir("#/modules/react_native_bindings/engines/hermes/API").abspath
-hermes_jsi_dir = env.Dir("#/modules/react_native_bindings/engines/hermes/API/jsi").abspath
-hermes_public_dir = env.Dir("#/modules/react_native_bindings/engines/hermes/public").abspath
-hermes_include_dir = env.Dir("#/modules/react_native_bindings/engines/hermes/include").abspath
-hermes_lib_dir = env.Dir("#/modules/react_native_bindings/engines/build_release/lib").abspath
-hermes_jsi_lib_dir = env.Dir("#/modules/react_native_bindings/engines/build_release/jsi").abspath
+module_dir = env.Dir(".").srcnode().abspath
+hermes_source_dir = os.path.join(module_dir, "engines", "hermes")
+hermes_build_dir = os.path.join(module_dir, "engines", "build_release")
+hermes_api_dir = os.path.join(hermes_source_dir, "API")
+hermes_jsi_dir = os.path.join(hermes_api_dir, "jsi")
+hermes_public_dir = os.path.join(hermes_source_dir, "public")
+hermes_include_dir = os.path.join(hermes_source_dir, "include")
+hermes_lib_dir = os.path.join(hermes_build_dir, "lib")
+hermes_jsi_lib_dir = os.path.join(hermes_build_dir, "jsi")
 hermes_lib = os.path.join(hermes_lib_dir, "libhermesvm.so")
+hermes_jsi_lib = os.path.join(hermes_jsi_lib_dir, "libjsi.so")
 
-if not os.path.exists(hermes_lib):
-	print("Warning: Hermes runtime library not found at %s" % hermes_lib)
+for required_path in [hermes_api_dir, hermes_include_dir, hermes_lib, hermes_jsi_lib]:
+	if not os.path.exists(required_path):
+		raise RuntimeError(
+			"Hermes dependency not found at %s. Run scripts/build_hermes.sh from the binding repository root."
+			% required_path
+		)
 
-yoga_dir = env.Dir("#/modules/react_native_bindings/thirdparty/yoga").abspath
+yoga_dir = os.path.join(module_dir, "thirdparty", "yoga")
 
-env_rn.Prepend(CPPPATH=[
-	hermes_api_dir,
-	hermes_jsi_dir,
-	hermes_public_dir,
-	hermes_include_dir,
-	yoga_dir,
-])
+env_rn.Prepend(CPPPATH=[yoga_dir])
+env_rn.Append(
+	CXXFLAGS=["-isystem%s" % path for path in [hermes_api_dir, hermes_jsi_dir, hermes_public_dir, hermes_include_dir]]
+)
 
 env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
 env.AppendUnique(LIBS=["hermesvm", "jsi"])
@@ -65,17 +70,15 @@ env_yoga.add_source_files(env.modules_sources, "thirdparty/yoga/yoga/*.cpp")
 for subdir in ["algorithm", "config", "debug", "event", "node"]:
 	env_yoga.add_source_files(env.modules_sources, "thirdparty/yoga/yoga/%s/*.cpp" % subdir)
 
-shared_libs = [hermes_lib, os.path.join(hermes_jsi_lib_dir, "libjsi.so")]
+shared_libs = [hermes_lib, hermes_jsi_lib]
 bin_dir = env.Dir("#bin").abspath
 copy_targets = []
 
 for lib_path in shared_libs:
-	if os.path.exists(lib_path):
-		target_path = os.path.join(bin_dir, os.path.basename(lib_path))
-		target_node = env.Command(target_path, lib_path, Copy("$TARGET", "$SOURCE"))
-		copy_targets.append(target_node)
+	target_path = os.path.join(bin_dir, os.path.basename(lib_path))
+	target_node = env.Command(target_path, lib_path, Copy("$TARGET", "$SOURCE"))
+	copy_targets.append(target_node)
 
-if copy_targets:
-	Alias("react_native_bindings_runtime", copy_targets)
-	if env["library_type"] == "executable":
-		Requires(os.path.join(bin_dir, "godot" + env["PROGSUFFIX"]), copy_targets)
+Alias("react_native_bindings_runtime", copy_targets)
+if env["library_type"] == "executable":
+	Requires(os.path.join(bin_dir, "godot" + env["PROGSUFFIX"]), copy_targets)

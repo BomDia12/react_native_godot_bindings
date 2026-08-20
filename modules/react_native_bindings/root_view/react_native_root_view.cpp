@@ -29,8 +29,6 @@ ReactNativeRootView::~ReactNativeRootView() {
 		file_singleton->disconnect("react_native_file_changed", callable_mp(this, &ReactNativeRootView::_on_react_native_file_changed));
 	}
 
-	// The UI manager outlives this node inside the runtime; make sure nothing it holds
-	// can reach a freed node.
 	registry.clear();
 }
 
@@ -46,9 +44,6 @@ void ReactNativeRootView::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_PROCESS: {
-			// JS timers are a host facility, not a language one: the bundle queues them
-			// and we drain the queue once per frame. Anything React schedules — effects,
-			// the Promise microtask that follows a render — arrives through here.
 			if (has_timers) {
 				HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton();
 				if (hermes) {
@@ -58,7 +53,6 @@ void ReactNativeRootView::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_RESIZED: {
-			// Flexbox depends on the available size, so a resize is a relayout.
 			if (committed_tree.is_valid()) {
 				_layout_and_mount();
 			}
@@ -97,8 +91,6 @@ void ReactNativeRootView::_reload_from_source(const String &p_source) {
 	HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton();
 	ERR_FAIL_NULL(hermes);
 
-	// A full reset is simpler than an incremental reload and leaves no stale host
-	// functions behind. install_host_object() reinstalls the UI manager for us.
 	hermes->reset();
 	registry.clear();
 	committed_tree.unref();
@@ -116,8 +108,6 @@ void ReactNativeRootView::_reload_from_source(const String &p_source) {
 	has_timers = hermes->get_global(FLUSH_TIMERS_FUNCTION).get_type() != Variant::NIL;
 	set_process(has_timers);
 
-	// A React Native bundle registers this and renders nothing until we call it.
-	// Hand-written Fabric scripts do their own commit and never define it.
 	if (hermes->get_global(RUN_APPLICATION_FUNCTION).get_type() != Variant::NIL) {
 		Array args;
 		args.push_back(root_tag);
@@ -160,8 +150,6 @@ void ReactNativeRootView::_layout_and_mount() {
 
 	RNLayout::calculate(committed_tree, get_size());
 
-	// Rebuild rather than diff. Correctness first: incremental reconciliation is a
-	// later slice and is invisible at this scale.
 	registry.clear();
 	_clear_children();
 	_build_node(committed_tree, this);
@@ -169,11 +157,9 @@ void ReactNativeRootView::_layout_and_mount() {
 
 Control *ReactNativeRootView::_build_node(const Ref<RNShadowNode> &p_node, Control *p_parent) {
 	if (p_node.is_null() || p_node->view_name == "RCTRawText") {
-		return nullptr; // Raw text is folded into its owning Label; a stray one is defensive.
+		return nullptr;
 	}
 
-	// completeRoot's synthetic wrapper. It is not a visual node: mount its children
-	// directly under the surface (p_parent), not under a Control of its own.
 	if (p_node->view_name == "RCTRootView") {
 		for (const Ref<RNShadowNode> &child : p_node->children) {
 			_build_node(child, p_parent);
@@ -195,19 +181,13 @@ Control *ReactNativeRootView::_build_node(const Ref<RNShadowNode> &p_node, Contr
 		if (RNViewStyle::color_of(p_node->props, "color", color)) {
 			label->add_theme_color_override("font_color", color);
 		}
-		// Opacity affects the whole subtree; a Label has no children, but modulate keeps
-		// it consistent with the View path below.
 		label->set_modulate(Color(1, 1, 1, RNViewStyle::opacity_of(p_node->props)));
 
 		p_parent->add_child(label);
 		registry.register_node(p_node->tag, label);
-		return label; // Its children are text, folded into the label above.
+		return label;
 	}
 
-	// RCTView, and anything else we don't recognize yet. A Panel is a reasonable default
-	// for an unknown host component, but say so — the same "loud stub" convention the
-	// Fabric UI manager uses for unimplemented spec methods. Don't silently invent
-	// semantics for an unknown view by treating it as a plain box without a word.
 	if (p_node->view_name != "RCTView") {
 		WARN_PRINT(vformat("Mounting unrecognized view \"%s\" as a plain View.", p_node->view_name));
 	}
@@ -215,15 +195,9 @@ Control *ReactNativeRootView::_build_node(const Ref<RNShadowNode> &p_node, Contr
 	Panel *panel = memnew(Panel);
 	panel->set_position(p_node->layout.position);
 	panel->set_size(p_node->layout.size);
-	// Unconditional: build_stylebox() returns a transparent box when unstyled, and a bare
-	// Panel would otherwise draw Godot's default gray theme panel. Never early-return
-	// before this line.
 	panel->add_theme_style_override("panel", RNViewStyle::build_stylebox(p_node->props));
-	// set_modulate (not set_self_modulate) so opacity cascades to descendants like RN.
 	panel->set_modulate(Color(1, 1, 1, RNViewStyle::opacity_of(p_node->props)));
 	panel->set_clip_contents(RNViewStyle::clips_contents(p_node->props));
-	// No touch/gesture dispatch exists yet; IGNORE keeps a styled box from silently
-	// eating input. Flip to STOP/PASS in the event-dispatch phase, not before.
 	panel->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
 
 	p_parent->add_child(panel);

@@ -204,8 +204,7 @@ facebook::jsi::Value FabricUIManager::complete_root(facebook::jsi::Runtime &rt, 
 	root->view_name = "RCTRootView";
 	root->children = child_set->children;
 
-	// Deferred on purpose: we hold runtime_mutex here (see trap 3 in the plan), and
-	// the scene tree must not be touched until evaluate() has returned.
+	// The runtime mutex is held here, so defer scene-tree changes until evaluation ends.
 	root_view->call_deferred("mount", root);
 	return facebook::jsi::Value::undefined();
 }

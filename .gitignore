@@ -1,3 +1,9 @@
-__pycache__/*
-bin/*
-engines/*
+__pycache__/
+/godot/
+/bin/
+/.scons-cache/
+/modules/react_native_bindings/engines/build*/
+/samples/view-text/node_modules/
+/samples/view-text/dist/
+/samples/view-text/.godot/
+*.log

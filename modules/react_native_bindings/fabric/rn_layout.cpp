@@ -14,8 +14,7 @@ bool is_number(const Variant &p_value) {
 	return p_value.get_type() == Variant::INT || p_value.get_type() == Variant::FLOAT;
 }
 
-// Style values arrive as numbers ("width: 100"), percent strings ("width: '50%'")
-// or "auto". Each Yoga setter comes in three flavours, so dispatch on the shape.
+// Yoga uses separate setters for points, percentages, and auto values.
 void apply_dimension(const Variant &p_value, YGNodeRef p_node,
 		void (*p_set_points)(YGNodeRef, float),
 		void (*p_set_percent)(YGNodeRef, float),
@@ -73,11 +72,7 @@ void apply_edge(const Dictionary &p_style, const String &p_prefix, YGNodeRef p_n
 	}
 }
 
-// borderWidth cannot reuse apply_edge: that helper appends its suffix directly to the
-// prefix (forming "borderWidthTop"), but RN emits "borderTopWidth". Yoga must be told
-// about border width so it reserves box-model space like padding, otherwise a bordered
-// container's children overlap the border. Uniform "borderWidth" first so the explicit
-// per-edge keys override it.
+// React Native puts the edge before "Width", unlike the other edge properties.
 void apply_border_width(const Dictionary &p_style, YGNodeRef p_node) {
 	struct BorderEdge {
 		const char *key;
@@ -119,7 +114,7 @@ YGFlexDirection parse_flex_direction(const String &p_value) {
 	if (p_value == "column-reverse") {
 		return YGFlexDirectionColumnReverse;
 	}
-	return YGFlexDirectionColumn; // RN's default, unlike the web's.
+	return YGFlexDirectionColumn;
 }
 
 YGJustify parse_justify(const String &p_value) {
@@ -164,10 +159,6 @@ YGAlign parse_align(const String &p_value, YGAlign p_default) {
 }
 
 void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
-	// Fabric delivers a *flat* props payload: RN's attribute processing hoists every
-	// style key (width, backgroundColor, flexDirection, ...) to the top level of props
-	// rather than nesting them under a "style" key. So the props dictionary *is* the
-	// style dictionary.
 	const Dictionary &style = p_props;
 
 	if (style.has("flexDirection")) {
@@ -248,7 +239,6 @@ void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
 		YGNodeStyleSetPositionType(p_node, position == "absolute" ? YGPositionTypeAbsolute : YGPositionTypeRelative);
 	}
 
-	// top/left/right/bottom, which Yoga models as position offsets.
 	struct Offset {
 		const char *key;
 		YGEdge edge;
@@ -267,15 +257,13 @@ void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
 }
 
 float font_size_of(const Dictionary &p_props) {
-	// Flat payload: fontSize is a top-level prop (see apply_style).
 	if (is_number(p_props.get("fontSize", Variant()))) {
 		return float(p_props["fontSize"]);
 	}
 	return ThemeDB::get_singleton()->get_fallback_font_size();
 }
 
-// Text is a leaf as far as flexbox is concerned: Yoga cannot know how wide a string
-// is, so it asks us. Without this an RCTText measures 0x0 and nothing is visible.
+// Yoga needs a measure function because text has no Yoga children.
 YGSize measure_text(YGNodeConstRef p_node, float p_width, YGMeasureMode p_width_mode, float p_height, YGMeasureMode p_height_mode) {
 	(void)p_height;
 	(void)p_height_mode;
@@ -293,7 +281,6 @@ YGSize measure_text(YGNodeConstRef p_node, float p_width, YGMeasureMode p_width_
 	const String text = shadow->collect_text();
 	const float font_size = font_size_of(shadow->props);
 
-	// Only wrap when Yoga actually constrains the width.
 	const float wrap_width = (p_width_mode == YGMeasureModeUndefined || !std::isfinite(p_width)) ? -1.0f : p_width;
 	const Size2 size = font->get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, wrap_width, font_size);
 
@@ -313,8 +300,6 @@ YGNodeRef build_yoga_tree(const Ref<RNShadowNode> &p_node) {
 	apply_style(yoga_node, p_node->props);
 
 	if (p_node->view_name == "RCTText") {
-		// Its RCTRawText/RCTVirtualText children are text, not boxes: they are folded
-		// into the measure function rather than laid out.
 		YGNodeSetMeasureFunc(yoga_node, measure_text);
 		return yoga_node;
 	}
@@ -330,9 +315,7 @@ YGNodeRef build_yoga_tree(const Ref<RNShadowNode> &p_node) {
 	return yoga_node;
 }
 
-// Stores each node's rect relative to its own Yoga parent (not accumulated to the root):
-// Control::position is parent-relative, so the stored rect matches its one consumer and
-// there is no parent origin left to forget to subtract at mount time.
+// Godot Control positions and these layout rectangles are parent-relative.
 void write_layout(YGNodeRef p_yoga_node) {
 	RNShadowNode *shadow = static_cast<RNShadowNode *>(YGNodeGetContext(p_yoga_node));
 
