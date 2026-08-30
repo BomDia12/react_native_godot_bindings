@@ -1,0 +1,113 @@
+name: Linux rolling prerelease
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: linux-rolling-prerelease
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Linux prerelease
+    uses: ./.github/workflows/_linux-build.yml
+    with:
+      cache_namespace: main
+      package_release: true
+
+  publish:
+    name: Replace Linux rolling prerelease
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: baseline-linux-latest
+      ARCHIVE_NAME: react-native-godot-linux-x86_64.zip
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: linux-baseline-package
+          path: artifacts
+
+      - name: Write release notes
+        run: |
+          source baseline.env
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          printf '%s\n\n%s\n%s\n\n%s\n%s\n%s\n' \
+            "Automated Linux baseline build for ${GITHUB_SHA}." \
+            "Workflow run: ${RUN_URL}" \
+            "Commit: ${GITHUB_SHA}" \
+            "Godot: ${GODOT_COMMIT}" \
+            "Hermes: ${HERMES_COMMIT}" \
+            "React Native: ${REACT_NATIVE_VERSION}" > artifacts/release-notes.md
+
+      - name: Replace rolling prerelease
+        run: |
+          set -euo pipefail
+          RELEASE_API="repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}"
+          RELEASE_EXISTS=false
+          if gh api "$RELEASE_API" >/dev/null 2>&1; then
+            RELEASE_EXISTS=true
+            if [[ $(gh api "$RELEASE_API" --jq '.immutable // false') == true ]]; then
+              echo "The rolling prerelease is immutable and cannot be replaced." >&2
+              exit 1
+            fi
+          fi
+          if git ls-remote --exit-code origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          fi
+          git tag --force "$RELEASE_TAG" "$GITHUB_SHA"
+          git push --force origin "refs/tags/${RELEASE_TAG}"
+
+          if [[ "$RELEASE_EXISTS" == true ]]; then
+            gh release edit "$RELEASE_TAG" \
+              --title "Linux baseline ${GITHUB_SHA::12}" \
+              --target "$GITHUB_SHA" \
+              --notes-file artifacts/release-notes.md \
+              --prerelease \
+              --latest=false
+            gh release upload "$RELEASE_TAG" \
+              "artifacts/${ARCHIVE_NAME}" \
+              "artifacts/${ARCHIVE_NAME}.sha256" \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              "artifacts/${ARCHIVE_NAME}" \
+              "artifacts/${ARCHIVE_NAME}.sha256" \
+              --target "$GITHUB_SHA" \
+              --title "Linux baseline ${GITHUB_SHA::12}" \
+              --notes-file artifacts/release-notes.md \
+              --prerelease \
+              --latest=false
+          fi
+
+      - name: Verify rolling prerelease
+        run: |
+          set -euo pipefail
+          RELEASE_API="repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}"
+          REMOTE_SHA=$(git ls-remote origin "refs/tags/${RELEASE_TAG}" | cut -f1)
+          [[ "$REMOTE_SHA" == "$GITHUB_SHA" ]]
+          [[ $(gh api "$RELEASE_API" --jq .target_commitish) == "$GITHUB_SHA" ]]
+          [[ $(gh api "$RELEASE_API" --jq .prerelease) == true ]]
+          ASSETS=$(gh api "$RELEASE_API" --jq '.assets[].name')
+          grep -Fx "$ARCHIVE_NAME" <<<"$ASSETS"
+          grep -Fx "${ARCHIVE_NAME}.sha256" <<<"$ASSETS"
+          mkdir -p artifacts/published
+          gh release download "$RELEASE_TAG" \
+            --pattern "$ARCHIVE_NAME" \
+            --pattern "${ARCHIVE_NAME}.sha256" \
+            --dir artifacts/published
+          cmp "artifacts/${ARCHIVE_NAME}.sha256" "artifacts/published/${ARCHIVE_NAME}.sha256"
+          cd artifacts/published
+          sha256sum --check "${ARCHIVE_NAME}.sha256"

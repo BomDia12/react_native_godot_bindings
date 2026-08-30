@@ -1,7 +1,6 @@
 # Fabric host-method compatibility
 
-The React Native 0.84.1 `FabricUIManager` surface and renderer event-registration hook
-are classified below.
+The React Native 0.84.1 `FabricUIManager` surface is classified below.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
@@ -30,5 +29,3 @@ are classified below.
 | FABRIC-CONTINUOUS-PRIORITY | `unstable_ContinuousEventPriority` | pending | Constant exists but lacks contract coverage. | [Fabric manager](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp) | none |
 | FABRIC-IDLE-PRIORITY | `unstable_IdleEventPriority` | pending | Constant exists but lacks contract coverage. | [Fabric manager](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp) | none |
 | FABRIC-CURRENT-PRIORITY | `unstable_getCurrentEventPriority` | pending | Always returns default priority and lacks contract coverage. | [Fabric manager](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp) | none |
-| FABRIC-VIEW-TRANSITION | `unstable_getViewTransitionInstance` | pending | Warning stub. | none | none |
-| FABRIC-REGISTER-EVENT | `registerEventHandler` | pending | Warning stub; Phase 3 implements event delivery. | none | none |

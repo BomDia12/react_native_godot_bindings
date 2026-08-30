@@ -1,0 +1,26 @@
+{
+  "id": "flex-padding",
+  "project_dir": "samples/view-text",
+  "scene": "res://smoke/tests/flex_padding/SmokeMain.tscn",
+  "timeout_seconds": 30,
+  "allowlist": "documentation/expected-warnings.txt",
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/view-text",
+    "script": "build:godot",
+    "output": "samples/view-text/dist/godot.bundle.js"
+  },
+  "inputs": [
+    "samples/view-text/project.godot",
+    "samples/view-text/godot.entry.js",
+    "samples/view-text/godot.preamble.js",
+    "samples/view-text/metro.config.godot.js",
+    "samples/view-text/babel.config.js",
+    "samples/view-text/package.json",
+    "samples/view-text/package-lock.json",
+    "documentation/expected-warnings.txt",
+    "samples/view-text/smoke/support/smoke_case.gd",
+    "samples/view-text/smoke/tests/flex_padding/SmokeMain.tscn",
+    "samples/view-text/smoke/tests/flex_padding/flex_padding.gd"
+  ]
+}
