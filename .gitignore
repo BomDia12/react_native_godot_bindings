@@ -2,6 +2,7 @@ __pycache__/
 /godot/
 /bin/
 /.scons-cache/
+/artifacts/
 /modules/react_native_bindings/engines/build*/
 /samples/view-text/node_modules/
 /samples/view-text/dist/

@@ -6,6 +6,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from smoke_manifest import ManifestError, discover_manifests
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,6 +42,32 @@ def yoga_digest(path: Path) -> str:
         digest.update(source.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def check_tracked_file(relative_path: Path, failures: list[str]) -> None:
+    display_path = relative_path.as_posix()
+    input_path = REPO_ROOT / relative_path
+    if not input_path.is_file():
+        failures.append(f"missing smoke input: {display_path}")
+        return
+
+    tracked = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch", "--", display_path],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if tracked.returncode != 0:
+        failures.append(f"smoke input is not tracked: {display_path}")
+
+    ignored = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "check-ignore", "--quiet", "--", display_path],
+        check=False,
+    )
+    if ignored.returncode == 0:
+        failures.append(f"smoke input is ignored: {display_path}")
+    elif ignored.returncode != 1:
+        failures.append(f"could not inspect ignore status: {display_path}")
 
 
 def main() -> int:
@@ -99,29 +127,19 @@ def main() -> int:
     if f"scons=={baseline['SCONS_VERSION']}" not in (REPO_ROOT / "requirements-ci.txt").read_text(encoding="utf-8"):
         failures.append("requirements-ci.txt does not match SCONS_VERSION")
 
-    required_inputs = (
-        "modules/react_native_bindings/SCsub",
-        "samples/view-text/project.godot",
-        "samples/view-text/Main.tscn",
-        "samples/view-text/godot.entry.js",
-        "samples/view-text/godot.preamble.js",
-        "samples/view-text/package-lock.json",
-        "samples/view-text/smoke/SmokeMain.tscn",
-        "samples/view-text/smoke/smoke_gate.gd",
-    )
-    for relative_path in required_inputs:
-        input_path = REPO_ROOT / relative_path
-        if not input_path.is_file():
-            failures.append(f"missing baseline input: {relative_path}")
-            continue
-        ignored = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "check-ignore", "--quiet", "--", relative_path],
-            check=False,
-        )
-        if ignored.returncode == 0:
-            failures.append(f"baseline input is ignored: {relative_path}")
-        elif ignored.returncode != 1:
-            failures.append(f"could not inspect ignore status: {relative_path}")
+    try:
+        manifests = discover_manifests(REPO_ROOT)
+    except ManifestError as error:
+        failures.append(f"smoke manifest validation: {error}")
+        manifests = []
+
+    smoke_inputs = {
+        path
+        for manifest in manifests
+        for path in (manifest.manifest_path, *manifest.inputs)
+    }
+    for relative_path in sorted(smoke_inputs):
+        check_tracked_file(relative_path, failures)
 
     if failures:
         print("Provenance validation failed:")

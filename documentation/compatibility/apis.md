@@ -1,7 +1,7 @@
 # API compatibility
 
-Public non-component exports from React Native 0.84.1 and the host timer surface used by
-the fixture are classified below. Preamble shims prove fixture compatibility only.
+Public non-component exports from React Native 0.84.1 are classified below. Preamble
+shims prove fixture compatibility only.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
@@ -56,12 +56,9 @@ the fixture are classified below. Preamble shims prove fixture compatibility onl
 | API-UI-MANAGER | `UIManager` | pending | Legacy Paper UIManager is absent. | none | none |
 | API-BATCHED-UPDATES | `unstable_batchedUpdates` | pending | Renderer behavior is not verified. | none | none |
 | API-ANIMATED-VALUE | `useAnimatedValue` | pending | Animation integration is not verified. | none | none |
-| API-ANIMATED-XY | `useAnimatedValueXY` | pending | Animation integration is not verified. | none | none |
-| API-ANIMATED-COLOR | `useAnimatedColor` | pending | Animation and color integration are not verified. | none | none |
 | API-COLOR-SCHEME | `useColorScheme` | pending | Appearance service is absent. | none | none |
 | API-PRESSABILITY | `usePressability` | pending | Input and responder path are absent. | none | none |
 | API-WINDOW-DIMENSIONS | `useWindowDimensions` | pending | Native dimensions service is absent. | none | none |
 | API-UTF-SEQUENCE | `UTFSequence` | pending | JS export is not verified. | none | none |
 | API-VIBRATION | `Vibration` | pending | No native service. | none | none |
 | API-VIRTUAL-MODE | `VirtualViewMode` | pending | Experimental API is not verified. | none | none |
-| API-TIMERS | `global timers` | partially supported | Preamble timers are drained once per Godot process frame; cancellation exists but production scheduling semantics are incomplete. | [preamble](../../samples/view-text/godot.preamble.js) | [BASELINE-SMOKE](test-coverage.md) |

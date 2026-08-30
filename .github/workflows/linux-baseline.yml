@@ -5,101 +5,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   baseline:
-    runs-on: ubuntu-24.04
-    env:
-      CC: gcc-13
-      CXX: g++-13
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: samples/view-text/package-lock.json
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements-ci.txt
-
-      - name: Install native toolchain
-        timeout-minutes: 15
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          APT_OPTIONS=(
-            -o Acquire::Retries=3
-            -o Acquire::http::Timeout=30
-            -o Acquire::https::Timeout=30
-            -o Acquire::ForceIPv4=true
-          )
-          sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip
-          python -m pip install --requirement requirements-ci.txt
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            .scons-cache
-            modules/react_native_bindings/engines/build_release
-          key: baseline-${{ runner.os }}-${{ hashFiles('baseline.env', 'scripts/build_hermes.sh', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub') }}
-
-      - name: Bootstrap pinned sources
-        run: scripts/bootstrap.sh
-
-      - name: Validate metadata
-        run: |
-          scripts/verify_provenance.py
-          scripts/validate_compatibility.py
-
-      - name: Build Hermes
-        run: |
-          set -o pipefail
-          scripts/build_hermes.sh 2>&1 | tee hermes-build.log
-
-      - name: Build Godot and module
-        run: |
-          set -o pipefail
-          scripts/build_godot.sh -j2 \
-            cpp_compiler_launcher=ccache \
-            c_compiler_launcher=ccache \
-            cache_path=${{ github.workspace }}/.scons-cache \
-            cache_limit=4 \
-            accesskit=no \
-            module_mono_enabled=no \
-            module_openxr_enabled=no \
-            module_webxr_enabled=no \
-            module_jolt_physics_enabled=no \
-            module_raycast_enabled=no \
-            module_lightmapper_rd_enabled=no \
-            module_basis_universal_enabled=no \
-            module_theora_enabled=no \
-            module_webrtc_enabled=no \
-            module_mobile_vr_enabled=no \
-            2>&1 | tee godot-build.log
-
-      - name: Run module unit tests
-        run: |
-          GODOT_BINARY=$(find godot/bin -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*' -perm -u+x -print -quit)
-          "$GODOT_BINARY" --headless --test --test-case='*[ReactNativeBindings]*'
-
-      - name: Run headless baseline
-        run: scripts/run_baseline.sh
-
-      - name: Upload failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v5
-        with:
-          name: baseline-failure
-          if-no-files-found: ignore
-          path: |
-            hermes-build.log
-            godot-build.log
-            baseline-runtime.log
-            samples/view-text/dist/godot.bundle.js
+    name: Linux baseline
+    uses: ./.github/workflows/_linux-build.yml
+    with:
+      cache_namespace: pr
+      package_release: false

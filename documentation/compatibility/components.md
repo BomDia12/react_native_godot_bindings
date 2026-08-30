@@ -8,7 +8,6 @@ an internal host primitive folded into `Text`, not a public component export.
 | COMP-ACTIVITY-INDICATOR | `ActivityIndicator` | pending | No native primitive. | none | none |
 | COMP-BUTTON | `Button` | pending | Requires the Phase 3 interaction path. | none | none |
 | COMP-DRAWER-ANDROID | `DrawerLayoutAndroid` | pending | Android-specific component has no Godot decision. | none | none |
-| COMP-EVENT-EMITTER | `EventEmitter` | pending | Public JS utility is not verified on the supported path. | none | none |
 | COMP-FLAT-LIST | `FlatList` | pending | Requires scrolling and durable identity. | none | none |
 | COMP-IMAGE | `Image` | pending | No native image primitive. | none | none |
 | COMP-IMAGE-BACKGROUND | `ImageBackground` | pending | Depends on `Image`. | none | none |
