@@ -30,9 +30,15 @@ def find_godot_binary(godot_source_dir: Path) -> Path:
         for path in (godot_source_dir / "bin").glob("godot.linuxbsd.editor.*")
         if path.is_file() and os.access(path, os.X_OK)
     )
-    if len(candidates) != 1:
-        raise RuntimeError(f"expected exactly one Godot editor executable, found {len(candidates)}")
-    return candidates[0]
+    dev_candidates = [path for path in candidates if ".editor.dev." in path.name]
+    if len(dev_candidates) == 1:
+        return dev_candidates[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    raise RuntimeError(
+        f"expected one Godot dev editor executable, found {len(dev_candidates)} "
+        f"among {len(candidates)} editor binaries"
+    )
 
 
 def run_bundle_command(command: list[str], cwd: Path) -> tuple[float, float]:
