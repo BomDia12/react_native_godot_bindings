@@ -1,12 +1,14 @@
 #include "fabric_ui_manager.h"
 
 #include "../root_view/react_native_root_view.h"
+#include "rn_event_target.h"
 
 #include "core/error/error_macros.h"
 #include "core/object/object.h"
 #include "core/variant/array.h"
 
 #include <string>
+#include <vector>
 
 const char *FabricUIManager::GLOBAL_NAME = "nativeFabricUIManager";
 
@@ -101,9 +103,56 @@ facebook::jsi::Value wrap_node(facebook::jsi::Runtime &rt, const Ref<RNShadowNod
 	return facebook::jsi::Object::createFromHostObject(rt, std::make_shared<RNShadowNodeHandle>(p_node));
 }
 
+std::string string_to_utf8(const String &p_value) {
+	const CharString utf8 = p_value.utf8();
+	return std::string(utf8.get_data(), utf8.length());
+}
+
+facebook::jsi::Value variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &p_value, int p_depth = 0) {
+	if (p_depth > MAX_PROP_DEPTH) {
+		return facebook::jsi::Value::undefined();
+	}
+
+	switch (p_value.get_type()) {
+		case Variant::NIL:
+			return facebook::jsi::Value::null();
+		case Variant::BOOL:
+			return facebook::jsi::Value(bool(p_value));
+		case Variant::INT:
+			return facebook::jsi::Value(double(int64_t(p_value)));
+		case Variant::FLOAT:
+			return facebook::jsi::Value(double(p_value));
+		case Variant::STRING:
+		case Variant::STRING_NAME: {
+			return facebook::jsi::String::createFromUtf8(rt, string_to_utf8(String(p_value)));
+		}
+		case Variant::ARRAY: {
+			const Array array = p_value;
+			facebook::jsi::Array result(rt, array.size());
+			for (int i = 0; i < array.size(); ++i) {
+				result.setValueAtIndex(rt, i, variant_to_jsi(rt, array[i], p_depth + 1));
+			}
+			return result;
+		}
+		case Variant::DICTIONARY: {
+			const Dictionary dictionary = p_value;
+			facebook::jsi::Object result(rt);
+			const Array keys = dictionary.keys();
+			for (int i = 0; i < keys.size(); ++i) {
+				const String key = keys[i];
+				result.setProperty(rt, string_to_utf8(key).c_str(), variant_to_jsi(rt, dictionary[keys[i]], p_depth + 1));
+			}
+			return result;
+		}
+		default:
+			return facebook::jsi::Value::undefined();
+	}
+}
+
 } //namespace
 
-FabricUIManager::FabricUIManager(ObjectID p_root_view_id) : root_view_id(p_root_view_id) {
+FabricUIManager::FabricUIManager(ObjectID p_root_view_id, uint64_t p_runtime_generation) :
+		root_view_id(p_root_view_id), runtime_generation(p_runtime_generation) {
 }
 
 ReactNativeRootView *FabricUIManager::get_root_view() const {
@@ -111,7 +160,7 @@ ReactNativeRootView *FabricUIManager::get_root_view() const {
 }
 
 facebook::jsi::Value FabricUIManager::create_node(facebook::jsi::Runtime &rt, const facebook::jsi::Value *p_args, size_t p_argc) {
-	if (p_argc < 4 || !p_args[0].isNumber() || !p_args[1].isString()) {
+	if (p_argc < 5 || !p_args[0].isNumber() || !p_args[1].isString() || !p_args[4].isObject()) {
 		throw facebook::jsi::JSError(rt, std::string("createNode(tag, viewName, rootTag, props, instanceHandle)"));
 	}
 
@@ -120,6 +169,8 @@ facebook::jsi::Value FabricUIManager::create_node(facebook::jsi::Runtime &rt, co
 	node->tag = static_cast<int>(p_args[0].getNumber());
 	node->view_name = string_from_utf8(p_args[1].getString(rt).utf8(rt));
 	node->props = props_from(rt, p_args[3]);
+	node->event_target = std::make_shared<RNEventTarget>(node->tag, runtime_generation, rt, p_args[4].getObject(rt));
+	event_targets[node->tag] = node->event_target;
 
 	return wrap_node(rt, node);
 }
@@ -138,7 +189,12 @@ facebook::jsi::Value FabricUIManager::clone_node(facebook::jsi::Runtime &rt, con
 		if (p_argc < 2) {
 			throw facebook::jsi::JSError(rt, std::string("cloneNode*WithNewProps: missing props."));
 		}
-		const Dictionary props = props_from(rt, p_args[1]);
+		Dictionary props = source->props.duplicate(true);
+		const Dictionary updates = props_from(rt, p_args[1]);
+		const Array keys = updates.keys();
+		for (int i = 0; i < keys.size(); ++i) {
+			props[keys[i]] = updates[keys[i]];
+		}
 		return wrap_node(rt, source->clone(p_new_children, &props));
 	}
 
@@ -204,9 +260,141 @@ facebook::jsi::Value FabricUIManager::complete_root(facebook::jsi::Runtime &rt, 
 	root->view_name = "RCTRootView";
 	root->children = child_set->children;
 
-	// The runtime mutex is held here, so defer scene-tree changes until evaluation ends.
-	root_view->call_deferred("mount", root);
+	root_view->enqueue_mount(root, runtime_generation);
 	return facebook::jsi::Value::undefined();
+}
+
+facebook::jsi::Value FabricUIManager::register_event_handler(facebook::jsi::Runtime &rt, const facebook::jsi::Value *p_args, size_t p_argc) {
+	if (p_argc != 1 || !p_args[0].isObject() || !p_args[0].getObject(rt).isFunction(rt)) {
+		throw facebook::jsi::JSError(rt, std::string("registerEventHandler(handler) expects one function."));
+	}
+	event_handler = std::make_unique<facebook::jsi::Function>(p_args[0].getObject(rt).getFunction(rt));
+	return facebook::jsi::Value::undefined();
+}
+
+facebook::jsi::Value FabricUIManager::set_is_js_responder(facebook::jsi::Runtime &rt, const facebook::jsi::Value *p_args, size_t p_argc) {
+	if (p_argc != 3 || !p_args[1].isBool() || !p_args[2].isBool()) {
+		throw facebook::jsi::JSError(rt, std::string("setIsJSResponder(node, isResponder, blockNativeResponder)"));
+	}
+
+	const Ref<RNShadowNode> node = node_from(rt, p_args[0]);
+	ReactNativeRootView *root_view = get_root_view();
+	if (node.is_null() || !root_view || !root_view->get_registry().has_tag(node->tag)) {
+		throw facebook::jsi::JSError(rt, std::string("setIsJSResponder: node is not in the current tree."));
+	}
+
+	if (p_args[1].getBool()) {
+		responder_tag = node->tag;
+	} else if (responder_tag == node->tag) {
+		responder_tag = 0;
+	}
+	return facebook::jsi::Value::undefined();
+}
+
+facebook::jsi::Value FabricUIManager::measure(facebook::jsi::Runtime &rt, const facebook::jsi::Value *p_args, size_t p_argc) {
+	if (p_argc != 2 || !p_args[1].isObject() || !p_args[1].getObject(rt).isFunction(rt)) {
+		throw facebook::jsi::JSError(rt, std::string("measure(node, callback)"));
+	}
+
+	const Ref<RNShadowNode> node = node_from(rt, p_args[0]);
+	ReactNativeRootView *root_view = get_root_view();
+	Rect2 local_rect;
+	Point2 page_position;
+	if (node.is_null() || !root_view || !root_view->get_measurement(node->tag, local_rect, page_position)) {
+		return facebook::jsi::Value::undefined();
+	}
+
+	facebook::jsi::Function callback = p_args[1].getObject(rt).getFunction(rt);
+	facebook::jsi::Value values[] = {
+		facebook::jsi::Value(double(local_rect.position.x)),
+		facebook::jsi::Value(double(local_rect.position.y)),
+		facebook::jsi::Value(double(local_rect.size.x)),
+		facebook::jsi::Value(double(local_rect.size.y)),
+		facebook::jsi::Value(double(page_position.x)),
+		facebook::jsi::Value(double(page_position.y)),
+	};
+	callback.call(rt, static_cast<const facebook::jsi::Value *>(values), size_t(6));
+	return facebook::jsi::Value::undefined();
+}
+
+void FabricUIManager::enqueue_event(const RNNativeEvent &p_event) {
+	event_queue.push_back(p_event);
+}
+
+void FabricUIManager::request_event_flush() {
+	if (event_flush_scheduled || event_queue.empty()) {
+		return;
+	}
+	event_flush_scheduled = true;
+	if (ReactNativeRootView *root_view = get_root_view()) {
+		root_view->call_deferred("_flush_native_events");
+	}
+}
+
+void FabricUIManager::clear_events() {
+	event_queue.clear();
+	event_flush_scheduled = false;
+}
+
+void FabricUIManager::dispatch_queued_events_locked(facebook::jsi::Runtime &p_runtime, uint64_t p_generation) {
+	event_flush_scheduled = false;
+	while (!event_queue.empty()) {
+		RNNativeEvent event = event_queue.front();
+		event_queue.pop_front();
+
+		if (event.generation != p_generation || event.generation != runtime_generation || !event_handler) {
+			continue;
+		}
+
+		auto target_entry = event_targets.find(event.tag);
+		if (target_entry == event_targets.end()) {
+			continue;
+		}
+		std::shared_ptr<RNEventTarget> target = target_entry->second.lock();
+		if (!target || target->get_generation() != p_generation) {
+			continue;
+		}
+
+		facebook::jsi::Value instance_handle = target->lock(p_runtime);
+		if (!instance_handle.isObject()) {
+			continue;
+		}
+
+		Dictionary payload = event.payload.duplicate(true);
+		payload["target"] = event.tag;
+		current_event_priority = event.priority;
+		try {
+			facebook::jsi::Value args[] = {
+				facebook::jsi::Value(p_runtime, instance_handle),
+				facebook::jsi::String::createFromUtf8(p_runtime, string_to_utf8(event.name)),
+				variant_to_jsi(p_runtime, payload),
+			};
+			event_handler->call(p_runtime, static_cast<const facebook::jsi::Value *>(args), size_t(3));
+		} catch (const facebook::jsi::JSIException &p_error) {
+			WARN_PRINT(vformat("React event %s for tag %d failed: %s", event.name, event.tag, string_from_utf8(p_error.what())));
+		}
+		current_event_priority = EVENT_PRIORITY_DEFAULT;
+	}
+
+	if (!event_queue.empty()) {
+		request_event_flush();
+	}
+}
+
+void FabricUIManager::before_runtime_reset_locked(facebook::jsi::Runtime &p_runtime, uint64_t p_generation) {
+	(void)p_runtime;
+	(void)p_generation;
+	event_handler.reset();
+	for (auto &entry : event_targets) {
+		if (std::shared_ptr<RNEventTarget> target = entry.second.lock()) {
+			target->reset();
+		}
+	}
+	event_targets.clear();
+	clear_events();
+	responder_tag = 0;
+	current_event_priority = EVENT_PRIORITY_DEFAULT;
+	++runtime_generation;
 }
 
 facebook::jsi::Value FabricUIManager::get(facebook::jsi::Runtime &rt, const facebook::jsi::PropNameID &p_name) {
@@ -265,6 +453,21 @@ facebook::jsi::Value FabricUIManager::get(facebook::jsi::Runtime &rt, const face
 			return complete_root(rt_inner, args, argc);
 		});
 	}
+	if (name == "registerEventHandler") {
+		return host_fn("registerEventHandler", 1, [this](facebook::jsi::Runtime &rt_inner, const facebook::jsi::Value *args, size_t argc) {
+			return register_event_handler(rt_inner, args, argc);
+		});
+	}
+	if (name == "setIsJSResponder") {
+		return host_fn("setIsJSResponder", 3, [this](facebook::jsi::Runtime &rt_inner, const facebook::jsi::Value *args, size_t argc) {
+			return set_is_js_responder(rt_inner, args, argc);
+		});
+	}
+	if (name == "measure") {
+		return host_fn("measure", 2, [this](facebook::jsi::Runtime &rt_inner, const facebook::jsi::Value *args, size_t argc) {
+			return measure(rt_inner, args, argc);
+		});
+	}
 
 	if (name == "unstable_DefaultEventPriority") {
 		return facebook::jsi::Value(EVENT_PRIORITY_DEFAULT);
@@ -279,8 +482,8 @@ facebook::jsi::Value FabricUIManager::get(facebook::jsi::Runtime &rt, const face
 		return facebook::jsi::Value(EVENT_PRIORITY_IDLE);
 	}
 	if (name == "unstable_getCurrentEventPriority") {
-		return host_fn("unstable_getCurrentEventPriority", 0, [](facebook::jsi::Runtime &, const facebook::jsi::Value *, size_t) {
-			return facebook::jsi::Value(EVENT_PRIORITY_DEFAULT);
+		return host_fn("unstable_getCurrentEventPriority", 0, [this](facebook::jsi::Runtime &, const facebook::jsi::Value *, size_t) {
+			return facebook::jsi::Value(current_event_priority);
 		});
 	}
 
@@ -305,6 +508,9 @@ std::vector<facebook::jsi::PropNameID> FabricUIManager::getPropertyNames(faceboo
 		"appendChild",
 		"appendChildToSet",
 		"completeRoot",
+		"registerEventHandler",
+		"setIsJSResponder",
+		"measure",
 		"unstable_DefaultEventPriority",
 		"unstable_DiscreteEventPriority",
 		"unstable_ContinuousEventPriority",

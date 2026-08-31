@@ -1,5 +1,8 @@
 #include "hermes_runtime_singleton.h"
 
+#include "hermes_runtime_lifecycle.h"
+#include "../fabric/fabric_ui_manager.h"
+
 #include "core/error/error_macros.h"
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
@@ -41,6 +44,7 @@ HermesRuntimeSingleton::HermesRuntimeSingleton() {
 
 HermesRuntimeSingleton::~HermesRuntimeSingleton() {
 	std::lock_guard<std::mutex> lock(runtime_mutex);
+	run_pre_reset_hooks_locked();
 	runtime.reset();
 	if (singleton == this) {
 		singleton = nullptr;
@@ -57,6 +61,7 @@ void HermesRuntimeSingleton::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_global", "name", "value"), &HermesRuntimeSingleton::set_global);
 	ClassDB::bind_method(D_METHOD("get_global", "name"), &HermesRuntimeSingleton::get_global);
 	ClassDB::bind_method(D_METHOD("reset"), &HermesRuntimeSingleton::reset);
+	ClassDB::bind_method(D_METHOD("get_runtime_generation"), &HermesRuntimeSingleton::get_runtime_generation);
 	ClassDB::bind_method(D_METHOD("is_ready"), &HermesRuntimeSingleton::is_ready);
 	ClassDB::bind_method(D_METHOD("get_last_error"), &HermesRuntimeSingleton::get_last_error);
 	ClassDB::bind_method(D_METHOD("set_import_resolver", "resolver"), &HermesRuntimeSingleton::set_import_resolver);
@@ -86,9 +91,28 @@ Variant HermesRuntimeSingleton::get_global(const String &p_name) {
 
 void HermesRuntimeSingleton::reset() {
 	std::lock_guard<std::mutex> lock(runtime_mutex);
+	run_pre_reset_hooks_locked();
 	runtime.reset();
+	++runtime_generation;
 	last_error = String();
 	ensure_runtime_locked();
+}
+
+uint64_t HermesRuntimeSingleton::get_runtime_generation() const {
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	return runtime_generation;
+}
+
+void HermesRuntimeSingleton::dispatch_queued_events(const std::shared_ptr<FabricUIManager> &p_ui_manager) {
+	if (!p_ui_manager) {
+		return;
+	}
+
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	if (!runtime) {
+		return;
+	}
+	p_ui_manager->dispatch_queued_events_locked(*runtime, runtime_generation);
 }
 
 bool HermesRuntimeSingleton::is_ready() const {
@@ -118,6 +142,9 @@ void HermesRuntimeSingleton::install_host_object(const String &p_name, std::shar
 
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	host_objects[p_name] = p_object;
+	if (std::shared_ptr<HermesRuntimeLifecycle> lifecycle = std::dynamic_pointer_cast<HermesRuntimeLifecycle>(p_object)) {
+		lifecycle_objects.push_back(lifecycle);
+	}
 	ensure_runtime_locked();
 
 	facebook::jsi::Runtime &rt = *runtime;
@@ -127,6 +154,22 @@ void HermesRuntimeSingleton::install_host_object(const String &p_name, std::shar
 	} catch (const facebook::jsi::JSIException &p_error) {
 		last_error = _string_from_utf8(std::string(p_error.what()));
 		WARN_PRINT(last_error);
+	}
+}
+
+void HermesRuntimeSingleton::run_pre_reset_hooks_locked() {
+	if (!runtime) {
+		return;
+	}
+
+	auto it = lifecycle_objects.begin();
+	while (it != lifecycle_objects.end()) {
+		if (std::shared_ptr<HermesRuntimeLifecycle> lifecycle = it->lock()) {
+			lifecycle->before_runtime_reset_locked(*runtime, runtime_generation);
+			++it;
+		} else {
+			it = lifecycle_objects.erase(it);
+		}
 	}
 }
 

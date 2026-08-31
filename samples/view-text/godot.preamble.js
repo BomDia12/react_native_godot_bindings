@@ -75,7 +75,11 @@ const MODULES = {
     getParentNode: () => null,
     getChildNodes: () => [],
     isConnected: () => true,
+	measure: (node, callback) => global.nativeFabricUIManager.measure(node, callback),
   },
+	NativeReactNativeFeatureFlagsCxx: {
+		shouldPressibilityUseW3CPointerEventsForHover: () => true,
+	},
   ExceptionsManager: {
     reportException: () => {},
     reportFatalException: () => {},

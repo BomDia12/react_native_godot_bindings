@@ -6,7 +6,7 @@ an internal host primitive folded into `Text`, not a public component export.
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
 | COMP-ACTIVITY-INDICATOR | `ActivityIndicator` | pending | No native primitive. | none | none |
-| COMP-BUTTON | `Button` | pending | Requires the Phase 3 interaction path. | none | none |
+| COMP-BUTTON | `Button` | pending | The public component is not verified against the routed interaction path. | none | none |
 | COMP-DRAWER-ANDROID | `DrawerLayoutAndroid` | pending | Android-specific component has no Godot decision. | none | none |
 | COMP-FLAT-LIST | `FlatList` | pending | Requires scrolling and durable identity. | none | none |
 | COMP-IMAGE | `Image` | pending | No native image primitive. | none | none |
@@ -17,7 +17,7 @@ an internal host primitive folded into `Text`, not a public component export.
 | COMP-MODAL | `Modal` | pending | No native modal primitive. | none | none |
 | COMP-NATIVE-TEXT | `unstable_NativeText` | pending | Underlying host primitive exists but this public export is not verified. | none | none |
 | COMP-NATIVE-VIEW | `unstable_NativeView` | pending | Underlying host primitive exists but this public export is not verified. | none | none |
-| COMP-PRESSABLE | `Pressable` | pending | Rendering works through `View`; input does not. | none | none |
+| COMP-PRESSABLE | `Pressable` | partially supported | Mouse, touch, keyboard, focus, hover, press, responder, capture, and bubble paths work through Godot input routing; durable native identity, complete measurement, pointer capture, long-press edge cases, production feature flags, and broader platform coverage are absent. | [input router](../../modules/react_native_bindings/input/rn_input_router.cpp), [event bridge](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp) | [PRESSABLE-SMOKE](test-coverage.md) |
 | COMP-PROGRESS-ANDROID | `ProgressBarAndroid` | pending | Deprecated Android-specific component has no Godot decision. | none | none |
 | COMP-REFRESH-CONTROL | `RefreshControl` | pending | Scrolling and refresh behavior are absent. | none | none |
 | COMP-SAFE-AREA | `SafeAreaView` | pending | Safe-area behavior is absent. | none | none |
@@ -28,12 +28,12 @@ an internal host primitive folded into `Text`, not a public component export.
 | COMP-TEXT | `Text` | partially supported | Mounts one Godot `Label`; nested spans, selection, bidi, and full typography are absent. | [renderer](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [BASELINE-SMOKE](test-coverage.md) |
 | COMP-TEXT-ANCESTOR | `unstable_TextAncestorContext` | pending | Public JS context export is not verified. | none | none |
 | COMP-TEXT-INPUT | `TextInput` | pending | Requires durable identity, focus, selection, and IME support. | none | none |
-| COMP-TOUCHABLE | `Touchable` | pending | Input and responder behavior are absent. | none | none |
-| COMP-TOUCHABLE-HIGHLIGHT | `TouchableHighlight` | pending | Input and responder behavior are absent. | none | none |
-| COMP-TOUCHABLE-NATIVE | `TouchableNativeFeedback` | pending | Android-specific feedback has no Godot decision. | none | none |
-| COMP-TOUCHABLE-OPACITY | `TouchableOpacity` | pending | Input and responder behavior are absent. | none | none |
-| COMP-TOUCHABLE-WITHOUT | `TouchableWithoutFeedback` | pending | Input and responder behavior are absent. | none | none |
-| COMP-VIEW | `View` | partially supported | Mounts a Godot `Panel` with basic Yoga layout and visual styles; events, accessibility, transforms, and persistent identity are absent. | [renderer](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [BASELINE-SMOKE](test-coverage.md) |
+| COMP-TOUCHABLE | `Touchable` | pending | The public component is not verified against the routed interaction path. | none | none |
+| COMP-TOUCHABLE-HIGHLIGHT | `TouchableHighlight` | pending | The public component is not verified against the routed interaction path. | none | none |
+| COMP-TOUCHABLE-NATIVE | `TouchableNativeFeedback` | pending | Android-specific feedback has no Godot adaptation. | none | none |
+| COMP-TOUCHABLE-OPACITY | `TouchableOpacity` | pending | The public component is not verified against the routed interaction path. | none | none |
+| COMP-TOUCHABLE-WITHOUT | `TouchableWithoutFeedback` | pending | The public component is not verified against the routed interaction path. | none | none |
+| COMP-VIEW | `View` | partially supported | Mounts a Godot `Panel` with Yoga layout, visual styles, pointer hit testing, layout events, and routed mouse, touch, keyboard, focus, and hover events; accessibility, transforms, and persistent identity are absent. | [renderer](../../modules/react_native_bindings/root_view/react_native_root_view.cpp), [input router](../../modules/react_native_bindings/input/rn_input_router.cpp) | [BASELINE-SMOKE](test-coverage.md), [INTERACTION-UNIT](test-coverage.md), [PRESSABLE-SMOKE](test-coverage.md) |
 | COMP-VIRTUALIZED-LIST | `VirtualizedList` | pending | Requires scrolling, measurement, and durable identity. | none | none |
 | COMP-VIRTUALIZED-SECTION | `VirtualizedSectionList` | pending | Requires scrolling, measurement, and durable identity. | none | none |
 | COMP-VIRTUAL-VIEW | `unstable_VirtualView` | pending | Experimental component is not implemented or verified. | none | none |

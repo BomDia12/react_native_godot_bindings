@@ -3,6 +3,8 @@
 #include "core/object/object_id.h"
 #include "core/templates/hash_map.h"
 
+#include "rn_shadow_node.h"
+
 class Node;
 
 // Tag allocator and tag -> scene node map.
@@ -13,15 +15,20 @@ class Node;
 class RNRegistry {
 	int next_tag = 1;
 	HashMap<int, ObjectID> nodes;
+	HashMap<ObjectID, int> tags;
+	HashMap<int, Ref<RNShadowNode>> shadow_nodes;
 
 public:
 	int allocate_tag();
 
-	void register_node(int p_tag, Node *p_node);
+	void register_node(int p_tag, Node *p_node, const Ref<RNShadowNode> &p_shadow_node);
 	void unregister_node(int p_tag);
 
 	// Returns nullptr if the tag is unknown or the node has been freed.
 	Node *get_node(int p_tag) const;
+	int get_tag(ObjectID p_id) const;
+	Ref<RNShadowNode> get_shadow_node(int p_tag) const;
+	bool has_tag(int p_tag) const;
 
 	void clear();
 };
