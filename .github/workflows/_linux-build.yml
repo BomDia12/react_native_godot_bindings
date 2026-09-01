@@ -63,9 +63,7 @@ jobs:
         id: hermes-library-cache
         uses: actions/cache/restore@v5
         with:
-          path: |
-            modules/react_native_bindings/engines/build_release/lib/libhermesvm.so
-            modules/react_native_bindings/engines/build_release/jsi/libjsi.so
+          path: modules/react_native_bindings/engines/build_release
           key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh') }}
           restore-keys: |
             hermes-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', '.gitmodules', 'scripts/build_hermes.sh') }}
@@ -130,9 +128,7 @@ jobs:
         if: steps.hermes-library-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
-          path: |
-            modules/react_native_bindings/engines/build_release/lib/libhermesvm.so
-            modules/react_native_bindings/engines/build_release/jsi/libjsi.so
+          path: modules/react_native_bindings/engines/build_release
           key: ${{ steps.hermes-library-cache.outputs.cache-primary-key }}
 
       - name: Build Godot and module
