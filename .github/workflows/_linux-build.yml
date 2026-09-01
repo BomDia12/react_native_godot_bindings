@@ -56,13 +56,17 @@ jobs:
           path: godot
           key: godot-source-${{ runner.os }}-${{ hashFiles('baseline.env', 'scripts/bootstrap.sh') }}
 
-      - name: Restore Hermes build cache
-        uses: actions/cache@v5
+      - name: Load pinned Hermes commit
+        run: grep '^HERMES_COMMIT=' baseline.env >> "$GITHUB_ENV"
+
+      - name: Restore Hermes library cache
+        id: hermes-library-cache
+        uses: actions/cache/restore@v5
         with:
-          path: modules/react_native_bindings/engines/build_release
-          key: hermes-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', '.gitmodules', 'scripts/build_hermes.sh') }}
-          restore-keys: |
-            hermes-${{ runner.os }}-gcc13-
+          path: |
+            modules/react_native_bindings/engines/build_release/lib/libhermesvm.so
+            modules/react_native_bindings/engines/build_release/jsi/libjsi.so
+          key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh') }}
 
       - name: Restore compiler caches
         uses: actions/cache@v5
@@ -105,13 +109,28 @@ jobs:
           python3 -m unittest discover -s scripts/tests
 
       - name: Build Hermes
+        if: steps.hermes-library-cache.outputs.cache-hit != 'true'
         run: |
           set -o pipefail
           scripts/build_hermes.sh 2>&1 | tee hermes-build.log
 
+      - name: Save Hermes library cache
+        if: steps.hermes-library-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            modules/react_native_bindings/engines/build_release/lib/libhermesvm.so
+            modules/react_native_bindings/engines/build_release/jsi/libjsi.so
+          key: ${{ steps.hermes-library-cache.outputs.cache-primary-key }}
+
       - name: Build Godot and module
         run: |
-          set -o pipefail
+          set -o pipefailmes library cache
+        if: steps.hermes-library-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            modules/react_native_bindings/engine
           scripts/build_godot.sh -j2 \
             cpp_compiler_launcher=ccache \
             c_compiler_launcher=ccache \
