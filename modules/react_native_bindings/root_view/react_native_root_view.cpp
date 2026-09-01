@@ -45,7 +45,9 @@ void ReactNativeRootView::_bind_methods() {
 
 void ReactNativeRootView::_notification(int p_what) {
 	switch (p_what) {
-		case NOTIFICATION_READY: {
+		// ENTER_TREE rather than READY: READY fires once per node lifetime, so a root
+		// view that is reparented or re-added would never boot its runtime again.
+		case NOTIFICATION_ENTER_TREE: {
 			_boot();
 		} break;
 
@@ -67,6 +69,7 @@ void ReactNativeRootView::_notification(int p_what) {
 		case NOTIFICATION_EXIT_TREE: {
 			_cleanup_runtime_state(true);
 			if (booted) {
+				booted = false;
 				if (HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton()) {
 					hermes->reset();
 				}
@@ -189,14 +192,18 @@ void ReactNativeRootView::_flush_mounts() {
 		pending_commits.clear();
 		return;
 	}
+	// Only the newest tree is observable, and mounting is a full Yoga pass plus a Control
+	// rebuild, so the commits it superseded are dropped rather than rendered.
 	const uint64_t generation = hermes->get_runtime_generation();
-	while (!pending_commits.empty()) {
-		PendingCommit commit = pending_commits.front();
-		pending_commits.pop_front();
-		if (commit.generation != generation) {
-			continue;
+	Ref<RNShadowNode> newest_tree;
+	for (const PendingCommit &commit : pending_commits) {
+		if (commit.generation == generation) {
+			newest_tree = commit.tree;
 		}
-		mount(commit.tree);
+	}
+	pending_commits.clear();
+	if (newest_tree.is_valid()) {
+		mount(newest_tree);
 	}
 }
 
@@ -448,6 +455,13 @@ void ReactNativeRootView::_route_input(const Ref<InputEvent> &p_event) {
 		if (control && control->get_focus_mode() != Control::FOCUS_NONE) {
 			_set_focused_tag(result.focus_tag);
 			control->grab_focus();
+		} else {
+			// Pressing something unfocusable drops focus, as a browser does. Godot's GUI
+			// would normally do this, but it never sees the press: we accept it here.
+			if (Control *focused = Object::cast_to<Control>(registry.get_node(focused_tag))) {
+				focused->release_focus();
+			}
+			_set_focused_tag(0);
 		}
 	}
 	if (!result.events.is_empty()) {

@@ -57,7 +57,6 @@ public:
 	ReactNativeRootView();
 	~ReactNativeRootView() override;
 
-	RNRegistry &get_registry() { return registry; }
 	int get_root_tag() const { return root_tag; }
 
 	void mount(const Ref<RNShadowNode> &p_tree);

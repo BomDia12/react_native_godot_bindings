@@ -43,6 +43,10 @@ func find_panel_with_color(node: Node, color: Color) -> Panel:
 			return found
 	return null
 
+func border_width_of(panel: Panel) -> int:
+	var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	return 0 if style == null else style.get_border_width(SIDE_TOP)
+
 func find_label_text(node: Node, value: String) -> Label:
 	if node is Label and node.text == value:
 		return node
@@ -149,7 +153,13 @@ func _process(_delta: float) -> void:
 			if not is_equal_approx(float(changed_layout.width), 42.0) or not is_equal_approx(float(changed_layout.height), 20.0):
 				fail("changed onLayout rectangle is wrong: %s" % changed_layout)
 				return
-			if find_label_text(self, "Count 1") == null or find_panel_with_color(self, CHANGED_COLOR) == null:
+			if find_label_text(self, "Count 1") == null:
+				return
+			var outlined := find_panel_with_color(self, CHANGED_COLOR)
+			if outlined == null:
+				return
+			if border_width_of(outlined) != 2:
+				fail("border props did not reach the stylebox")
 				return
 			if not assert_order(log_values, ["outer-capture", "inner-capture", "inner-bubble", "outer-bubble"]):
 				fail("pointer capture and bubble order is wrong: %s" % log_values)
@@ -261,5 +271,13 @@ func _process(_delta: float) -> void:
 			mouse_button(counter_point, MOUSE_BUTTON_LEFT, false)
 			stage = 14
 		14:
-			if current.get("count", 0) == 1:
-				finish()
+			if current.get("count", 0) != 1 or not has_log("counter-focus"):
+				return
+			var background := get_global_rect().get_center()
+			mouse_button(background, MOUSE_BUTTON_LEFT, true)
+			mouse_button(background, MOUSE_BUTTON_LEFT, false)
+			stage = 15
+		15:
+			if not has_log("counter-blur"):
+				return
+			finish()

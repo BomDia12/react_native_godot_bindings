@@ -17,7 +17,6 @@ jobs:
     name: Build Linux prerelease
     uses: ./.github/workflows/_linux-build.yml
     with:
-      cache_namespace: main
       package_release: true
 
   publish:

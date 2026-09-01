@@ -362,8 +362,9 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 			contact.tag = target;
 			contact.root_position = p_root_position;
 			contact.screen_position = p_screen_position;
+			const bool is_first_contact = touch_contacts.is_empty();
 			touch_contacts[index] = contact;
-			if (primary_touch_id < 0) {
+			if (is_first_contact) {
 				primary_touch_id = index;
 			}
 			const Dictionary pointer = pointer_payload(target, p_root_position, p_screen_position, target_origin(p_tree, target), 0, 1, "touch", index, 0.5f, 1.0f, 1.0f, index == primary_touch_id, nullptr, timestamp);
@@ -388,12 +389,10 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 		const TouchContact ended = *contact;
 		const bool was_primary = index == primary_touch_id;
 		touch_contacts.erase(index);
+		// A pointer is primary for its whole lifetime (W3C): once the primary contact
+		// lifts, nothing is primary again until every contact has been released.
 		if (was_primary) {
 			primary_touch_id = -1;
-			for (const KeyValue<int, TouchContact> &entry : touch_contacts) {
-				primary_touch_id = entry.key;
-				break;
-			}
 		}
 		Dictionary touch = touch_value(ended.tag, index, p_root_tag, p_root_position, p_screen_position, target_origin(p_tree, ended.tag), 0.0f, timestamp);
 		Array changed;

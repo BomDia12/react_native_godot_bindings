@@ -103,6 +103,7 @@ function App() {
         style={[
           styles.counter,
           count > 0 ? styles.wide : null,
+          count === 1 ? styles.outlined : null,
           pressed ? styles.pressed : count > 0 ? styles.changed : null,
         ]}>
         <Text style={styles.text}>{`Count ${count}`}</Text>
@@ -138,6 +139,12 @@ const styles = StyleSheet.create({
   },
   changed: {
     backgroundColor: '#227744',
+  },
+  // Applied at exactly one count, so the following commit removes these props
+  // instead of changing them.
+  outlined: {
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   secondary: {
     width: 30,

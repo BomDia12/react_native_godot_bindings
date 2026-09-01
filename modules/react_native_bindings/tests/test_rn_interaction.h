@@ -250,8 +250,12 @@ TEST_CASE("[ReactNativeBindings][Interaction] multiple touches track primary con
 	REQUIRE(second_cancel.events.size() == 2);
 	CHECK(second_cancel.events[0].name == "topTouchCancel");
 	CHECK(second_cancel.events[1].name == "topPointerCancel");
-	CHECK(bool(second_cancel.events[1].payload["isPrimary"]));
+	CHECK_FALSE(bool(second_cancel.events[1].payload["isPrimary"]));
 	CHECK(Array(second_cancel.events[0].payload["touches"]).is_empty());
+
+	RNInputRouter::RouteResult third = route_touch(7, true, false);
+	REQUIRE(third.events.size() == 2);
+	CHECK(bool(third.events[0].payload["isPrimary"]));
 }
 
 TEST_CASE("[ReactNativeBindings][Interaction] disappearing responders cancel once") {

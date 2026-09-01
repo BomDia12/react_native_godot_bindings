@@ -7,6 +7,7 @@
 #include "core/object/object.h"
 #include "core/variant/array.h"
 
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,32 @@ Variant jsi_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p
 Dictionary props_from(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value) {
 	const Variant converted = jsi_to_variant(rt, p_value, 0);
 	return converted.get_type() == Variant::DICTIONARY ? Dictionary(converted) : Dictionary();
+}
+
+// Fabric's prop diffs spell "this prop went away" as an explicit null, so a null erases
+// rather than overwrites. The distinction matters because jsi_to_variant also maps
+// functions to NIL, and a live onLayout handler must stay present in the dictionary.
+void merge_props(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_updates, Dictionary &r_props) {
+	if (!p_updates.isObject()) {
+		return;
+	}
+
+	facebook::jsi::Object updates = p_updates.getObject(rt);
+	facebook::jsi::Array names = updates.getPropertyNames(rt);
+	for (size_t i = 0; i < names.size(rt); ++i) {
+		facebook::jsi::Value key = names.getValueAtIndex(rt, i);
+		if (!key.isString()) {
+			continue;
+		}
+		facebook::jsi::String key_string = key.getString(rt);
+		const String name = string_from_utf8(key_string.utf8(rt));
+		facebook::jsi::Value value = updates.getProperty(rt, key_string);
+		if (value.isNull() || value.isUndefined()) {
+			r_props.erase(name);
+		} else {
+			r_props[name] = jsi_to_variant(rt, value, 0);
+		}
+	}
 }
 
 Ref<RNShadowNode> node_from(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value) {
@@ -190,11 +217,7 @@ facebook::jsi::Value FabricUIManager::clone_node(facebook::jsi::Runtime &rt, con
 			throw facebook::jsi::JSError(rt, std::string("cloneNode*WithNewProps: missing props."));
 		}
 		Dictionary props = source->props.duplicate(true);
-		const Dictionary updates = props_from(rt, p_args[1]);
-		const Array keys = updates.keys();
-		for (int i = 0; i < keys.size(); ++i) {
-			props[keys[i]] = updates[keys[i]];
-		}
+		merge_props(rt, p_args[1], props);
 		return wrap_node(rt, source->clone(p_new_children, &props));
 	}
 
@@ -260,6 +283,12 @@ facebook::jsi::Value FabricUIManager::complete_root(facebook::jsi::Runtime &rt, 
 	root->view_name = "RCTRootView";
 	root->children = child_set->children;
 
+	// Nodes React has dropped take their event target with them. Pruning here, once per
+	// commit, is what keeps the map from growing for the lifetime of the runtime.
+	for (auto entry = event_targets.begin(); entry != event_targets.end();) {
+		entry = entry->second.expired() ? event_targets.erase(entry) : std::next(entry);
+	}
+
 	root_view->enqueue_mount(root, runtime_generation);
 	return facebook::jsi::Value::undefined();
 }
@@ -278,11 +307,13 @@ facebook::jsi::Value FabricUIManager::set_is_js_responder(facebook::jsi::Runtime
 	}
 
 	const Ref<RNShadowNode> node = node_from(rt, p_args[0]);
-	ReactNativeRootView *root_view = get_root_view();
-	if (node.is_null() || !root_view || !root_view->get_registry().has_tag(node->tag)) {
-		throw facebook::jsi::JSError(rt, std::string("setIsJSResponder: node is not in the current tree."));
+	if (node.is_null()) {
+		throw facebook::jsi::JSError(rt, std::string("setIsJSResponder: first argument is not a shadow node."));
 	}
 
+	// Deliberately not checking that the node is still mounted: React releases the
+	// responder for nodes that unmounted mid-gesture, and throwing there would abort
+	// the rest of the dispatch and strand ResponderEventPlugin holding the responder.
 	if (p_args[1].getBool()) {
 		responder_tag = node->tag;
 	} else if (responder_tag == node->tag) {
@@ -300,8 +331,11 @@ facebook::jsi::Value FabricUIManager::measure(facebook::jsi::Runtime &rt, const 
 	ReactNativeRootView *root_view = get_root_view();
 	Rect2 local_rect;
 	Point2 page_position;
-	if (node.is_null() || !root_view || !root_view->get_measurement(node->tag, local_rect, page_position)) {
-		return facebook::jsi::Value::undefined();
+	// An unmounted or not-yet-mounted node still gets its callback, with zeros: React
+	// treats measure() as always resolving, and a commit is a frame behind the JS that
+	// asks for it, so refusing to answer strands the caller forever.
+	if (!node.is_null() && root_view) {
+		root_view->get_measurement(node->tag, local_rect, page_position);
 	}
 
 	facebook::jsi::Function callback = p_args[1].getObject(rt).getFunction(rt);
