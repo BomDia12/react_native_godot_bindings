@@ -125,12 +125,7 @@ jobs:
 
       - name: Build Godot and module
         run: |
-          set -o pipefailmes library cache
-        if: steps.hermes-library-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            modules/react_native_bindings/engine
+          set -o pipefail
           scripts/build_godot.sh -j2 \
             cpp_compiler_launcher=ccache \
             c_compiler_launcher=ccache \
