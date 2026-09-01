@@ -6,6 +6,10 @@
 #include "core/templates/vector.h"
 #include "core/variant/dictionary.h"
 
+#include <memory>
+
+class RNEventTarget;
+
 // One node of Fabric's shadow tree.
 //
 // The tree is persistent and immutable: the renderer clones nodes instead of
@@ -20,6 +24,7 @@ public:
 	String view_name;
 	Dictionary props;
 	Vector<Ref<RNShadowNode>> children;
+	std::shared_ptr<RNEventTarget> event_target;
 
 	// Layout relative to this node's Yoga parent, filled in by RNLayout::calculate().
 	// Matches what Control::set_position() expects from a Godot child. Not part of the

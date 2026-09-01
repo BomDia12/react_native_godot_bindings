@@ -13,5 +13,4 @@ jobs:
     name: Linux baseline
     uses: ./.github/workflows/_linux-build.yml
     with:
-      cache_namespace: pr
       package_release: false

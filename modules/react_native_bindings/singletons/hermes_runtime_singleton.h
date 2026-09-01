@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <mutex>
+#include <vector>
 
 namespace facebook {
 	namespace hermes {
@@ -38,6 +39,8 @@ class HermesRuntimeSingleton : public Object {
 	String last_error;
 	Callable import_resolver;
 	HashMap<String, std::shared_ptr<facebook::jsi::HostObject>> host_objects;
+	std::vector<std::weak_ptr<class HermesRuntimeLifecycle>> lifecycle_objects;
+	uint64_t runtime_generation = 1;
 
 	Variant evaluate_locked(const String &code, const String &source);
 	Variant call_function_locked(const String &function_name, const Array &args);
@@ -49,6 +52,7 @@ class HermesRuntimeSingleton : public Object {
 	void ensure_runtime_locked();
 	void install_import_function_locked();
 	void install_host_objects_locked();
+	void run_pre_reset_hooks_locked();
 	facebook::jsi::Value handle_import_module(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
  	Variant filesystem_import_resolver(const String &path);
 
@@ -66,6 +70,8 @@ public:
 	void set_global(const String &name, const Variant &value);
 	Variant get_global(const String &name);
 	void reset();
+	uint64_t get_runtime_generation() const;
+	void dispatch_queued_events(const std::shared_ptr<class FabricUIManager> &p_ui_manager);
 	bool is_ready() const;
 	String get_last_error() const;
 	void set_import_resolver(const Callable &resolver);

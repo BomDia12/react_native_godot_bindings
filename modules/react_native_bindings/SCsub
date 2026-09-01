@@ -52,6 +52,7 @@ env_rn.add_source_files(env.modules_sources, "*.cpp")
 module_source_dirs = [
 	"editor",
 	"fabric",
+	"input",
 	"root_view",
 	"singletons",
 ]

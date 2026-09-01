@@ -31,7 +31,7 @@ shims prove fixture compatibility only.
 | API-LINKING | `Linking` | pending | No native service. | none | none |
 | API-LOGBOX | `LogBox` | pending | Preamble no-op is not support. | none | none |
 | API-NATIVE-APP-EVENT | `NativeAppEventEmitter` | pending | Native event bridge is absent. | none | none |
-| API-COMPONENT-REGISTRY | `NativeComponentRegistry` | pending | Descriptor registry arrives in Phase 5. | none | none |
+| API-COMPONENT-REGISTRY | `NativeComponentRegistry` | pending | No Godot component descriptor registry is implemented. | none | none |
 | API-DIALOG-ANDROID | `NativeDialogManagerAndroid` | pending | Android-specific API has no Godot decision. | none | none |
 | API-NATIVE-EVENT | `NativeEventEmitter` | pending | Native event bridge is absent. | none | none |
 | API-NATIVE-MODULES | `NativeModules` | pending | General native-module bridge is absent. | none | none |
@@ -40,9 +40,9 @@ shims prove fixture compatibility only.
 | API-PERMISSIONS-ANDROID | `PermissionsAndroid` | pending | Android-specific API has no Godot decision. | none | none |
 | API-PIXEL-RATIO | `PixelRatio` | pending | Fixed fixture scale is not native support. | none | none |
 | API-PLATFORM | `Platform` | pending | Supported bundle currently reports Android, not Godot. | none | none |
-| API-PLATFORM-COLOR | `PlatformColor` | pending | Godot color contract arrives in Phase 5. | none | none |
-| API-PUSH-IOS | `PushNotificationIOS` | pending | iOS-specific API has no Godot decision. | none | none |
-| API-PROCESS-COLOR | `processColor` | partially supported | Android signed-ARGB output is decoded by the renderer; Godot-native colors arrive in Phase 5. | [color conversion](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | [STYLE-UNIT](test-coverage.md) |
+| API-PLATFORM-COLOR | `PlatformColor` | pending | No Godot color contract is implemented. | none | none |
+| API-PUSH-IOS | `PushNotificationIOS` | pending | iOS-specific API has no Godot adaptation. | none | none |
+| API-PROCESS-COLOR | `processColor` | partially supported | Android signed-ARGB output is decoded by the renderer; Godot-native and dynamic colors are absent. | [color conversion](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | [STYLE-UNIT](test-coverage.md) |
 | API-REGISTER-CALLABLE | `registerCallableModule` | pending | Preamble registry is fixture-only. | none | none |
 | API-REQUIRE-NATIVE | `requireNativeComponent` | pending | Host-component registry contract is absent. | none | none |
 | API-RN-VERSION | `ReactNativeVersion` | pending | JS export is not verified. | none | none |
@@ -57,7 +57,7 @@ shims prove fixture compatibility only.
 | API-BATCHED-UPDATES | `unstable_batchedUpdates` | pending | Renderer behavior is not verified. | none | none |
 | API-ANIMATED-VALUE | `useAnimatedValue` | pending | Animation integration is not verified. | none | none |
 | API-COLOR-SCHEME | `useColorScheme` | pending | Appearance service is absent. | none | none |
-| API-PRESSABILITY | `usePressability` | pending | Input and responder path are absent. | none | none |
+| API-PRESSABILITY | `usePressability` | partially supported | Works through the routed mouse, touch, keyboard, focus, hover, and responder subset; durable native identity, complete measurement, pointer capture, long-press edge cases, production feature flags, and broader platform coverage are absent. | [input router](../../modules/react_native_bindings/input/rn_input_router.cpp), [event bridge](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp) | [PRESSABLE-SMOKE](test-coverage.md) |
 | API-WINDOW-DIMENSIONS | `useWindowDimensions` | pending | Native dimensions service is absent. | none | none |
 | API-UTF-SEQUENCE | `UTFSequence` | pending | JS export is not verified. | none | none |
 | API-VIBRATION | `Vibration` | pending | No native service. | none | none |

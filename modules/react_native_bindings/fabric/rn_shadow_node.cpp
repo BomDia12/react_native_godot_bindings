@@ -8,6 +8,7 @@ Ref<RNShadowNode> RNShadowNode::clone(bool p_new_children, const Dictionary *p_n
 	copy->view_name = view_name;
 	copy->props = p_new_props ? *p_new_props : props;
 	copy->layout = layout;
+	copy->event_target = event_target;
 
 	if (!p_new_children) {
 		// Shares the child subtrees by reference; the renderer replaces only what changed.

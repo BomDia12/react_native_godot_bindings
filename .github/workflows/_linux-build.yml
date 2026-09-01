@@ -3,10 +3,6 @@ name: Linux build
 on:
   workflow_call:
     inputs:
-      cache_namespace:
-        description: Cache namespace for this workflow class
-        required: true
-        type: string
       package_release:
         description: Package the successful build for publication
         required: true
@@ -22,6 +18,8 @@ jobs:
     env:
       CC: gcc-13
       CXX: g++-13
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
     steps:
       - uses: actions/checkout@v6
         with:
@@ -39,40 +37,56 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.npm
-          key: ${{ inputs.cache_namespace }}-npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'samples/view-text/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'samples/view-text/package-lock.json') }}
           restore-keys: |
-            ${{ inputs.cache_namespace }}-npm-${{ runner.os }}-
+            npm-${{ runner.os }}-
 
       - name: Restore pip download cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
-          key: ${{ inputs.cache_namespace }}-pip-${{ runner.os }}-${{ hashFiles('baseline.env', 'requirements-ci.txt') }}
+          key: pip-${{ runner.os }}-${{ hashFiles('baseline.env', 'requirements-ci.txt') }}
           restore-keys: |
-            ${{ inputs.cache_namespace }}-pip-${{ runner.os }}-
+            pip-${{ runner.os }}-
 
       - name: Restore Godot source cache
         id: godot-source-cache
         uses: actions/cache/restore@v5
         with:
           path: godot
-          key: ${{ inputs.cache_namespace }}-godot-source-${{ runner.os }}-${{ hashFiles('baseline.env', 'scripts/bootstrap.sh') }}
+          key: godot-source-${{ runner.os }}-${{ hashFiles('baseline.env', 'scripts/bootstrap.sh') }}
 
-      - name: Restore Hermes build cache
-        uses: actions/cache@v5
+      - name: Load pinned Hermes commit
+        run: grep '^HERMES_COMMIT=' baseline.env >> "$GITHUB_ENV"
+
+      - name: Restore Hermes library cache
+        id: hermes-library-cache
+        uses: actions/cache/restore@v5
         with:
           path: modules/react_native_bindings/engines/build_release
-          key: ${{ inputs.cache_namespace }}-hermes-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', '.gitmodules', 'scripts/build_hermes.sh') }}
+          key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh') }}
           restore-keys: |
-            ${{ inputs.cache_namespace }}-hermes-${{ runner.os }}-gcc13-
+            hermes-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', '.gitmodules', 'scripts/build_hermes.sh') }}
 
-      - name: Restore SCons cache
+      - name: Check Hermes libraries
+        id: hermes-libraries
+        run: |
+          HERMES_BUILD_DIR=modules/react_native_bindings/engines/build_release
+          if [[ -f "$HERMES_BUILD_DIR/lib/libhermesvm.so" && -f "$HERMES_BUILD_DIR/jsi/libjsi.so" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore compiler caches
         uses: actions/cache@v5
         with:
-          path: .scons-cache
-          key: ${{ inputs.cache_namespace }}-scons-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
+          path: |
+            .scons-cache
+            .ccache
+          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
           restore-keys: |
-            ${{ inputs.cache_namespace }}-scons-${{ runner.os }}-gcc13-
+            compiler-${{ runner.os }}-gcc13-
 
       - name: Install native toolchain
         timeout-minutes: 15
@@ -105,9 +119,17 @@ jobs:
           python3 -m unittest discover -s scripts/tests
 
       - name: Build Hermes
+        if: steps.hermes-libraries.outputs.available != 'true'
         run: |
           set -o pipefail
           scripts/build_hermes.sh 2>&1 | tee hermes-build.log
+
+      - name: Save Hermes library cache
+        if: steps.hermes-library-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: modules/react_native_bindings/engines/build_release
+          key: ${{ steps.hermes-library-cache.outputs.cache-primary-key }}
 
       - name: Build Godot and module
         run: |
