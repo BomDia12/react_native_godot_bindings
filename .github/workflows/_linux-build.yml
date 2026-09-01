@@ -67,6 +67,18 @@ jobs:
             modules/react_native_bindings/engines/build_release/lib/libhermesvm.so
             modules/react_native_bindings/engines/build_release/jsi/libjsi.so
           key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh') }}
+          restore-keys: |
+            hermes-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', '.gitmodules', 'scripts/build_hermes.sh') }}
+
+      - name: Check Hermes libraries
+        id: hermes-libraries
+        run: |
+          HERMES_BUILD_DIR=modules/react_native_bindings/engines/build_release
+          if [[ -f "$HERMES_BUILD_DIR/lib/libhermesvm.so" && -f "$HERMES_BUILD_DIR/jsi/libjsi.so" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Restore compiler caches
         uses: actions/cache@v5
@@ -109,7 +121,7 @@ jobs:
           python3 -m unittest discover -s scripts/tests
 
       - name: Build Hermes
-        if: steps.hermes-library-cache.outputs.cache-hit != 'true'
+        if: steps.hermes-libraries.outputs.available != 'true'
         run: |
           set -o pipefail
           scripts/build_hermes.sh 2>&1 | tee hermes-build.log
