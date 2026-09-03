@@ -2,7 +2,7 @@
 
 Repository: `https://github.com/facebook/react-native.git`
 
-Revision: `6747cd2a6c137a2f3317082b51ac8e30b878b00d`
+Revision: `a59eff64fa907ed6e919fafe6cbd26d1d54c2de3`
 
 Source path: `packages/react-native/ReactCommon/yoga/yoga`
 
@@ -10,11 +10,11 @@ Local path: `modules/react_native_bindings/thirdparty/yoga/yoga`
 
 License: MIT, copied from the React Native repository root into `LICENSE`.
 
-Files: the 78 source and header files under the upstream `yoga/` directory.
+Files: all 80 files under the upstream `yoga/` directory.
 
 Modifications: none.
 
-Tree SHA-256: `2c2731ff50034012e5864df2c5c5426397bb61b150815cda22fa7d2ba1d14c3a`
+Tree SHA-256: `3642d798233e07f054c5fbf8219a3659fcc26643022f715b63c32cb40d11441b`
 
 Update by checking out the recorded React Native revision, replacing the local `yoga/`
 directory with the upstream directory, copying the root license, and updating the
