@@ -5,8 +5,7 @@ Public cross-platform component exports from React Native 0.87.1 are classified 
 export. Components that React Native scopes to a single platform are out of scope and are
 not listed: `DrawerLayoutAndroid`, `InputAccessoryView`, `ProgressBarAndroid`,
 `SafeAreaView`, and `TouchableNativeFeedback`. `Touchable` remains a runtime compatibility
-re-export but is absent from the tagged public types; `unstable_VirtualView` resolves to a
-private source module and is excluded from this public matrix.
+re-export but is absent from the tagged public types.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
@@ -35,3 +34,6 @@ private source module and is excluded from this public matrix.
 | COMP-VIEW | `View` | partially supported | Mounts a Godot `Panel` with Yoga layout, visual styles, pointer hit testing, layout events, and routed mouse, touch, keyboard, focus, and hover events; accessibility, transforms, and persistent identity are absent. | [renderer](../../modules/react_native_bindings/root_view/react_native_root_view.cpp), [input router](../../modules/react_native_bindings/input/rn_input_router.cpp) | [BASELINE-SMOKE](test-coverage.md), [INTERACTION-UNIT](test-coverage.md), [PRESSABLE-SMOKE](test-coverage.md) |
 | COMP-VIRTUALIZED-LIST | `VirtualizedList` | pending | Requires scrolling, measurement, and durable identity. | none | none |
 | COMP-VIRTUALIZED-SECTION | `VirtualizedSectionList` | pending | Requires scrolling, measurement, and durable identity. | none | none |
+| COMP-VIRTUAL-VIEW | `unstable_VirtualView` | pending | Experimental component is not implemented or verified. | none | none |
+| COMP-VIRTUAL-COLUMN | `unstable_VirtualColumn` | pending | Experimental virtual-collection component is not implemented or verified. | none | none |
+| COMP-VIRTUAL-ROW | `unstable_VirtualRow` | pending | Experimental virtual-collection component is not implemented or verified. | none | none |

@@ -1,7 +1,6 @@
 # Fabric host-method compatibility
 
-The React Native 0.87.1 `FabricUIManager` surface is classified below. `findNodeAtPoint`
-is an internal renderer hook and is excluded; it is not in the tagged public `Spec`.
+The React Native 0.87.1 `FabricUIManager` surface is classified below.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
@@ -22,9 +21,10 @@ is an internal renderer hook and is excluded; it is not in the tagged public `Sp
 | FABRIC-FIND-SHADOW | `findShadowNodeByTag_DEPRECATED` | pending | Warning stub. | none | none |
 | FABRIC-SET-NATIVE-PROPS | `setNativeProps` | pending | Warning stub. | none | none |
 | FABRIC-DISPATCH-COMMAND | `dispatchCommand` | pending | Warning stub. | none | none |
-| FABRIC-SET-JS-RESPONDER | `setIsJSResponder` | pending | No Godot JS-responder adaptation is implemented. | none | none |
+| FABRIC-FIND-POINT | `findNodeAtPoint` | pending | Warning stub. | none | none |
 | FABRIC-COMPARE-POSITION | `compareDocumentPosition` | pending | Warning stub. | none | none |
 | FABRIC-BOUNDING-RECT | `getBoundingClientRect` | pending | Warning stub. | none | none |
+| FABRIC-SET-JS-RESPONDER | `setIsJSResponder` | partially supported | Records the active JavaScript responder tag; native-responder blocking is not implemented. | [Fabric manager](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp) | [PRESSABLE-SMOKE](test-coverage.md) |
 | FABRIC-DEFAULT-PRIORITY | `unstable_DefaultEventPriority` | partially supported | Returns serialized Default priority `0`, matching the tagged `ReactEventPriority` enum. | [Fabric manager](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp), [priority enum](../../modules/react_native_bindings/fabric/fabric_ui_manager.h) | [PRESSABLE-SMOKE](test-coverage.md) |
 | FABRIC-DISCRETE-PRIORITY | `unstable_DiscreteEventPriority` | partially supported | Returns serialized Discrete priority `1`, matching the tagged `ReactEventPriority` enum. | [Fabric manager](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp), [priority enum](../../modules/react_native_bindings/fabric/fabric_ui_manager.h) | [PRESSABLE-SMOKE](test-coverage.md) |
 | FABRIC-CONTINUOUS-PRIORITY | `unstable_ContinuousEventPriority` | partially supported | Returns serialized Continuous priority `2`, matching the tagged `ReactEventPriority` enum. | [Fabric manager](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp), [priority enum](../../modules/react_native_bindings/fabric/fabric_ui_manager.h) | [PRESSABLE-SMOKE](test-coverage.md) |
