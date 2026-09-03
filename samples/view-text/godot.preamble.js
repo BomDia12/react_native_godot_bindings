@@ -56,7 +56,7 @@ const MODULES = {
   PlatformConstants: {
     getConstants: () => ({
       isTesting: false,
-      reactNativeVersion: {major: 0, minor: 84, patch: 1},
+      reactNativeVersion: {major: 0, minor: 87, patch: 1},
     }),
   },
   // AppContainer reads these values during startup.

@@ -1,6 +1,6 @@
 # React Native bindings for Godot
 
-This repository builds the current React Native 0.84.1 `View`/`Text` baseline as an
+This repository builds the current React Native 0.87.1 `View`/`Text` baseline as an
 external Godot module. Godot is cloned into the ignored `godot/` working directory; the
 tracked module remains under `modules/react_native_bindings/`.
 

@@ -3,7 +3,8 @@
 ## Hermes
 
 - Repository: `https://github.com/facebook/hermes.git`
-- Revision: `fd0e1d3ed928510b30fd74b792a826f9d0457064` (`hermes-v0.15.0`)
+- Revision: `3477757eb2475555cf8d8df24bfb1deb0613880d`
+  (`hermes-v250829098.0.17`)
 - Local destination: `modules/react_native_bindings/engines/hermes`
 - Acquisition: pinned Git submodule
 - License: MIT at `modules/react_native_bindings/engines/hermes/LICENSE`
@@ -16,7 +17,7 @@
 ## Yoga
 
 - Repository: `https://github.com/facebook/react-native.git`
-- Revision: `6747cd2a6c137a2f3317082b51ac8e30b878b00d`
+- Revision: `a59eff64fa907ed6e919fafe6cbd26d1d54c2de3` (React Native `v0.87.1`)
 - Upstream path: `packages/react-native/ReactCommon/yoga/yoga`
 - Local destination: `modules/react_native_bindings/thirdparty/yoga/yoga`
 - Acquisition: vendored source copy

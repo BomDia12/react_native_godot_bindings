@@ -1,6 +1,7 @@
 # Fabric host-method compatibility
 
-The React Native 0.84.1 `FabricUIManager` surface is classified below.
+The React Native 0.87.1 `FabricUIManager` surface is classified below. `findNodeAtPoint`
+is an internal renderer hook and is excluded; it is not in the tagged public `Spec`.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
@@ -21,7 +22,7 @@ The React Native 0.84.1 `FabricUIManager` surface is classified below.
 | FABRIC-FIND-SHADOW | `findShadowNodeByTag_DEPRECATED` | pending | Warning stub. | none | none |
 | FABRIC-SET-NATIVE-PROPS | `setNativeProps` | pending | Warning stub. | none | none |
 | FABRIC-DISPATCH-COMMAND | `dispatchCommand` | pending | Warning stub. | none | none |
-| FABRIC-FIND-POINT | `findNodeAtPoint` | pending | Warning stub. | none | none |
+| FABRIC-SET-JS-RESPONDER | `setIsJSResponder` | pending | No Godot JS-responder adaptation is implemented. | none | none |
 | FABRIC-COMPARE-POSITION | `compareDocumentPosition` | pending | Warning stub. | none | none |
 | FABRIC-BOUNDING-RECT | `getBoundingClientRect` | pending | Warning stub. | none | none |
 | FABRIC-DEFAULT-PRIORITY | `unstable_DefaultEventPriority` | partially supported | Returns serialized Default priority `0`, matching the tagged `ReactEventPriority` enum. | [Fabric manager](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp), [priority enum](../../modules/react_native_bindings/fabric/fabric_ui_manager.h) | [PRESSABLE-SMOKE](test-coverage.md) |

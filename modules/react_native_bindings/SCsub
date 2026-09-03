@@ -47,7 +47,8 @@ env_rn.Append(CXXFLAGS=["-fexceptions"], CCFLAGS=["-fexceptions"])
 # Module sources. Listed explicitly: SCons' Glob has no recursive "**", so the old
 # "**/*.cpp" only ever matched one directory deep. An explicit list is what keeps
 # engines/hermes out of the build and lets nested sources in. Add new folders here.
-env_rn.add_source_files(env.modules_sources, "*.cpp")
+module_objects = []
+env_rn.add_source_files(module_objects, "*.cpp")
 
 module_source_dirs = [
 	"editor",
@@ -58,7 +59,10 @@ module_source_dirs = [
 ]
 
 for subdir in module_source_dirs:
-	env_rn.add_source_files(env.modules_sources, "%s/*.cpp" % subdir)
+	env_rn.add_source_files(module_objects, "%s/*.cpp" % subdir)
+
+env_rn.Depends(module_objects, [hermes_lib, hermes_jsi_lib])
+env.modules_sources.extend(module_objects)
 
 # Yoga (vendored from react-native/ReactCommon/yoga). Built in its own cloned env so
 # its warnings stay out of the module build. Header-only: style/, enums/, numeric/.
