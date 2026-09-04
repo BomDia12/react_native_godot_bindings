@@ -5,8 +5,8 @@
 #include "core/string/ustring.h"
 #include "core/templates/hash_map.h"
 #include "core/variant/array.h"
-#include "core/variant/dictionary.h"
 #include "core/variant/callable.h"
+#include "core/variant/dictionary.h"
 #include "core/variant/variant.h"
 
 #include <memory>
@@ -14,16 +14,16 @@
 #include <vector>
 
 namespace facebook {
-	namespace hermes {
-		class HermesRuntime;
-	} // namespace hermes
+namespace hermes {
+class HermesRuntime;
+} // namespace hermes
 
-	namespace jsi {
-		class Runtime;
-		class Value;
-		class Object;
-		class HostObject;
-	} // namespace jsi
+namespace jsi {
+class Runtime;
+class Value;
+class Object;
+class HostObject;
+} // namespace jsi
 } // namespace facebook
 
 class HermesRuntimeSingleton : public Object {
@@ -53,8 +53,9 @@ class HermesRuntimeSingleton : public Object {
 	void install_import_function_locked();
 	void install_host_objects_locked();
 	void run_pre_reset_hooks_locked();
+	bool is_lifecycle_registered_locked(const std::shared_ptr<class HermesRuntimeLifecycle> &lifecycle) const;
 	facebook::jsi::Value handle_import_module(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
- 	Variant filesystem_import_resolver(const String &path);
+	Variant filesystem_import_resolver(const String &path);
 
 protected:
 	static void _bind_methods();
@@ -74,9 +75,18 @@ public:
 	void dispatch_queued_events(const std::shared_ptr<class FabricUIManager> &p_ui_manager);
 	bool is_ready() const;
 	String get_last_error() const;
+	// Resolves an importModule() specifier to source code, as either a String or a
+	// Dictionary with "code", "path", or "error" keys.
+	//
+	// The resolver runs inside evaluate_locked() with runtime_mutex held, under the same
+	// rule as install_host_object() below: it must never call back into this singleton's
+	// public API, because runtime_mutex is not recursive and the call would self-deadlock.
+	// Read the file and return it; do not evaluate anything from the resolver itself.
 	void set_import_resolver(const Callable &resolver);
 	Callable get_import_resolver() const;
- 	void use_filesystem_import_resolver();
+
+	// Restores the built-in resolver, which reads from res:// and user:// only.
+	void use_filesystem_import_resolver();
 
 	// Registers a jsi::HostObject as a global. The object is retained and reinstalled
 	// automatically on reset(), so callers do not have to reinstall after a reload.

@@ -1,5 +1,7 @@
 #include "rn_shadow_node.h"
 
+#include "core/templates/local_vector.h"
+
 Ref<RNShadowNode> RNShadowNode::clone(bool p_new_children, const Dictionary *p_new_props) const {
 	Ref<RNShadowNode> copy;
 	copy.instantiate();
@@ -16,6 +18,37 @@ Ref<RNShadowNode> RNShadowNode::clone(bool p_new_children, const Dictionary *p_n
 	}
 
 	return copy;
+}
+
+bool RNShadowNode::is_within_depth_limit(const Ref<RNShadowNode> &p_root) {
+	struct PendingNode {
+		const RNShadowNode *node;
+		int depth;
+	};
+
+	if (p_root.is_null()) {
+		return true;
+	}
+
+	LocalVector<PendingNode> pending;
+	pending.push_back({ p_root.ptr(), 0 });
+
+	while (!pending.is_empty()) {
+		const PendingNode current = pending[pending.size() - 1];
+		pending.remove_at(pending.size() - 1);
+
+		if (current.depth >= MAX_DEPTH) {
+			return false;
+		}
+
+		for (const Ref<RNShadowNode> &child : current.node->children) {
+			if (child.is_valid()) {
+				pending.push_back({ child.ptr(), current.depth + 1 });
+			}
+		}
+	}
+
+	return true;
 }
 
 String RNShadowNode::collect_text() const {

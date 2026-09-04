@@ -100,7 +100,7 @@ jobs:
             -o Acquire::ForceIPv4=true
           )
           sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip
+          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache clang-format cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip
           python -m pip install --requirement requirements-ci.txt
 
       - name: Bootstrap pinned sources
@@ -116,6 +116,7 @@ jobs:
       - name: Validate metadata and scripts
         run: |
           scripts/verify_provenance.py
+          scripts/check_format.sh
           python3 -m unittest discover -s scripts/tests
 
       - name: Build Hermes

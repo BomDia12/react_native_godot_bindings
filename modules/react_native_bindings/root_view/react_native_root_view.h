@@ -6,8 +6,8 @@
 
 #include "scene/gui/control.h"
 
-#include <memory>
 #include <deque>
+#include <memory>
 
 class FabricUIManager;
 
@@ -51,7 +51,6 @@ protected:
 	static void _bind_methods();
 	void _notification(int p_what);
 	void input(const Ref<InputEvent> &p_event) override;
-	void gui_input(const Ref<InputEvent> &p_event) override;
 
 public:
 	ReactNativeRootView();

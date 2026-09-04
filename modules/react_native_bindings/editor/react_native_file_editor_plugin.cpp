@@ -2,15 +2,11 @@
 
 #ifdef TOOLS_ENABLED
 
-#include "editor/file_system/editor_file_system.h"
+#include "../singletons/react_native_file_singleton.h"
 
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
-
-#include "../singletons/react_native_file_singleton.h"
-
-void ReactNativeFileEditorPlugin::_bind_methods() {
-}
+#include "editor/file_system/editor_file_system.h"
 
 ReactNativeFileEditorPlugin::ReactNativeFileEditorPlugin() {
 	_update_monitored_path();
@@ -60,11 +56,7 @@ void ReactNativeFileEditorPlugin::_check_file_status(bool p_force_refresh) {
 
 void ReactNativeFileEditorPlugin::_update_monitored_path() {
 	ReactNativeFileSingleton *singleton = ReactNativeFileSingleton::get_singleton();
-	if (singleton) {
-		monitored_path = singleton->get_monitored_file();
-	} else {
-		monitored_path = "res://test.txt";
-	}
+	monitored_path = singleton ? singleton->get_monitored_file() : String();
 }
 
 void ReactNativeFileEditorPlugin::_on_filesystem_changed() {

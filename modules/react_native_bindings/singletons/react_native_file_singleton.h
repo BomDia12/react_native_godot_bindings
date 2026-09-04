@@ -5,8 +5,6 @@
 #include "core/object/object.h"
 #include "core/string/ustring.h"
 
-class Object;
-
 class ReactNativeFileSingleton : public Object {
 	GDCLASS(ReactNativeFileSingleton, Object);
 
@@ -18,6 +16,7 @@ class ReactNativeFileSingleton : public Object {
 	bool file_exists = false;
 
 	Error _reload_content(bool p_force_emit);
+	void _forget_file(bool p_force_emit);
 	void _emit_change();
 
 protected:

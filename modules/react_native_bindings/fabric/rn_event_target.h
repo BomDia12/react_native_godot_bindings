@@ -7,7 +7,7 @@ namespace facebook::jsi {
 class Runtime;
 class Object;
 class Value;
-}
+} //namespace facebook::jsi
 
 class RNEventTarget {
 	int tag;

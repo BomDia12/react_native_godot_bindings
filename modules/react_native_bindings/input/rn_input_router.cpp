@@ -430,21 +430,36 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 String RNInputRouter::key_name(const Ref<InputEventKey> &p_key) {
 	switch (p_key->get_keycode()) {
 		case Key::ENTER:
-		case Key::KP_ENTER: return "Enter";
-		case Key::SPACE: return " ";
-		case Key::ESCAPE: return "Escape";
-		case Key::TAB: return "Tab";
-		case Key::BACKSPACE: return "Backspace";
-		case Key::KEY_DELETE: return "Delete";
-		case Key::LEFT: return "ArrowLeft";
-		case Key::RIGHT: return "ArrowRight";
-		case Key::UP: return "ArrowUp";
-		case Key::DOWN: return "ArrowDown";
-		case Key::HOME: return "Home";
-		case Key::END: return "End";
-		case Key::PAGEUP: return "PageUp";
-		case Key::PAGEDOWN: return "PageDown";
-		default: break;
+		case Key::KP_ENTER:
+			return "Enter";
+		case Key::SPACE:
+			return " ";
+		case Key::ESCAPE:
+			return "Escape";
+		case Key::TAB:
+			return "Tab";
+		case Key::BACKSPACE:
+			return "Backspace";
+		case Key::KEY_DELETE:
+			return "Delete";
+		case Key::LEFT:
+			return "ArrowLeft";
+		case Key::RIGHT:
+			return "ArrowRight";
+		case Key::UP:
+			return "ArrowUp";
+		case Key::DOWN:
+			return "ArrowDown";
+		case Key::HOME:
+			return "Home";
+		case Key::END:
+			return "End";
+		case Key::PAGEUP:
+			return "PageUp";
+		case Key::PAGEDOWN:
+			return "PageDown";
+		default:
+			break;
 	}
 	if (p_key->get_unicode() != 0) {
 		return String::chr(p_key->get_unicode());
@@ -464,21 +479,36 @@ String RNInputRouter::code_name(const Ref<InputEventKey> &p_key) {
 	}
 	switch (physical) {
 		case Key::ENTER:
-		case Key::KP_ENTER: return "Enter";
-		case Key::SPACE: return "Space";
-		case Key::ESCAPE: return "Escape";
-		case Key::TAB: return "Tab";
-		case Key::BACKSPACE: return "Backspace";
-		case Key::KEY_DELETE: return "Delete";
-		case Key::LEFT: return "ArrowLeft";
-		case Key::RIGHT: return "ArrowRight";
-		case Key::UP: return "ArrowUp";
-		case Key::DOWN: return "ArrowDown";
-		case Key::HOME: return "Home";
-		case Key::END: return "End";
-		case Key::PAGEUP: return "PageUp";
-		case Key::PAGEDOWN: return "PageDown";
-		default: break;
+		case Key::KP_ENTER:
+			return "Enter";
+		case Key::SPACE:
+			return "Space";
+		case Key::ESCAPE:
+			return "Escape";
+		case Key::TAB:
+			return "Tab";
+		case Key::BACKSPACE:
+			return "Backspace";
+		case Key::KEY_DELETE:
+			return "Delete";
+		case Key::LEFT:
+			return "ArrowLeft";
+		case Key::RIGHT:
+			return "ArrowRight";
+		case Key::UP:
+			return "ArrowUp";
+		case Key::DOWN:
+			return "ArrowDown";
+		case Key::HOME:
+			return "Home";
+		case Key::END:
+			return "End";
+		case Key::PAGEUP:
+			return "PageUp";
+		case Key::PAGEDOWN:
+			return "PageDown";
+		default:
+			break;
 	}
 	const String value = keycode_get_string(physical);
 	return value.is_empty() ? "Unidentified" : value;

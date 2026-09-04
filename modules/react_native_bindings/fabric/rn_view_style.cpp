@@ -3,17 +3,21 @@
 #include "core/error/error_macros.h"
 #include "core/math/color.h"
 
-namespace {
+#include <cmath>
 
-Dictionary style_of(const Dictionary &p_props) {
-	// Fabric delivers a flat props payload: style keys (backgroundColor, borderWidth, ...)
-	// live at the top level, so the props dictionary *is* the style dictionary. There is
-	// no nested "style" key on the real RN renderer path.
-	return p_props;
-}
+// Fabric delivers a flat props payload: style keys (backgroundColor, borderWidth, ...) live
+// at the top level, so the props dictionary *is* the style dictionary. There is no nested
+// "style" key on the real RN renderer path.
+namespace {
 
 bool is_number(const Variant &p_value) {
 	return p_value.get_type() == Variant::INT || p_value.get_type() == Variant::FLOAT;
+}
+
+// A double outside the 32-bit range, or a NaN, has an undefined conversion to int64_t, so
+// the bit pattern below is only meaningful for values processColor could have produced.
+bool is_packed_argb(double p_value) {
+	return std::isfinite(p_value) && p_value >= -2147483648.0 && p_value <= 4294967295.0;
 }
 
 // processColor (JS-side, --platform android) hands us a *signed* 32-bit int in ARGB byte
@@ -37,7 +41,7 @@ bool read_color(const Dictionary &p_style, const String &p_key, Color &r_color) 
 		return false;
 	}
 	const Variant value = p_style[p_key];
-	if (is_number(value)) {
+	if (is_number(value) && is_packed_argb(double(value))) {
 		r_color = color_from_packed_argb(double(value));
 		return true;
 	}
@@ -57,54 +61,52 @@ bool read_number(const Dictionary &p_style, const String &p_key, float &r_value)
 } //namespace
 
 Ref<StyleBoxFlat> RNViewStyle::build_stylebox(const Dictionary &p_props) {
-	const Dictionary style = style_of(p_props);
-
 	Ref<StyleBoxFlat> box;
 	box.instantiate();
 	box->set_bg_color(Color(0, 0, 0, 0)); // Transparent default, not Godot's panel gray.
 
 	Color color;
-	if (read_color(style, "backgroundColor", color)) {
+	if (read_color(p_props, "backgroundColor", color)) {
 		box->set_bg_color(color);
 	}
-	if (read_color(style, "borderColor", color)) {
+	if (read_color(p_props, "borderColor", color)) {
 		box->set_border_color(color);
 	}
 
 	// Border width: uniform first, then per-edge overrides. Same four RN keys Yoga
 	// reserves box-model space for in rn_layout.cpp, consumed here for painting.
 	float width = 0.0f;
-	if (read_number(style, "borderWidth", width)) {
+	if (read_number(p_props, "borderWidth", width)) {
 		box->set_border_width_all(int(width));
 	}
-	if (read_number(style, "borderTopWidth", width)) {
+	if (read_number(p_props, "borderTopWidth", width)) {
 		box->set_border_width(SIDE_TOP, int(width));
 	}
-	if (read_number(style, "borderBottomWidth", width)) {
+	if (read_number(p_props, "borderBottomWidth", width)) {
 		box->set_border_width(SIDE_BOTTOM, int(width));
 	}
-	if (read_number(style, "borderLeftWidth", width)) {
+	if (read_number(p_props, "borderLeftWidth", width)) {
 		box->set_border_width(SIDE_LEFT, int(width));
 	}
-	if (read_number(style, "borderRightWidth", width)) {
+	if (read_number(p_props, "borderRightWidth", width)) {
 		box->set_border_width(SIDE_RIGHT, int(width));
 	}
 
 	// Corner radius: uniform first, then per-corner overrides.
 	float radius = 0.0f;
-	if (read_number(style, "borderRadius", radius)) {
+	if (read_number(p_props, "borderRadius", radius)) {
 		box->set_corner_radius_all(int(radius));
 	}
-	if (read_number(style, "borderTopLeftRadius", radius)) {
+	if (read_number(p_props, "borderTopLeftRadius", radius)) {
 		box->set_corner_radius(CORNER_TOP_LEFT, int(radius));
 	}
-	if (read_number(style, "borderTopRightRadius", radius)) {
+	if (read_number(p_props, "borderTopRightRadius", radius)) {
 		box->set_corner_radius(CORNER_TOP_RIGHT, int(radius));
 	}
-	if (read_number(style, "borderBottomRightRadius", radius)) {
+	if (read_number(p_props, "borderBottomRightRadius", radius)) {
 		box->set_corner_radius(CORNER_BOTTOM_RIGHT, int(radius));
 	}
-	if (read_number(style, "borderBottomLeftRadius", radius)) {
+	if (read_number(p_props, "borderBottomLeftRadius", radius)) {
 		box->set_corner_radius(CORNER_BOTTOM_LEFT, int(radius));
 	}
 
@@ -112,23 +114,21 @@ Ref<StyleBoxFlat> RNViewStyle::build_stylebox(const Dictionary &p_props) {
 }
 
 float RNViewStyle::opacity_of(const Dictionary &p_props) {
-	const Dictionary style = style_of(p_props);
 	float opacity = 1.0f;
 	// Plain numeric pass-through: opacity is not a color attribute, so do NOT run it
 	// through the ARGB unpacker.
-	read_number(style, "opacity", opacity);
+	read_number(p_props, "opacity", opacity);
 	return opacity;
 }
 
 bool RNViewStyle::clips_contents(const Dictionary &p_props) {
-	const Dictionary style = style_of(p_props);
-	return String(style.get("overflow", "")) == "hidden";
+	return String(p_props.get("overflow", "")) == "hidden";
 }
 
 bool RNViewStyle::color_of(const Dictionary &p_props, const String &p_key, Color &r_color) {
-	return read_color(style_of(p_props), p_key, r_color);
+	return read_color(p_props, p_key, r_color);
 }
 
 bool RNViewStyle::font_size_of(const Dictionary &p_props, float &r_size) {
-	return read_number(style_of(p_props), "fontSize", r_size);
+	return read_number(p_props, "fontSize", r_size);
 }

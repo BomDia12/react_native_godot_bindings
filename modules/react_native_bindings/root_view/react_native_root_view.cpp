@@ -6,12 +6,12 @@
 #include "../singletons/hermes_runtime_singleton.h"
 #include "../singletons/react_native_file_singleton.h"
 
+#include "core/input/input_event.h"
 #include "core/object/callable_mp.h"
 #include "core/string/print_string.h"
-#include "core/input/input_event.h"
-#include "scene/main/viewport.h"
 #include "scene/gui/label.h"
 #include "scene/gui/panel.h"
+#include "scene/main/viewport.h"
 
 namespace {
 constexpr const char *RUN_APPLICATION_FUNCTION = "__godotRunApplication";
@@ -170,6 +170,13 @@ void ReactNativeRootView::_on_react_native_file_changed(const String &p_path, co
 }
 
 void ReactNativeRootView::mount(const Ref<RNShadowNode> &p_tree) {
+	// The single gate for every recursive walk below: layout, mounting, hit testing and
+	// measurement all trust that the committed tree fits on the native stack.
+	if (!RNShadowNode::is_within_depth_limit(p_tree)) {
+		ERR_PRINT(vformat("ReactNativeRootView: shadow tree is nested deeper than %d; refusing to mount it.", RNShadowNode::MAX_DEPTH));
+		return;
+	}
+
 	committed_tree = p_tree;
 	_layout_and_mount();
 }
@@ -418,10 +425,6 @@ void ReactNativeRootView::_set_focused_tag(int p_tag) {
 
 void ReactNativeRootView::input(const Ref<InputEvent> &p_event) {
 	_route_input(p_event);
-}
-
-void ReactNativeRootView::gui_input(const Ref<InputEvent> &p_event) {
-	(void)p_event;
 }
 
 void ReactNativeRootView::_route_input(const Ref<InputEvent> &p_event) {
