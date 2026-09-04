@@ -15,9 +15,6 @@ var secondary_point := Vector2.ZERO
 var stop_log_start := 0
 var count_before_cancel := 0
 
-func _init() -> void:
-	ReactNativeFileSingleton.set_monitored_file("res://dist/interaction.bundle.js")
-
 func fail(message: String) -> void:
 	printerr("RN_SMOKE_FAILED: pressable-interaction: %s" % message)
 	get_tree().quit(1)

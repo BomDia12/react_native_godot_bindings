@@ -7,6 +7,10 @@ Ref<RNShadowNode> RNShadowNode::clone(bool p_new_children, const Dictionary *p_n
 	copy.instantiate();
 
 	copy->tag = tag;
+	copy->root_tag = root_tag;
+	copy->runtime_generation = runtime_generation;
+	copy->surface_epoch = surface_epoch;
+	copy->revision = revision;
 	copy->view_name = view_name;
 	copy->props = p_new_props ? *p_new_props : props;
 	copy->layout = layout;

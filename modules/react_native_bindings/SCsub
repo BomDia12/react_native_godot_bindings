@@ -55,6 +55,7 @@ module_source_dirs = [
 	"fabric",
 	"input",
 	"root_view",
+	"runtime",
 	"singletons",
 ]
 

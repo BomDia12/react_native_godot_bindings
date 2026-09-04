@@ -3,7 +3,10 @@
 #include "../singletons/hermes_runtime_singleton.h"
 
 #include "core/object/callable_mp.h"
+#include "core/os/thread.h"
 #include "tests/test_macros.h"
+
+#include <atomic>
 
 namespace TestRNHermesRuntime {
 
@@ -25,6 +28,32 @@ String evaluate_string(HermesRuntimeSingleton *p_runtime, const String &p_code) 
 Variant resolve_test_module(const String &p_specifier) {
 	(void)p_specifier;
 	return String("return 1;");
+}
+
+struct ThreadRuntimeProbe {
+	HermesRuntimeSingleton *runtime = nullptr;
+	std::atomic<bool> returned_ready{ true };
+
+	static void run(void *p_userdata) {
+		ThreadRuntimeProbe *probe = static_cast<ThreadRuntimeProbe *>(p_userdata);
+		probe->returned_ready.store(probe->runtime->is_ready());
+	}
+};
+
+TEST_CASE("[ReactNativeBindings][HermesRuntime] bound runtime calls reject Godot worker threads") {
+	HermesRuntimeSingleton *runtime = fresh_runtime();
+	REQUIRE(runtime != nullptr);
+	const uint64_t generation = runtime->get_runtime_generation();
+	ThreadRuntimeProbe probe;
+	probe.runtime = runtime;
+	Thread thread;
+	ERR_PRINT_OFF;
+	REQUIRE(thread.start(ThreadRuntimeProbe::run, &probe) != Thread::UNASSIGNED_ID);
+	thread.wait_to_finish();
+	ERR_PRINT_ON;
+	CHECK_FALSE(probe.returned_ready.load());
+	CHECK(runtime->get_runtime_generation() == generation);
+	CHECK(runtime->is_ready());
 }
 
 TEST_CASE("[ReactNativeBindings][HermesRuntime] import is confined to res:// and user://") {
