@@ -6,8 +6,8 @@
 
 #include "scene/gui/control.h"
 
-#include <memory>
 #include <deque>
+#include <memory>
 
 class FabricUIManager;
 

@@ -31,8 +31,17 @@ public:
 	// JS contract.
 	Rect2 layout;
 
+	// Layout, mounting, hit testing and measurement all walk this tree recursively, and JS
+	// decides how deep it is. Trees are checked against this limit once on the way in, so
+	// those walks cannot be driven into a native stack overflow. Far deeper than any real
+	// React tree.
+	static constexpr int MAX_DEPTH = 1024;
+
 	Ref<RNShadowNode> clone(bool p_new_children, const Dictionary *p_new_props) const;
 
 	// Concatenation of the RCTRawText descendants, which is what an RCTText displays.
 	String collect_text() const;
+
+	// Iterative, so validating a hostile tree cannot overflow the stack by itself.
+	static bool is_within_depth_limit(const Ref<RNShadowNode> &p_root);
 };

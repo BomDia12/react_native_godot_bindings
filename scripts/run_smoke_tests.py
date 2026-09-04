@@ -3,7 +3,9 @@ import os
 import resource
 import subprocess
 import sys
+import threading
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,7 +79,13 @@ def build_bundles(repo_root: Path, groups: list[BundleGroup]) -> None:
         )
 
 
-def run_test(repo_root: Path, godot_binary: Path, manifest: SmokeManifest, log_dir: Path) -> SmokeResult:
+def run_test(
+    repo_root: Path,
+    godot_binary: Path,
+    manifest: SmokeManifest,
+    log_dir: Path,
+    project_lock: threading.Lock,
+) -> SmokeResult:
     log_path = log_dir / f"{manifest.id}.log"
     command = [
         str(godot_binary),
@@ -88,23 +96,26 @@ def run_test(repo_root: Path, godot_binary: Path, manifest: SmokeManifest, log_d
     ]
     started = time.monotonic()
     timed_out = False
-    try:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=manifest.timeout_seconds,
-            check=False,
-        )
-        exit_code = completed.returncode
-        log = completed.stdout + completed.stderr
-    except subprocess.TimeoutExpired as error:
-        timed_out = True
-        exit_code = 124
-        stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else error.stdout or ""
-        stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr or ""
-        log = stdout + stderr
+    # Two Godot processes in one project directory would race on its shared .godot import
+    # cache, so tests are parallel across projects and serial within one.
+    with project_lock:
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=manifest.timeout_seconds,
+                check=False,
+            )
+            exit_code = completed.returncode
+            log = completed.stdout + completed.stderr
+        except subprocess.TimeoutExpired as error:
+            timed_out = True
+            exit_code = 124
+            stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else error.stdout or ""
+            stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr or ""
+            log = stdout + stderr
 
     duration = time.monotonic() - started
     log_path.write_text(log, encoding="utf-8")
@@ -157,9 +168,17 @@ def main() -> int:
         return 1
 
     results: list[SmokeResult] = []
+    project_locks: dict[Path, threading.Lock] = defaultdict(threading.Lock)
     with ThreadPoolExecutor(max_workers=min(jobs, len(manifests))) as executor:
         futures = {
-            executor.submit(run_test, REPO_ROOT, godot_binary, manifest, log_dir): manifest.id
+            executor.submit(
+                run_test,
+                REPO_ROOT,
+                godot_binary,
+                manifest,
+                log_dir,
+                project_locks[manifest.project_dir],
+            ): manifest.id
             for manifest in manifests
         }
         for future in as_completed(futures):

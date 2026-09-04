@@ -279,4 +279,24 @@ TEST_CASE("[ReactNativeBindings][Interaction] disappearing responders cancel onc
 	CHECK(router.reconcile_tree(empty_root, registry, 1, 8).is_empty());
 }
 
+// JS decides how deep the shadow tree is, and layout, mounting, hit testing and
+// measurement all walk it recursively. The limit is what keeps a hostile tree from
+// reaching those walks at all.
+TEST_CASE("[ReactNativeBindings][Interaction] depth limit accepts real trees and rejects deep ones") {
+	Ref<RNShadowNode> shallow_leaf = make_node(3, "RCTView", Rect2());
+	Ref<RNShadowNode> shallow_branch = make_node(2, "RCTView", Rect2());
+	shallow_branch->children.push_back(shallow_leaf);
+	CHECK(RNShadowNode::is_within_depth_limit(make_root({ shallow_branch })));
+	CHECK(RNShadowNode::is_within_depth_limit(Ref<RNShadowNode>()));
+
+	Ref<RNShadowNode> deep_root = make_node(1, "RCTRootView", Rect2());
+	Ref<RNShadowNode> deepest = deep_root;
+	for (int i = 0; i < RNShadowNode::MAX_DEPTH + 1; ++i) {
+		Ref<RNShadowNode> child = make_node(i + 2, "RCTView", Rect2());
+		deepest->children.push_back(child);
+		deepest = child;
+	}
+	CHECK_FALSE(RNShadowNode::is_within_depth_limit(deep_root));
+}
+
 } // namespace TestRNInteraction

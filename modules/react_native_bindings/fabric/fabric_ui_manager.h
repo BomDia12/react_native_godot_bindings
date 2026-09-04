@@ -1,8 +1,8 @@
 #pragma once
 
-#include "rn_shadow_node.h"
-#include "rn_native_event.h"
 #include "../singletons/hermes_runtime_lifecycle.h"
+#include "rn_native_event.h"
+#include "rn_shadow_node.h"
 
 #include "core/object/object_id.h"
 

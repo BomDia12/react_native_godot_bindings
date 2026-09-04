@@ -1,7 +1,7 @@
 #include "hermes_runtime_singleton.h"
 
-#include "hermes_runtime_lifecycle.h"
 #include "../fabric/fabric_ui_manager.h"
+#include "hermes_runtime_lifecycle.h"
 
 #include "core/error/error_macros.h"
 #include "core/io/file_access.h"
@@ -21,16 +21,26 @@ using facebook::hermes::makeHermesRuntime;
 HermesRuntimeSingleton *HermesRuntimeSingleton::singleton = nullptr;
 
 namespace {
-	static String _string_from_utf8(const std::string &p_value) {
-		return String::utf8(p_value.c_str());
-	}
-
-	static std::string _to_utf8(const String &p_value) {
-		const CharString utf8 = p_value.utf8();
-		return std::string(utf8.get_data(), utf8.length());
-	}
-	static constexpr const char *IMPORT_FUNCTION_NAME = "importModule";
+// The length is passed so the conversion does not re-scan for a terminator it already
+// knows. It does not preserve an embedded NUL: String::append_utf8() stops at the first
+// zero byte whatever length it is given, so a JS string containing one is cut short here.
+static String _string_from_utf8(const std::string &p_value) {
+	return String::utf8(p_value.c_str(), int(p_value.length()));
 }
+
+static std::string _to_utf8(const String &p_value) {
+	const CharString utf8 = p_value.utf8();
+	return std::string(utf8.get_data(), utf8.length());
+}
+static constexpr const char *IMPORT_FUNCTION_NAME = "importModule";
+
+static Dictionary _import_failure(const String &p_message, const String &p_path) {
+	Dictionary result;
+	result[SNAME("error")] = p_message;
+	result[SNAME("path")] = p_path;
+	return result;
+}
+} //namespace
 
 HermesRuntimeSingleton::HermesRuntimeSingleton() {
 	ERR_FAIL_COND_MSG(singleton != nullptr, "HermesRuntimeSingleton is a singleton.");
@@ -142,7 +152,8 @@ void HermesRuntimeSingleton::install_host_object(const String &p_name, std::shar
 
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	host_objects[p_name] = p_object;
-	if (std::shared_ptr<HermesRuntimeLifecycle> lifecycle = std::dynamic_pointer_cast<HermesRuntimeLifecycle>(p_object)) {
+	std::shared_ptr<HermesRuntimeLifecycle> lifecycle = std::dynamic_pointer_cast<HermesRuntimeLifecycle>(p_object);
+	if (lifecycle && !is_lifecycle_registered_locked(lifecycle)) {
 		lifecycle_objects.push_back(lifecycle);
 	}
 	ensure_runtime_locked();
@@ -155,6 +166,15 @@ void HermesRuntimeSingleton::install_host_object(const String &p_name, std::shar
 		last_error = _string_from_utf8(std::string(p_error.what()));
 		WARN_PRINT(last_error);
 	}
+}
+
+bool HermesRuntimeSingleton::is_lifecycle_registered_locked(const std::shared_ptr<HermesRuntimeLifecycle> &p_lifecycle) const {
+	for (const std::weak_ptr<HermesRuntimeLifecycle> &entry : lifecycle_objects) {
+		if (entry.lock() == p_lifecycle) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void HermesRuntimeSingleton::run_pre_reset_hooks_locked() {
@@ -302,6 +322,7 @@ Variant HermesRuntimeSingleton::get_global_locked(const String &p_name) {
 
 Variant HermesRuntimeSingleton::jsi_value_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value, int p_depth) {
 	if (p_depth > MAX_CONVERSION_DEPTH) {
+		WARN_PRINT_ONCE(vformat("HermesRuntime: JS value nested deeper than %d; the rest is converted as null.", MAX_CONVERSION_DEPTH));
 		return Variant();
 	}
 
@@ -340,6 +361,7 @@ Variant HermesRuntimeSingleton::jsi_value_to_variant(facebook::jsi::Runtime &rt,
 
 Variant HermesRuntimeSingleton::object_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Object &p_object, int p_depth) {
 	if (p_depth > MAX_CONVERSION_DEPTH) {
+		WARN_PRINT_ONCE(vformat("HermesRuntime: JS value nested deeper than %d; the rest is converted as null.", MAX_CONVERSION_DEPTH));
 		return Variant();
 	}
 
@@ -367,6 +389,7 @@ Variant HermesRuntimeSingleton::object_to_variant(facebook::jsi::Runtime &rt, co
 	size_t count = names.size(rt);
 	if (count > static_cast<size_t>(MAX_OBJECT_PROPERTIES)) {
 		count = static_cast<size_t>(MAX_OBJECT_PROPERTIES);
+		WARN_PRINT_ONCE(vformat("HermesRuntime: JS object has more than %d properties; the rest are dropped.", MAX_OBJECT_PROPERTIES));
 	}
 
 	for (size_t i = 0; i < count; ++i) {
@@ -506,13 +529,14 @@ facebook::jsi::Value HermesRuntimeSingleton::handle_import_module(facebook::jsi:
 		throw facebook::jsi::JSError(rt, _to_utf8(err_msg));
 	}
 
-	std::string code_utf8 = _to_utf8(module_code);
-	std::string source_utf8 = _to_utf8(module_source_name.is_empty() ? module_specifier : module_source_name);
-	auto buffer = std::make_shared<facebook::jsi::StringBuffer>(code_utf8);
+	const std::string code_utf8 = _to_utf8(module_code);
+	const std::string source_utf8 = _to_utf8(module_source_name.is_empty() ? module_specifier : module_source_name);
 	last_error = String();
 
-	std::string module_utf8 = _to_utf8(module_specifier);
-	std::string wrapped_source = "(function(){\n" + code_utf8 + "\n})";
+	// The factory is returned to the caller and never stored on the global object: a
+	// specifier is arbitrary JS-supplied text, so naming a global after it would let
+	// importModule("Object") overwrite a core global.
+	const std::string wrapped_source = "(function(){\n" + code_utf8 + "\n})";
 	auto wrapped_buffer = std::make_shared<facebook::jsi::StringBuffer>(wrapped_source);
 
 	facebook::jsi::Value factory_value = rt.evaluateJavaScript(wrapped_buffer, source_utf8);
@@ -520,11 +544,7 @@ facebook::jsi::Value HermesRuntimeSingleton::handle_import_module(facebook::jsi:
 		throw facebook::jsi::JSError(rt, std::string("HermesRuntime: module resolver did not provide a callable factory."));
 	}
 
-	facebook::jsi::Function factory = factory_value.getObject(rt).getFunction(rt);
-	facebook::jsi::Object global = rt.global();
-	global.setProperty(rt, module_utf8.c_str(), facebook::jsi::Value(rt, factory));
-
-	return facebook::jsi::Value(rt, factory);
+	return facebook::jsi::Value(rt, factory_value.getObject(rt).getFunction(rt));
 }
 
 void HermesRuntimeSingleton::set_import_resolver(const Callable &p_resolver) {
@@ -544,22 +564,25 @@ void HermesRuntimeSingleton::use_filesystem_import_resolver() {
 	install_import_function_locked();
 }
 
+// The specifier reaching this resolver is arbitrary text from the JS bundle, so it is
+// confined to the project and user data directories. Without the prefix check,
+// importModule("/etc/passwd") would hand the file back to JavaScript.
 Variant HermesRuntimeSingleton::filesystem_import_resolver(const String &p_path) {
-	if (p_path.is_empty()) {
-		last_error = String("HermesRuntime: import path is empty.");
-		Dictionary result;
-		result[SNAME("error")] = last_error;
-		return result;
+	if (!p_path.begins_with("res://") && !p_path.begins_with("user://")) {
+		last_error = vformat("HermesRuntime: import path must start with res:// or user://, got '%s'.", p_path);
+		return _import_failure(last_error, p_path);
+	}
+
+	if (p_path.contains("..")) {
+		last_error = vformat("HermesRuntime: import path must not contain '..', got '%s'.", p_path);
+		return _import_failure(last_error, p_path);
 	}
 
 	Error err = OK;
 	String code = FileAccess::get_file_as_string(p_path, &err);
 	if (err != OK) {
 		last_error = vformat("HermesRuntime: failed to read module '%s': %s", p_path, err);
-		Dictionary result;
-		result[SNAME("error")] = last_error;
-		result[SNAME("path")] = p_path;
-		return result;
+		return _import_failure(last_error, p_path);
 	}
 
 	last_error = String();

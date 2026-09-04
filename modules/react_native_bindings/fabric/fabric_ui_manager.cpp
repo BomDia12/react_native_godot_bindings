@@ -17,8 +17,11 @@ namespace {
 
 constexpr int MAX_PROP_DEPTH = 8;
 
+// The length is passed so the conversion does not re-scan for a terminator it already
+// knows. It does not preserve an embedded NUL: String::append_utf8() stops at the first
+// zero byte whatever length it is given, so a JS string containing one is cut short here.
 String string_from_utf8(const std::string &p_value) {
-	return String::utf8(p_value.c_str());
+	return String::utf8(p_value.c_str(), int(p_value.length()));
 }
 
 Variant jsi_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value, int p_depth) {
@@ -216,7 +219,9 @@ facebook::jsi::Value FabricUIManager::clone_node(facebook::jsi::Runtime &rt, con
 		if (p_argc < 2) {
 			throw facebook::jsi::JSError(rt, std::string("cloneNode*WithNewProps: missing props."));
 		}
-		Dictionary props = source->props.duplicate(true);
+		// Shallow: merge_props only ever assigns or erases top-level keys, so nested style
+		// objects can stay shared with the source node instead of being copied per commit.
+		Dictionary props = source->props.duplicate();
 		merge_props(rt, p_args[1], props);
 		return wrap_node(rt, source->clone(p_new_children, &props));
 	}

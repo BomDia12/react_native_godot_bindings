@@ -35,4 +35,25 @@ TEST_CASE("[ReactNativeBindings][RNViewStyle] rejects unsupported color values")
 	CHECK_FALSE(found);
 }
 
+// A number outside the 32-bit range has no defined conversion to the packed ARGB integer,
+// so it must be refused rather than reinterpreted.
+TEST_CASE("[ReactNativeBindings][RNViewStyle] rejects color numbers outside the 32-bit range") {
+	Color color;
+
+	for (const double value : { 1e30, -1e30, double(NAN), double(INFINITY) }) {
+		Dictionary props;
+		props["backgroundColor"] = value;
+
+		ERR_PRINT_OFF;
+		const bool found = RNViewStyle::color_of(props, "backgroundColor", color);
+		ERR_PRINT_ON;
+		CHECK_FALSE(found);
+	}
+
+	Dictionary unsigned_props;
+	unsigned_props["backgroundColor"] = 4294967295.0;
+	CHECK(RNViewStyle::color_of(unsigned_props, "backgroundColor", color));
+	CHECK(color.is_equal_approx(Color(1.0, 1.0, 1.0, 1.0)));
+}
+
 } //namespace TestRNViewStyle

@@ -2,12 +2,11 @@
 
 #ifdef TOOLS_ENABLED
 
-#include "editor/file_system/editor_file_system.h"
+#include "../singletons/react_native_file_singleton.h"
 
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
-
-#include "../singletons/react_native_file_singleton.h"
+#include "editor/file_system/editor_file_system.h"
 
 void ReactNativeFileEditorPlugin::_bind_methods() {
 }

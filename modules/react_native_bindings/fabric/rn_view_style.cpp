@@ -3,6 +3,8 @@
 #include "core/error/error_macros.h"
 #include "core/math/color.h"
 
+#include <cmath>
+
 namespace {
 
 Dictionary style_of(const Dictionary &p_props) {
@@ -14,6 +16,12 @@ Dictionary style_of(const Dictionary &p_props) {
 
 bool is_number(const Variant &p_value) {
 	return p_value.get_type() == Variant::INT || p_value.get_type() == Variant::FLOAT;
+}
+
+// A double outside the 32-bit range, or a NaN, has an undefined conversion to int64_t, so
+// the bit pattern below is only meaningful for values processColor could have produced.
+bool is_packed_argb(double p_value) {
+	return std::isfinite(p_value) && p_value >= -2147483648.0 && p_value <= 4294967295.0;
 }
 
 // processColor (JS-side, --platform android) hands us a *signed* 32-bit int in ARGB byte
@@ -37,7 +45,7 @@ bool read_color(const Dictionary &p_style, const String &p_key, Color &r_color) 
 		return false;
 	}
 	const Variant value = p_style[p_key];
-	if (is_number(value)) {
+	if (is_number(value) && is_packed_argb(double(value))) {
 		r_color = color_from_packed_argb(double(value));
 		return true;
 	}
