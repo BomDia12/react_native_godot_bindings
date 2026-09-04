@@ -158,84 +158,82 @@ YGAlign parse_align(const String &p_value, YGAlign p_default) {
 	return p_default;
 }
 
-void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
-	const Dictionary &style = p_props;
-
-	if (style.has("flexDirection")) {
-		YGNodeStyleSetFlexDirection(p_node, parse_flex_direction(style["flexDirection"]));
+void apply_style(YGNodeRef p_node, const Dictionary &p_style) {
+	if (p_style.has("flexDirection")) {
+		YGNodeStyleSetFlexDirection(p_node, parse_flex_direction(p_style["flexDirection"]));
 	}
-	if (style.has("justifyContent")) {
-		YGNodeStyleSetJustifyContent(p_node, parse_justify(style["justifyContent"]));
+	if (p_style.has("justifyContent")) {
+		YGNodeStyleSetJustifyContent(p_node, parse_justify(p_style["justifyContent"]));
 	}
-	if (style.has("alignItems")) {
-		YGNodeStyleSetAlignItems(p_node, parse_align(style["alignItems"], YGAlignStretch));
+	if (p_style.has("alignItems")) {
+		YGNodeStyleSetAlignItems(p_node, parse_align(p_style["alignItems"], YGAlignStretch));
 	}
-	if (style.has("alignSelf")) {
-		YGNodeStyleSetAlignSelf(p_node, parse_align(style["alignSelf"], YGAlignAuto));
+	if (p_style.has("alignSelf")) {
+		YGNodeStyleSetAlignSelf(p_node, parse_align(p_style["alignSelf"], YGAlignAuto));
 	}
-	if (style.has("alignContent")) {
-		YGNodeStyleSetAlignContent(p_node, parse_align(style["alignContent"], YGAlignFlexStart));
+	if (p_style.has("alignContent")) {
+		YGNodeStyleSetAlignContent(p_node, parse_align(p_style["alignContent"], YGAlignFlexStart));
 	}
-	if (style.has("flexWrap")) {
-		YGNodeStyleSetFlexWrap(p_node, parse_flex_wrap(style["flexWrap"]));
+	if (p_style.has("flexWrap")) {
+		YGNodeStyleSetFlexWrap(p_node, parse_flex_wrap(p_style["flexWrap"]));
 	}
 
-	if (is_number(style.get("flex", Variant()))) {
-		YGNodeStyleSetFlex(p_node, float(style["flex"]));
+	if (is_number(p_style.get("flex", Variant()))) {
+		YGNodeStyleSetFlex(p_node, float(p_style["flex"]));
 	}
-	if (is_number(style.get("flexGrow", Variant()))) {
-		YGNodeStyleSetFlexGrow(p_node, float(style["flexGrow"]));
+	if (is_number(p_style.get("flexGrow", Variant()))) {
+		YGNodeStyleSetFlexGrow(p_node, float(p_style["flexGrow"]));
 	}
-	if (is_number(style.get("flexShrink", Variant()))) {
-		YGNodeStyleSetFlexShrink(p_node, float(style["flexShrink"]));
+	if (is_number(p_style.get("flexShrink", Variant()))) {
+		YGNodeStyleSetFlexShrink(p_node, float(p_style["flexShrink"]));
 	}
-	if (style.has("flexBasis")) {
-		apply_dimension(style["flexBasis"], p_node, YGNodeStyleSetFlexBasis, YGNodeStyleSetFlexBasisPercent, YGNodeStyleSetFlexBasisAuto);
+	if (p_style.has("flexBasis")) {
+		apply_dimension(p_style["flexBasis"], p_node, YGNodeStyleSetFlexBasis, YGNodeStyleSetFlexBasisPercent, YGNodeStyleSetFlexBasisAuto);
 	}
-	if (is_number(style.get("aspectRatio", Variant()))) {
-		YGNodeStyleSetAspectRatio(p_node, float(style["aspectRatio"]));
-	}
-
-	if (style.has("width")) {
-		apply_dimension(style["width"], p_node, YGNodeStyleSetWidth, YGNodeStyleSetWidthPercent, YGNodeStyleSetWidthAuto);
-	}
-	if (style.has("height")) {
-		apply_dimension(style["height"], p_node, YGNodeStyleSetHeight, YGNodeStyleSetHeightPercent, YGNodeStyleSetHeightAuto);
-	}
-	if (style.has("minWidth")) {
-		apply_dimension(style["minWidth"], p_node, YGNodeStyleSetMinWidth, YGNodeStyleSetMinWidthPercent, nullptr);
-	}
-	if (style.has("minHeight")) {
-		apply_dimension(style["minHeight"], p_node, YGNodeStyleSetMinHeight, YGNodeStyleSetMinHeightPercent, nullptr);
-	}
-	if (style.has("maxWidth")) {
-		apply_dimension(style["maxWidth"], p_node, YGNodeStyleSetMaxWidth, YGNodeStyleSetMaxWidthPercent, nullptr);
-	}
-	if (style.has("maxHeight")) {
-		apply_dimension(style["maxHeight"], p_node, YGNodeStyleSetMaxHeight, YGNodeStyleSetMaxHeightPercent, nullptr);
+	if (is_number(p_style.get("aspectRatio", Variant()))) {
+		YGNodeStyleSetAspectRatio(p_node, float(p_style["aspectRatio"]));
 	}
 
-	apply_edge(style, "margin", p_node, YGNodeStyleSetMargin, YGNodeStyleSetMarginPercent);
-	apply_edge(style, "padding", p_node, YGNodeStyleSetPadding, YGNodeStyleSetPaddingPercent);
-	apply_border_width(style, p_node);
+	if (p_style.has("width")) {
+		apply_dimension(p_style["width"], p_node, YGNodeStyleSetWidth, YGNodeStyleSetWidthPercent, YGNodeStyleSetWidthAuto);
+	}
+	if (p_style.has("height")) {
+		apply_dimension(p_style["height"], p_node, YGNodeStyleSetHeight, YGNodeStyleSetHeightPercent, YGNodeStyleSetHeightAuto);
+	}
+	if (p_style.has("minWidth")) {
+		apply_dimension(p_style["minWidth"], p_node, YGNodeStyleSetMinWidth, YGNodeStyleSetMinWidthPercent, nullptr);
+	}
+	if (p_style.has("minHeight")) {
+		apply_dimension(p_style["minHeight"], p_node, YGNodeStyleSetMinHeight, YGNodeStyleSetMinHeightPercent, nullptr);
+	}
+	if (p_style.has("maxWidth")) {
+		apply_dimension(p_style["maxWidth"], p_node, YGNodeStyleSetMaxWidth, YGNodeStyleSetMaxWidthPercent, nullptr);
+	}
+	if (p_style.has("maxHeight")) {
+		apply_dimension(p_style["maxHeight"], p_node, YGNodeStyleSetMaxHeight, YGNodeStyleSetMaxHeightPercent, nullptr);
+	}
 
-	if (is_number(style.get("gap", Variant()))) {
-		YGNodeStyleSetGap(p_node, YGGutterAll, float(style["gap"]));
+	apply_edge(p_style, "margin", p_node, YGNodeStyleSetMargin, YGNodeStyleSetMarginPercent);
+	apply_edge(p_style, "padding", p_node, YGNodeStyleSetPadding, YGNodeStyleSetPaddingPercent);
+	apply_border_width(p_style, p_node);
+
+	if (is_number(p_style.get("gap", Variant()))) {
+		YGNodeStyleSetGap(p_node, YGGutterAll, float(p_style["gap"]));
 	}
-	if (is_number(style.get("rowGap", Variant()))) {
-		YGNodeStyleSetGap(p_node, YGGutterRow, float(style["rowGap"]));
+	if (is_number(p_style.get("rowGap", Variant()))) {
+		YGNodeStyleSetGap(p_node, YGGutterRow, float(p_style["rowGap"]));
 	}
-	if (is_number(style.get("columnGap", Variant()))) {
-		YGNodeStyleSetGap(p_node, YGGutterColumn, float(style["columnGap"]));
+	if (is_number(p_style.get("columnGap", Variant()))) {
+		YGNodeStyleSetGap(p_node, YGGutterColumn, float(p_style["columnGap"]));
 	}
 
-	if (style.has("display")) {
-		const String display = style["display"];
+	if (p_style.has("display")) {
+		const String display = p_style["display"];
 		YGNodeStyleSetDisplay(p_node, display == "none" ? YGDisplayNone : YGDisplayFlex);
 	}
 
-	if (style.has("position")) {
-		const String position = style["position"];
+	if (p_style.has("position")) {
+		const String position = p_style["position"];
 		YGNodeStyleSetPositionType(p_node, position == "absolute" ? YGPositionTypeAbsolute : YGPositionTypeRelative);
 	}
 
@@ -250,8 +248,8 @@ void apply_style(YGNodeRef p_node, const Dictionary &p_props) {
 		{ "right", YGEdgeRight },
 	};
 	for (const Offset &offset : OFFSETS) {
-		if (is_number(style.get(offset.key, Variant()))) {
-			YGNodeStyleSetPosition(p_node, offset.edge, float(style[offset.key]));
+		if (is_number(p_style.get(offset.key, Variant()))) {
+			YGNodeStyleSetPosition(p_node, offset.edge, float(p_style[offset.key]));
 		}
 	}
 }

@@ -427,10 +427,6 @@ void ReactNativeRootView::input(const Ref<InputEvent> &p_event) {
 	_route_input(p_event);
 }
 
-void ReactNativeRootView::gui_input(const Ref<InputEvent> &p_event) {
-	(void)p_event;
-}
-
 void ReactNativeRootView::_route_input(const Ref<InputEvent> &p_event) {
 	if (!ui_manager || committed_tree.is_null()) {
 		return;

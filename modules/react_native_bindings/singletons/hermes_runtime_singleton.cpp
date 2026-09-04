@@ -512,11 +512,11 @@ facebook::jsi::Value HermesRuntimeSingleton::handle_import_module(facebook::jsi:
 				String err_msg = dict[SNAME("error")];
 				throw facebook::jsi::JSError(rt, _to_utf8(err_msg));
 			}
-			if (dict.has(StringName("code"))) {
-				module_code = dict[StringName("code")];
+			if (dict.has(SNAME("code"))) {
+				module_code = dict[SNAME("code")];
 			}
-			if (dict.has(StringName("path"))) {
-				module_source_name = dict[StringName("path")];
+			if (dict.has(SNAME("path"))) {
+				module_source_name = dict[SNAME("path")];
 			}
 			break;
 		}

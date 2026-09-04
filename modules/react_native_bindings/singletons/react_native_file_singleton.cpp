@@ -3,11 +3,8 @@
 #include "core/config/project_settings.h"
 #include "core/error/error_macros.h"
 #include "core/io/file_access.h"
-#include "core/math/math_defs.h"
 #include "core/object/class_db.h"
-#include "core/os/os.h"
 #include "core/variant/variant.h"
-#include "scene/main/scene_tree.h"
 
 ReactNativeFileSingleton *ReactNativeFileSingleton::singleton = nullptr;
 
@@ -71,35 +68,21 @@ void ReactNativeFileSingleton::force_refresh() {
 }
 
 Error ReactNativeFileSingleton::_reload_content(bool p_force_emit) {
-	bool path_valid = !configured_path.is_empty();
-	bool exists = path_valid && FileAccess::exists(configured_path);
-
-	if (!exists) {
-		bool should_emit = p_force_emit || file_exists || !cached_content.is_empty();
-		file_exists = false;
-		cached_content = String();
-		last_modified_time = 0;
-		if (should_emit) {
-			_emit_change();
-		}
+	const bool path_valid = !configured_path.is_empty();
+	if (!path_valid || !FileAccess::exists(configured_path)) {
+		_forget_file(p_force_emit);
 		return path_valid ? ERR_FILE_NOT_FOUND : ERR_INVALID_PARAMETER;
 	}
 
 	Error err = OK;
-	String new_content = FileAccess::get_file_as_string(configured_path, &err);
+	const String new_content = FileAccess::get_file_as_string(configured_path, &err);
 	if (err != OK) {
-		bool should_emit = p_force_emit || file_exists;
-		file_exists = false;
-		cached_content = String();
-		last_modified_time = 0;
-		if (should_emit) {
-			_emit_change();
-		}
+		_forget_file(p_force_emit);
 		return err;
 	}
 
-	uint64_t modified_time = FileAccess::get_modified_time(configured_path);
-	bool changed = p_force_emit || !file_exists || cached_content != new_content || last_modified_time != modified_time;
+	const uint64_t modified_time = FileAccess::get_modified_time(configured_path);
+	const bool changed = p_force_emit || !file_exists || cached_content != new_content || last_modified_time != modified_time;
 
 	cached_content = new_content;
 	file_exists = true;
@@ -110,6 +93,18 @@ Error ReactNativeFileSingleton::_reload_content(bool p_force_emit) {
 	}
 
 	return OK;
+}
+
+// cached_content is only ever non-empty while file_exists is true, so file_exists alone
+// decides whether listeners still believe there is a bundle.
+void ReactNativeFileSingleton::_forget_file(bool p_force_emit) {
+	const bool should_emit = p_force_emit || file_exists;
+	file_exists = false;
+	cached_content = String();
+	last_modified_time = 0;
+	if (should_emit) {
+		_emit_change();
+	}
 }
 
 void ReactNativeFileSingleton::_emit_change() {
