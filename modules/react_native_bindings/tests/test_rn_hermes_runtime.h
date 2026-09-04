@@ -2,8 +2,7 @@
 
 #include "../singletons/hermes_runtime_singleton.h"
 
-#include "core/io/dir_access.h"
-#include "core/io/file_access.h"
+#include "core/object/callable_mp.h"
 #include "tests/test_macros.h"
 
 namespace TestRNHermesRuntime {
@@ -21,6 +20,11 @@ HermesRuntimeSingleton *fresh_runtime() {
 
 String evaluate_string(HermesRuntimeSingleton *p_runtime, const String &p_code) {
 	return p_runtime->evaluate(p_code);
+}
+
+Variant resolve_test_module(const String &p_specifier) {
+	(void)p_specifier;
+	return String("return 1;");
 }
 
 TEST_CASE("[ReactNativeBindings][HermesRuntime] import is confined to res:// and user://") {
@@ -48,20 +52,12 @@ TEST_CASE("[ReactNativeBindings][HermesRuntime] import does not publish a global
 	HermesRuntimeSingleton *runtime = fresh_runtime();
 	REQUIRE(runtime != nullptr);
 
-	const String module_path = "user://rn_bindings_import_test.js";
-	{
-		Ref<FileAccess> file = FileAccess::open(module_path, FileAccess::WRITE);
-		REQUIRE(file.is_valid());
-		file->store_string("globalThis.__rn_import_test_ran = true;");
-	}
-
-	CHECK(evaluate_string(runtime, vformat("typeof importModule('%s')", module_path)) == "function");
+	runtime->set_import_resolver(callable_mp_static(resolve_test_module));
+	CHECK(bool(runtime->evaluate(
+			"(() => { const original = Object; const factory = importModule('Object'); "
+			"return typeof factory === 'function' && Object === original; })()")));
 	CHECK(runtime->get_last_error().is_empty());
-	CHECK(evaluate_string(runtime, vformat("typeof globalThis['%s']", module_path)) == "undefined");
-	CHECK(evaluate_string(runtime, "typeof Object") == "function");
 	CHECK(evaluate_string(runtime, "typeof importModule") == "function");
-
-	DirAccess::remove_absolute(module_path);
 }
 
 // Pins a known platform limit rather than a target behaviour. Godot's
