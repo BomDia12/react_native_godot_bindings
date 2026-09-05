@@ -161,9 +161,13 @@ const styles = StyleSheet.create({
 
 AppRegistry.registerComponent('GodotInteractionApp', () => App);
 
-global.__godotRunApplication = rootTag =>
-  AppRegistry.runApplication('GodotInteractionApp', {
+global.__godotRunApplication = (applicationKey, rootTag) =>
+  AppRegistry.runApplication(applicationKey, {
     rootTag,
     initialProps: {},
     fabric: true,
   });
+
+global.__godotStopApplication = rootTag => {
+  global.RN$stopSurface(rootTag);
+};

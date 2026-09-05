@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:godot": "mkdir -p dist && metro build godot.entry.js --config metro.config.godot.js --out dist/godot.bundle.js --platform android --dev false --minify false",
-    "build:interaction": "mkdir -p dist && metro build interaction.entry.js --config metro.config.godot.js --out dist/interaction.bundle.js --platform android --dev false --minify false"
+    "build:godot": "mkdir -p dist && metro build godot.entry.js --config metro.config.godot.js --out dist/godot.bundle.js --platform android --dev false --minify false"
   },
   "dependencies": {
     "react": "19.2.3",

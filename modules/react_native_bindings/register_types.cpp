@@ -2,6 +2,7 @@
 
 #include "fabric/rn_shadow_node.h"
 #include "root_view/react_native_root_view.h"
+#include "runtime/react_native_runtime_coordinator.h"
 #include "singletons/hermes_runtime_singleton.h"
 #include "singletons/react_native_file_singleton.h"
 
@@ -15,6 +16,7 @@
 
 static ReactNativeFileSingleton *react_native_file_singleton = nullptr;
 static HermesRuntimeSingleton *hermes_runtime_singleton = nullptr;
+static ReactNativeRuntimeCoordinator *react_native_runtime_coordinator = nullptr;
 
 void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_CORE) {
@@ -28,6 +30,9 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		ERR_FAIL_COND(react_native_file_singleton != nullptr);
 		react_native_file_singleton = memnew(ReactNativeFileSingleton);
 		Engine::get_singleton()->add_singleton(Engine::Singleton("ReactNativeFileSingleton", ReactNativeFileSingleton::get_singleton(), "ReactNativeFileSingleton"));
+
+		ERR_FAIL_COND(react_native_runtime_coordinator != nullptr);
+		react_native_runtime_coordinator = memnew(ReactNativeRuntimeCoordinator);
 		return;
 	}
 
@@ -53,16 +58,21 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 
 void uninitialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_CORE) {
-		if (hermes_runtime_singleton) {
-			Engine::get_singleton()->remove_singleton("HermesRuntime");
-			memdelete(hermes_runtime_singleton);
-			hermes_runtime_singleton = nullptr;
+		if (react_native_runtime_coordinator) {
+			memdelete(react_native_runtime_coordinator);
+			react_native_runtime_coordinator = nullptr;
 		}
 
 		if (react_native_file_singleton) {
 			Engine::get_singleton()->remove_singleton("ReactNativeFileSingleton");
 			memdelete(react_native_file_singleton);
 			react_native_file_singleton = nullptr;
+		}
+
+		if (hermes_runtime_singleton) {
+			Engine::get_singleton()->remove_singleton("HermesRuntime");
+			memdelete(hermes_runtime_singleton);
+			hermes_runtime_singleton = nullptr;
 		}
 	}
 }

@@ -1,9 +1,9 @@
 {
-  "id": "baseline-mount",
+  "id": "multi-root",
   "project_dir": "samples/view-text",
-  "scene": "res://smoke/tests/baseline_mount/SmokeMain.tscn",
-  "timeout_seconds": 30,
-  "allowlist": "documentation/expected-warnings.txt",
+  "scene": "res://smoke/tests/multi_root/MultiRoot.tscn",
+  "timeout_seconds": 90,
+  "allowlist": "documentation/expected-warnings-multi-root.txt",
   "bundle": {
     "mode": "shared",
     "package_dir": "samples/view-text",
@@ -21,8 +21,8 @@
     "samples/view-text/package.json",
     "samples/view-text/package-lock.json",
     "documentation/expected-warnings.txt",
-    "samples/view-text/smoke/support/smoke_case.gd",
-    "samples/view-text/smoke/tests/baseline_mount/SmokeMain.tscn",
-    "samples/view-text/smoke/tests/baseline_mount/baseline_mount.gd"
+    "documentation/expected-warnings-multi-root.txt",
+    "samples/view-text/smoke/tests/multi_root/MultiRoot.tscn",
+    "samples/view-text/smoke/tests/multi_root/multi_root.gd"
   ]
 }

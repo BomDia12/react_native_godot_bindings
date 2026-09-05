@@ -13,6 +13,8 @@
   "inputs": [
     "samples/view-text/project.godot",
     "samples/view-text/godot.entry.js",
+    "samples/view-text/interaction.entry.js",
+    "samples/view-text/multi_root.entry.js",
     "samples/view-text/godot.preamble.js",
     "samples/view-text/metro.config.godot.js",
     "samples/view-text/babel.config.js",
