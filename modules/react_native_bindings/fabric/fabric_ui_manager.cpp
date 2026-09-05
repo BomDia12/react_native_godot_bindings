@@ -258,12 +258,17 @@ class EventPriorityGuard {
 	int previous;
 
 public:
-	EventPriorityGuard(int &p_priority, int p_next) : priority(p_priority), previous(p_priority) { priority = p_next; }
+	EventPriorityGuard(int &p_priority, int p_next) :
+			priority(p_priority),
+			previous(p_priority) {
+		priority = p_next;
+	}
 	~EventPriorityGuard() { priority = previous; }
 };
 } // namespace
 
-FabricUIManager::FabricUIManager(const std::shared_ptr<RNRuntimeCoordinatorState> &p_state) : state(p_state) {
+FabricUIManager::FabricUIManager(const std::shared_ptr<RNRuntimeCoordinatorState> &p_state) :
+		state(p_state) {
 }
 
 void FabricUIManager::register_surface(const RNSurfaceRoute &p_route) {
