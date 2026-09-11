@@ -200,10 +200,25 @@ global.__godotMultiRootSetProps = side => {
   roots[side]?.targetRef.current?.setNativeProps({
     style: {opacity: 0.4, width: 100},
   });
+  roots[side]?.targetRef.current?.setNativeProps({
+    style: {opacity: 0.4, width: 101},
+  });
 };
 
 global.__godotMultiRootSetDeclarativeOpacity = side => {
   roots[side]?.setDeclarativeStyle({opacity: 0.7, width: 95});
+};
+
+global.__godotMultiRootSetTemporaryProps = side => {
+  roots[side]?.targetRef.current?.setNativeProps({
+    style: {opacity: 0.3, width: 80},
+  });
+};
+
+global.__godotMultiRootClearProps = side => {
+  roots[side]?.targetRef.current?.setNativeProps({
+    style: {opacity: null, width: null},
+  });
 };
 
 global.__godotMultiRootFocus = side => {

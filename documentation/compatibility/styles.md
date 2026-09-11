@@ -3,7 +3,7 @@
 This matrix covers cross-platform style keys from React Native 0.87.1 and distinguishes
 implemented subsets from behavior covered by automated tests. Partially supported rows may
 rely on source evidence when test evidence is `none`. Style keys that React Native scopes
-to a single platform are out of scope and are not listed: `borderCurve`, `direction`,
+to a single platform are out of scope and are not listed: `borderCurve`,
 `elevation`, `fontVariant`, `includeFontPadding`, `shadowColor`, `shadowOffset`,
 `shadowOpacity`, `shadowRadius`, `textAlignVertical`, `verticalAlign`, and
 `writingDirection`.
@@ -38,6 +38,7 @@ to a single platform are out of scope and are not listed: `borderCurve`, `direct
 | STYLE-DISPLAY | `display` | partially supported | Maps `none` and other values to Godot's Yoga display modes; `contents` is not distinct and automated coverage is absent. | [layout](../../modules/react_native_bindings/fabric/rn_layout.cpp) | none |
 | STYLE-BACKFACE | `backfaceVisibility` | pending | Public view style key has no Godot behavior or automated coverage. | none | none |
 | STYLE-POSITION | `position` | partially supported | Maps `absolute` and other values to Godot's Yoga position modes; `static` is not distinct and automated coverage is absent. | [layout](../../modules/react_native_bindings/fabric/rn_layout.cpp) | none |
+| STYLE-DIRECTION | `direction` | pending | Public direction key; no Godot behavior or automated coverage. | none | none |
 | STYLE-OFFSETS | `top/right/bottom/left` | partially supported | Numeric physical offsets reach Godot's Yoga layout; percent and logical edges are absent and automated coverage is absent. | [layout](../../modules/react_native_bindings/fabric/rn_layout.cpp) | none |
 | STYLE-INSET | `inset*` | pending | Public inset keys have no Godot behavior or automated coverage. | none | none |
 | STYLE-BORDER-WIDTH | `borderWidth/border*Width` | partially supported | Numeric physical widths affect Godot Yoga layout and Panel painting; logical edges and automated coverage are absent. | [layout](../../modules/react_native_bindings/fabric/rn_layout.cpp), [view style](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | none |

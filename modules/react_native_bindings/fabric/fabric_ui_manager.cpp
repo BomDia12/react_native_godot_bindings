@@ -392,7 +392,11 @@ facebook::jsi::Value FabricUIManager::clone_node(facebook::jsi::Runtime &rt, con
 		Dictionary props = source->props.duplicate();
 		merge_props(rt, p_args[1], props);
 		Ref<RNShadowNode> result = source->clone(p_new_children, &props);
-		result->declarative_prop_keys = prop_keys(rt, p_args[1]);
+		for (const String &key : prop_keys(rt, p_args[1])) {
+			if (!result->declarative_prop_keys.has(key)) {
+				result->declarative_prop_keys.push_back(key);
+			}
+		}
 		return wrap_node(rt, result);
 	}
 	return wrap_node(rt, source->clone(p_new_children, nullptr));

@@ -19,6 +19,7 @@ var seen_tags: Array[int] = []
 var stress_cycle := 0
 var stress_generation := 0
 var declarative_override_requested := false
+var direct_reset_stage := 0
 
 func snapshot() -> Dictionary:
 	var value = HermesRuntime.get_global("__godotMultiRootSnapshot")
@@ -123,13 +124,13 @@ func _process(_delta: float) -> void:
 			advance()
 		2:
 			var left_target := target(left)
-			if left_target == null or not is_equal_approx(left_target.modulate.a, 0.4) or not is_equal_approx(left_target.size.x, 100.0):
+			if left_target == null or not is_equal_approx(left_target.modulate.a, 0.4) or not is_equal_approx(left_target.size.x, 101.0):
 				if frames - stage_frame > 30:
 					fail("setNativeProps did not update layout and opacity: width=%s opacity=%s events=%s" % [left_target.size.x if left_target != null else -1, left_target.modulate.a if left_target != null else -1, side("left").get("events", [])])
 				return
-			if "layout:100" not in side("left").get("events", []):
+			if "layout:101" not in side("left").get("events", []) or "layout:100" in side("left").get("events", []):
 				if frames - stage_frame > 30:
-					fail("layout-affecting setNativeProps did not emit onLayout")
+					fail("setNativeProps requests were not coalesced: %s" % [side("left").get("events", [])])
 				return
 			if "focus" not in side("left").get("events", []):
 				if frames - stage_frame > 30:
@@ -153,9 +154,23 @@ func _process(_delta: float) -> void:
 				call_fixture("__godotMultiRootSetDeclarativeOpacity", "left")
 				declarative_override_requested = true
 				return
+			if direct_reset_stage == 0:
+				if left_target == null or not is_equal_approx(left_target.modulate.a, 0.7) or not is_equal_approx(left_target.size.x, 95.0):
+					if frames - stage_frame > 30:
+						fail("declarative props did not replace direct props: width=%s opacity=%s" % [left_target.size.x if left_target != null else -1, left_target.modulate.a if left_target != null else -1])
+					return
+				call_fixture("__godotMultiRootSetTemporaryProps", "left")
+				direct_reset_stage = 1
+				return
+			if direct_reset_stage == 1:
+				if left_target == null or not is_equal_approx(left_target.modulate.a, 0.3) or not is_equal_approx(left_target.size.x, 80.0):
+					return
+				call_fixture("__godotMultiRootClearProps", "left")
+				direct_reset_stage = 2
+				return
 			if left_target == null or not is_equal_approx(left_target.modulate.a, 0.7) or not is_equal_approx(left_target.size.x, 95.0):
 				if frames - stage_frame > 30:
-					fail("declarative props did not replace direct props: width=%s opacity=%s" % [left_target.size.x if left_target != null else -1, left_target.modulate.a if left_target != null else -1])
+					fail("clearing direct props did not restore declarative values")
 				return
 			stale_handle = call_fixture("__godotMultiRootSaveRef", "left")
 			left.reload()

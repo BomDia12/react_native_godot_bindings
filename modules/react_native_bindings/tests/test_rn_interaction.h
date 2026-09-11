@@ -44,6 +44,17 @@ TEST_CASE("[ReactNativeBindings][Interaction] clones preserve one weak event tar
 	CHECK_FALSE(target->has_instance_handle());
 }
 
+TEST_CASE("[ReactNativeBindings][Interaction] cloned props do not alias their source") {
+	Ref<RNShadowNode> node = make_node(42, "RCTView", Rect2());
+	node->props["width"] = 90;
+	node->declarative_prop_keys.push_back("width");
+	Ref<RNShadowNode> clone = node->clone(false, nullptr);
+
+	clone->props["width"] = 100;
+	CHECK(int(node->props["width"]) == 90);
+	CHECK(clone->declarative_prop_keys == node->declarative_prop_keys);
+}
+
 TEST_CASE("[ReactNativeBindings][Interaction] hit testing honors paint order and pointerEvents") {
 	Ref<RNShadowNode> back = make_node(2, "RCTView", Rect2(0, 0, 100, 100));
 	Ref<RNShadowNode> front = make_node(3, "RCTView", Rect2(20, 20, 100, 100));

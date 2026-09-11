@@ -134,6 +134,7 @@ void ReactNativeRootView::_detach_surface(int p_root_tag, uint64_t p_epoch) {
 
 void ReactNativeRootView::_clear_scene_state() {
 	input_router.clear();
+	declarative_tree.unref();
 	committed_tree.unref();
 	registry.clear();
 	layout_cache.clear();
@@ -188,8 +189,9 @@ void ReactNativeRootView::_accept_commit(const RNPendingCommit &p_commit) {
 		}
 		return;
 	}
-	committed_tree = p_commit.tree;
-	_apply_declarative_overrides(committed_tree);
+	_apply_declarative_overrides(p_commit.tree);
+	declarative_tree = p_commit.tree;
+	committed_tree = _build_effective_tree(declarative_tree);
 	if (!_layout_and_mount(p_commit.revision)) {
 		if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
 			coordinator->fail_surface(root_tag, surface_epoch, "Native staging or mount failed.");
@@ -213,16 +215,31 @@ void ReactNativeRootView::_apply_declarative_overrides(const Ref<RNShadowNode> &
 		}
 		if (overrides->is_empty()) {
 			direct_prop_overrides.erase(p_node->tag);
-		} else {
-			const Array keys = overrides->keys();
-			for (int i = 0; i < keys.size(); ++i) {
-				p_node->props[keys[i]] = (*overrides)[keys[i]];
-			}
 		}
 	}
+	p_node->declarative_prop_keys.clear();
 	for (const Ref<RNShadowNode> &child : p_node->children) {
 		_apply_declarative_overrides(child);
 	}
+}
+
+Ref<RNShadowNode> ReactNativeRootView::_build_effective_tree(const Ref<RNShadowNode> &p_node) const {
+	if (p_node.is_null()) {
+		return Ref<RNShadowNode>();
+	}
+	Ref<RNShadowNode> result = p_node->clone(true, nullptr);
+	const Dictionary *overrides = direct_prop_overrides.getptr(p_node->tag);
+	if (overrides) {
+		const Array keys = overrides->keys();
+		for (int i = 0; i < keys.size(); ++i) {
+			result->props[keys[i]] = (*overrides)[keys[i]];
+		}
+	}
+	result->declarative_prop_keys.clear();
+	for (const Ref<RNShadowNode> &child : p_node->children) {
+		result->children.push_back(_build_effective_tree(child));
+	}
+	return result;
 }
 
 bool ReactNativeRootView::_layout_and_mount(uint64_t p_revision) {
@@ -436,18 +453,18 @@ bool ReactNativeRootView::get_measurement(int p_tag, Rect2 &r_local_rect, Point2
 	return true;
 }
 
-void ReactNativeRootView::_apply_imperative(const RNImperativeRequest &p_request) {
+bool ReactNativeRootView::_apply_imperative(const RNImperativeRequest &p_request) {
 	if (p_request.runtime_generation != runtime_generation || p_request.root_tag != root_tag || p_request.surface_epoch != surface_epoch) {
-		return;
+		return false;
 	}
 	Ref<RNShadowNode> node = registry.get_shadow_node(p_request.tag);
 	if (node.is_null() || node->view_name != p_request.component_name) {
-		return;
+		return false;
 	}
 	if (p_request.kind == RNImperativeRequestKind::COMMAND) {
 		Control *control = Object::cast_to<Control>(registry.get_node(p_request.tag));
 		if (!control) {
-			return;
+			return false;
 		}
 		if (p_request.component_name == "RCTView" && p_request.command_name == "focus") {
 			control->grab_focus();
@@ -458,10 +475,10 @@ void ReactNativeRootView::_apply_imperative(const RNImperativeRequest &p_request
 		} else {
 			WARN_PRINT(vformat("%s command %s is not supported by the Godot host.", p_request.component_name, p_request.command_name));
 		}
-		return;
+		return false;
 	}
 	if (p_request.payload.get_type() != Variant::DICTIONARY) {
-		return;
+		return false;
 	}
 	Dictionary &overrides = direct_prop_overrides[p_request.tag];
 	const Dictionary props = p_request.payload;
@@ -469,13 +486,23 @@ void ReactNativeRootView::_apply_imperative(const RNImperativeRequest &p_request
 	for (int i = 0; i < keys.size(); ++i) {
 		if (props[keys[i]].get_type() == Variant::NIL) {
 			overrides.erase(keys[i]);
-			node->props.erase(keys[i]);
 		} else {
 			overrides[keys[i]] = props[keys[i]];
-			node->props[keys[i]] = props[keys[i]];
 		}
 	}
-	_layout_and_mount(mounted_revision);
+	if (overrides.is_empty()) {
+		direct_prop_overrides.erase(p_request.tag);
+	}
+	return true;
+}
+
+void ReactNativeRootView::_flush_imperative_updates() {
+	committed_tree = _build_effective_tree(declarative_tree);
+	if (!_layout_and_mount(mounted_revision)) {
+		if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+			coordinator->fail_surface(root_tag, surface_epoch, "Native staging or mount failed.");
+		}
+	}
 }
 
 void ReactNativeRootView::_on_focus_entered(int p_tag, ObjectID p_control_id) {

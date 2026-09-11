@@ -12,9 +12,10 @@ Ref<RNShadowNode> RNShadowNode::clone(bool p_new_children, const Dictionary *p_n
 	copy->surface_epoch = surface_epoch;
 	copy->revision = revision;
 	copy->view_name = view_name;
-	copy->props = p_new_props ? *p_new_props : props;
+	copy->props = p_new_props ? p_new_props->duplicate(true) : props.duplicate(true);
 	copy->layout = layout;
 	copy->event_target = event_target;
+	copy->declarative_prop_keys = declarative_prop_keys;
 
 	if (!p_new_children) {
 		// Shares the child subtrees by reference; the renderer replaces only what changed.

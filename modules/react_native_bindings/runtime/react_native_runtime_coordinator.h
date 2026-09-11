@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 
@@ -47,7 +48,9 @@ struct RNSurfaceTag {
 
 struct RNSurfaceTagHash {
 	size_t operator()(const RNSurfaceTag &p_value) const {
-		return (static_cast<size_t>(static_cast<uint32_t>(p_value.root_tag)) << 32) ^ static_cast<uint32_t>(p_value.tag);
+		const size_t root_hash = std::hash<int>{}(p_value.root_tag);
+		const size_t tag_hash = std::hash<int>{}(p_value.tag);
+		return root_hash ^ (tag_hash + size_t(0x9e3779b9U) + (root_hash << 6) + (root_hash >> 2));
 	}
 };
 
@@ -132,7 +135,9 @@ class RNPointerCaptureProcessor {
 
 	struct PointerKeyHash {
 		size_t operator()(const PointerKey &p_value) const {
-			return (static_cast<size_t>(static_cast<uint32_t>(p_value.root_tag)) << 32) ^ static_cast<uint32_t>(p_value.pointer_id);
+			const size_t root_hash = std::hash<int>{}(p_value.root_tag);
+			const size_t pointer_hash = std::hash<int>{}(p_value.pointer_id);
+			return root_hash ^ (pointer_hash + size_t(0x9e3779b9U) + (root_hash << 6) + (root_hash >> 2));
 		}
 	};
 

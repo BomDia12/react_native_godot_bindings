@@ -16,6 +16,27 @@ TEST_CASE("[ReactNativeBindings][RuntimeCoordinator] routed keys keep surface ta
 	CHECK(values.size() == 2);
 	CHECK(values[left] == 1);
 	CHECK(values[right] == 2);
+	CHECK(RNSurfaceTagHash{}(left) != RNSurfaceTagHash{}(right));
+}
+
+TEST_CASE("[ReactNativeBindings][RuntimeCoordinator] primary touch pointer can capture") {
+	RNPointerCaptureProcessor processor;
+	RNNativeEvent down;
+	down.root_tag = 11;
+	down.tag = 42;
+	down.name = "topPointerDown";
+	down.surface_epoch = 7;
+	down.payload["pointerId"] = 0;
+	processor.observe(down);
+	processor.set_capture(11, 7, 42, 0);
+	CHECK(processor.has_capture(11, 7, 42, 0));
+
+	RNNativeEvent move = down;
+	move.name = "topPointerMove";
+	Vector<RNNativeEvent> gained = processor.apply_pending(move);
+	REQUIRE(gained.size() == 1);
+	CHECK(gained[0].name == "topGotPointerCapture");
+	CHECK(processor.captured_target(11, 7, 0) == 42);
 }
 
 TEST_CASE("[ReactNativeBindings][RuntimeCoordinator] pointer capture changes on the next pointer event") {

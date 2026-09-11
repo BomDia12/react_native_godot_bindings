@@ -11,6 +11,7 @@
 #include "core/object/object.h"
 #include "scene/main/scene_tree.h"
 
+#include <algorithm>
 #include <climits>
 #include <unordered_map>
 #include <vector>
@@ -37,9 +38,6 @@ void RNPointerCaptureProcessor::observe(const RNNativeEvent &p_event) {
 		return;
 	}
 	const int pointer_id = pointer_id_of(p_event.payload);
-	if (pointer_id == 0) {
-		return;
-	}
 	const PointerKey key{ p_event.root_tag, pointer_id };
 	if (p_event.name == "topPointerDown") {
 		PointerState &pointer = pointers[key];
@@ -512,6 +510,7 @@ void ReactNativeRuntimeCoordinator::_process_frame() {
 	}
 
 	const size_t request_count = state->imperative_queue.size();
+	std::vector<ObjectID> roots_with_updates;
 	for (size_t i = 0; i < request_count; ++i) {
 		RNImperativeRequest request = state->imperative_queue.front();
 		state->imperative_queue.pop_front();
@@ -524,8 +523,17 @@ void ReactNativeRuntimeCoordinator::_process_frame() {
 			continue;
 		}
 		ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(route->second.root_view_id));
+		if (root && root->_apply_imperative(request)) {
+			const ObjectID root_id = route->second.root_view_id;
+			if (std::find(roots_with_updates.begin(), roots_with_updates.end(), root_id) == roots_with_updates.end()) {
+				roots_with_updates.push_back(root_id);
+			}
+		}
+	}
+	for (ObjectID root_id : roots_with_updates) {
+		ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(root_id));
 		if (root) {
-			root->_apply_imperative(request);
+			root->_flush_imperative_updates();
 		}
 	}
 }

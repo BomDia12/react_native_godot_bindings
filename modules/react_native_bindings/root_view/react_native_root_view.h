@@ -12,6 +12,7 @@ class ReactNativeRootView : public Control {
 
 	RNRegistry registry;
 	RNInputRouter input_router;
+	Ref<RNShadowNode> declarative_tree;
 	Ref<RNShadowNode> committed_tree;
 	HashMap<int, Rect2> layout_cache;
 	HashMap<int, Dictionary> direct_prop_overrides;
@@ -31,6 +32,7 @@ class ReactNativeRootView : public Control {
 	void _on_focus_entered(int p_tag, ObjectID p_control_id);
 	void _on_focus_exited(int p_tag, ObjectID p_control_id);
 	void _set_focused_tag(int p_tag);
+	Ref<RNShadowNode> _build_effective_tree(const Ref<RNShadowNode> &p_node) const;
 	bool _layout_and_mount(uint64_t p_revision);
 	Control *_build_node(const Ref<RNShadowNode> &p_node, Control *p_parent, RNRegistry &r_registry, bool p_branch_targetable = true);
 	void _queue_layout_events(const Ref<RNShadowNode> &p_node, HashMap<int, Rect2> &r_next_cache, Vector<RNNativeEvent> &r_events);
@@ -60,5 +62,6 @@ public:
 	Vector<RNNativeEvent> _prepare_surface_stop();
 	void _detach_surface(int p_root_tag, uint64_t p_epoch);
 	void _accept_commit(const RNPendingCommit &p_commit);
-	void _apply_imperative(const RNImperativeRequest &p_request);
+	bool _apply_imperative(const RNImperativeRequest &p_request);
+	void _flush_imperative_updates();
 };
