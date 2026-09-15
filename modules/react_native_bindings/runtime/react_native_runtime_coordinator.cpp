@@ -339,6 +339,7 @@ void ReactNativeRuntimeCoordinator::register_root(ReactNativeRootView *p_root) {
 
 void ReactNativeRuntimeCoordinator::stop_route(RNSurfaceRoute &p_route, bool p_dispatch_cancellations) {
 	p_route.status = RNSurfaceStatus::STOPPING;
+	state->operation_queues.erase(p_route.root_tag);
 	ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(p_route.root_view_id));
 	if (root && p_dispatch_cancellations) {
 		enqueue_events(root->_prepare_surface_stop());
@@ -402,8 +403,25 @@ void ReactNativeRuntimeCoordinator::enqueue_events(const Vector<RNNativeEvent> &
 
 void ReactNativeRuntimeCoordinator::publish_snapshot(const std::shared_ptr<const RNSurfaceSnapshot> &p_snapshot) {
 	if (p_snapshot) {
+		std::shared_ptr<const RNSurfaceSnapshot> old_snapshot;
+		auto old = state->snapshots.find(p_snapshot->root_tag);
+		if (old != state->snapshots.end()) {
+			old_snapshot = old->second;
+		}
 		state->snapshots[p_snapshot->root_tag] = p_snapshot;
-		enqueue_events(state->pointer_capture.reconcile_surface(*p_snapshot));
+		if (ui_manager) {
+			ui_manager->reconcile_surface(*p_snapshot);
+		}
+		Vector<RNNativeEvent> events = state->pointer_capture.reconcile_surface(*p_snapshot);
+		if (old_snapshot) {
+			for (RNNativeEvent &event : events) {
+				const RNMountedNodeSnapshot *old_node = old_snapshot->nodes.getptr(event.tag);
+				if (old_node && old_node->shadow_node.is_valid()) {
+					event.retained_target = old_node->shadow_node->event_target;
+				}
+			}
+		}
+		enqueue_events(events);
 	}
 }
 
@@ -421,24 +439,37 @@ void ReactNativeRuntimeCoordinator::fail_surface(int p_root_tag, uint64_t p_epoc
 	found->second.error = p_error;
 }
 
+void ReactNativeRuntimeCoordinator::reject_commit(int p_root_tag, uint64_t p_epoch, uint64_t p_revision, const String &p_error) {
+	auto found = state->routes.find(p_root_tag);
+	if (found == state->routes.end() || found->second.surface_epoch != p_epoch) {
+		return;
+	}
+	found->second.error = vformat("Revision %d rejected: %s", p_revision, p_error);
+	found->second.rejected_revision = p_revision;
+	ERR_PRINT(vformat("React Native surface %d revision %d rejected: %s", p_root_tag, p_revision, p_error));
+}
+
 void ReactNativeRuntimeCoordinator::mark_surface_mounted(int p_root_tag, uint64_t p_epoch, uint64_t p_revision) {
 	auto found = state->routes.find(p_root_tag);
 	if (found == state->routes.end() || found->second.surface_epoch != p_epoch) {
 		return;
 	}
 	found->second.mounted_revision = p_revision;
+	if (found->second.rejected_revision < p_revision) {
+		found->second.error = String();
+	}
 	if (found->second.status == RNSurfaceStatus::STARTING) {
 		found->second.status = RNSurfaceStatus::ACTIVE;
 	}
 }
 
 void ReactNativeRuntimeCoordinator::clear_generation_state() {
-	state->commit_queue.clear();
-	state->imperative_queue.clear();
+	state->operation_queues.clear();
 	state->event_queue.clear();
 	state->desired_nodes.clear();
 	state->snapshots.clear();
 	state->pointer_capture.clear();
+	state->coalesced_commits = 0;
 }
 
 void ReactNativeRuntimeCoordinator::_on_react_native_file_changed(const String &p_path, const String &p_content, bool p_exists) {
@@ -488,52 +519,56 @@ void ReactNativeRuntimeCoordinator::_process_frame() {
 	}
 	hermes->dispatch_queued_events(ui_manager);
 
-	std::unordered_map<int, RNPendingCommit> newest;
-	while (!state->commit_queue.empty()) {
-		RNPendingCommit commit = state->commit_queue.front();
-		state->commit_queue.pop_front();
-		auto route = state->routes.find(commit.root_tag);
-		if (route != state->routes.end() && route->second.runtime_generation == commit.runtime_generation && route->second.surface_epoch == commit.surface_epoch) {
-			newest[commit.root_tag] = commit;
-		}
-	}
-	for (const auto &entry : newest) {
-		const RNPendingCommit &commit = entry.second;
-		auto route = state->routes.find(commit.root_tag);
-		if (route == state->routes.end()) {
-			continue;
-		}
-		ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(route->second.root_view_id));
-		if (root) {
-			root->_accept_commit(commit);
-		}
-	}
-
-	const size_t request_count = state->imperative_queue.size();
-	std::vector<ObjectID> roots_with_updates;
-	for (size_t i = 0; i < request_count; ++i) {
-		RNImperativeRequest request = state->imperative_queue.front();
-		state->imperative_queue.pop_front();
-		auto route = state->routes.find(request.root_tag);
-		if (route == state->routes.end() || route->second.runtime_generation != request.runtime_generation || route->second.surface_epoch != request.surface_epoch) {
-			continue;
-		}
-		if (route->second.mounted_revision < request.required_revision) {
-			state->imperative_queue.push_back(request);
-			continue;
-		}
-		ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(route->second.root_view_id));
-		if (root && root->_apply_imperative(request)) {
-			const ObjectID root_id = route->second.root_view_id;
-			if (std::find(roots_with_updates.begin(), roots_with_updates.end(), root_id) == roots_with_updates.end()) {
-				roots_with_updates.push_back(root_id);
+	for (auto &queue_entry : state->operation_queues) {
+		std::deque<RNSurfaceOperation> &operation_queue = queue_entry.second;
+		const size_t operation_count = operation_queue.size();
+		size_t processed = 0;
+		while (processed < operation_count && !operation_queue.empty()) {
+			RNSurfaceOperation operation = operation_queue.front();
+			operation_queue.pop_front();
+			processed++;
+			if (operation.kind == RNSurfaceOperationKind::COMMIT) {
+				RNPendingCommit commit = operation.commit;
+				while (processed < operation_count && !operation_queue.empty()) {
+					const RNSurfaceOperation &next = operation_queue.front();
+					if (next.kind != RNSurfaceOperationKind::COMMIT || next.commit.root_tag != commit.root_tag) {
+						break;
+					}
+					commit = next.commit;
+					operation_queue.pop_front();
+					processed++;
+					state->coalesced_commits++;
+				}
+				auto route = state->routes.find(commit.root_tag);
+				if (route == state->routes.end() || route->second.runtime_generation != commit.runtime_generation || route->second.surface_epoch != commit.surface_epoch || commit.revision <= route->second.mounted_revision) {
+					continue;
+				}
+				ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(route->second.root_view_id));
+				if (root) {
+					root->_accept_commit(commit);
+				}
+				continue;
 			}
-		}
-	}
-	for (ObjectID root_id : roots_with_updates) {
-		ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(root_id));
-		if (root) {
-			root->_flush_imperative_updates();
+
+			const RNImperativeRequest &request = operation.imperative;
+			auto route = state->routes.find(request.root_tag);
+			if (route == state->routes.end() || route->second.runtime_generation != request.runtime_generation || route->second.surface_epoch != request.surface_epoch) {
+				continue;
+			}
+			if (route->second.mounted_revision < request.required_revision) {
+				if (route->second.rejected_revision == request.required_revision) {
+					route->second.error = vformat("Imperative work for surface %d tag %d requires rejected revision %d; published revision is %d.", request.root_tag, request.tag, request.required_revision, route->second.mounted_revision);
+					ERR_PRINT(route->second.error);
+				} else {
+					operation_queue.push_front(operation);
+					break;
+				}
+				continue;
+			}
+			ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(route->second.root_view_id));
+			if (root) {
+				root->_apply_imperative(request);
+			}
 		}
 	}
 }

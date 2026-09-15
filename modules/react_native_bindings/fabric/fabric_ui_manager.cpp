@@ -142,6 +142,34 @@ Ref<RNShadowNode> node_from(facebook::jsi::Runtime &rt, const facebook::jsi::Val
 	return object.getHostObject<RNShadowNodeHandle>(rt)->node;
 }
 
+bool subtree_contains_tag(const Ref<RNShadowNode> &p_node, int p_tag) {
+	if (p_node.is_null()) {
+		return false;
+	}
+	Vector<Ref<RNShadowNode>> pending;
+	pending.push_back(p_node);
+	while (!pending.is_empty()) {
+		Ref<RNShadowNode> current = pending[pending.size() - 1];
+		pending.remove_at(pending.size() - 1);
+		if (current->tag == p_tag) {
+			return true;
+		}
+		for (const Ref<RNShadowNode> &child : current->children) {
+			if (child.is_valid()) {
+				pending.push_back(child);
+			}
+		}
+	}
+	return false;
+}
+
+void invalidate_node(const Ref<RNShadowNode> &p_node, const String &p_error) {
+	if (p_node.is_valid()) {
+		p_node->structurally_valid = false;
+		p_node->structural_error = p_error;
+	}
+}
+
 std::shared_ptr<RNChildSetHandle> child_set_from(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value) {
 	if (!p_value.isObject()) {
 		return nullptr;
@@ -239,17 +267,16 @@ bool prepare_imperative_request(const std::shared_ptr<RNRuntimeCoordinatorState>
 	return true;
 }
 
-void index_tree(const Ref<RNShadowNode> &p_node, uint64_t p_revision, RNRuntimeCoordinatorState &r_state) {
+void index_tree(const Ref<RNShadowNode> &p_node, RNRuntimeCoordinatorState &r_state) {
 	if (p_node.is_null()) {
 		return;
 	}
-	p_node->revision = p_revision;
 	RNDesiredNode desired;
 	desired.component_name = p_node->view_name;
 	desired.event_target = p_node->event_target;
 	r_state.desired_nodes[{ p_node->root_tag, p_node->tag }] = desired;
 	for (const Ref<RNShadowNode> &child : p_node->children) {
-		index_tree(child, p_revision, r_state);
+		index_tree(child, r_state);
 	}
 }
 
@@ -325,6 +352,13 @@ void FabricUIManager::remove_surface(int p_root_tag, uint64_t p_epoch) {
 	}
 }
 
+void FabricUIManager::reconcile_surface(const RNSurfaceSnapshot &p_snapshot) {
+	auto responder = responder_tags.find(p_snapshot.root_tag);
+	if (responder != responder_tags.end() && !p_snapshot.nodes.has(responder->second)) {
+		responder_tags.erase(responder);
+	}
+}
+
 facebook::jsi::Value FabricUIManager::link_root_node(facebook::jsi::Runtime &p_runtime, int p_root_tag, const facebook::jsi::Object &p_instance_handle) {
 	auto shared = state.lock();
 	if (!shared) {
@@ -371,6 +405,10 @@ facebook::jsi::Value FabricUIManager::create_node(facebook::jsi::Runtime &rt, co
 	node->runtime_generation = route->second.runtime_generation;
 	node->surface_epoch = route->second.surface_epoch;
 	node->view_name = string_from_utf8(p_args[1].getString(rt).utf8(rt));
+	auto existing_target = event_targets.find({ root_tag, node->tag });
+	if (existing_target != event_targets.end() && !existing_target->second.expired()) {
+		throw facebook::jsi::JSError(rt, "createNode: duplicate live tag in this surface.");
+	}
 	node->props = props_from(rt, p_args[3]);
 	node->event_target = std::make_shared<RNEventTarget>(node->tag, node->runtime_generation, root_tag, node->surface_epoch, rt, p_args[4].getObject(rt));
 	event_targets[{ root_tag, node->tag }] = node->event_target;
@@ -437,9 +475,25 @@ facebook::jsi::Value FabricUIManager::append_child(facebook::jsi::Runtime &rt, c
 		argument_error(rt, "appendChild", 1, "shadow node", p_args, p_argc);
 	}
 	if (parent->root_tag != child->root_tag || parent->runtime_generation != child->runtime_generation || parent->surface_epoch != child->surface_epoch) {
+		invalidate_node(parent, "appendChild: cross-surface nodes are not allowed.");
 		throw facebook::jsi::JSError(rt, "appendChild: cross-surface nodes are not allowed.");
 	}
+	for (const Ref<RNShadowNode> &existing : parent->children) {
+		if (existing.is_valid() && existing->tag == child->tag) {
+			invalidate_node(parent, "appendChild: repeated direct child.");
+			throw facebook::jsi::JSError(rt, "appendChild: repeated direct child.");
+		}
+	}
+	if (subtree_contains_tag(child, parent->tag)) {
+		invalidate_node(parent, "appendChild: cycle detected.");
+		throw facebook::jsi::JSError(rt, "appendChild: cycle detected.");
+	}
+	if (child->validated_depth >= RNShadowNode::MAX_DEPTH) {
+		invalidate_node(parent, "appendChild: native depth limit exceeded.");
+		throw facebook::jsi::JSError(rt, "appendChild: native depth limit exceeded.");
+	}
 	parent->children.push_back(child);
+	parent->validated_depth = MAX(parent->validated_depth, child->validated_depth + 1);
 	return facebook::jsi::Value(rt, p_args[0]);
 }
 
@@ -461,7 +515,16 @@ facebook::jsi::Value FabricUIManager::append_child_to_set(facebook::jsi::Runtime
 		child_set->surface_epoch = child->surface_epoch;
 	}
 	if (child_set->root_tag != child->root_tag || child_set->runtime_generation != child->runtime_generation || child_set->surface_epoch != child->surface_epoch) {
+		child_set->structurally_valid = false;
+		child_set->structural_error = "appendChildToSet: cross-surface nodes are not allowed.";
 		throw facebook::jsi::JSError(rt, "appendChildToSet: cross-surface nodes are not allowed.");
+	}
+	for (const Ref<RNShadowNode> &existing : child_set->children) {
+		if (existing.is_valid() && existing->tag == child->tag) {
+			child_set->structurally_valid = false;
+			child_set->structural_error = "appendChildToSet: repeated direct child.";
+			throw facebook::jsi::JSError(rt, "appendChildToSet: repeated direct child.");
+		}
 	}
 	child_set->children.push_back(child);
 	return facebook::jsi::Value::undefined();
@@ -493,6 +556,9 @@ facebook::jsi::Value FabricUIManager::complete_root(facebook::jsi::Runtime &rt, 
 	if (child_set->root_tag != root_tag || child_set->runtime_generation != route->second.runtime_generation || child_set->surface_epoch != route->second.surface_epoch) {
 		throw facebook::jsi::JSError(rt, "completeRoot: child set belongs to another surface.");
 	}
+	if (!child_set->structurally_valid) {
+		throw facebook::jsi::JSError(rt, std::string("completeRoot: rejected invalid child set: ") + string_to_utf8(child_set->structural_error));
+	}
 	Ref<RNShadowNode> root = root_entry->second->clone(true, nullptr);
 	root->children = child_set->children;
 	if (!RNShadowNode::is_within_depth_limit(root)) {
@@ -507,14 +573,17 @@ facebook::jsi::Value FabricUIManager::complete_root(facebook::jsi::Runtime &rt, 
 			++it;
 		}
 	}
-	index_tree(root, revision, *shared);
+	index_tree(root, *shared);
 	RNPendingCommit commit;
 	commit.runtime_generation = route->second.runtime_generation;
 	commit.root_tag = root_tag;
 	commit.surface_epoch = route->second.surface_epoch;
 	commit.revision = revision;
 	commit.tree = root;
-	shared->commit_queue.push_back(commit);
+	RNSurfaceOperation operation;
+	operation.kind = RNSurfaceOperationKind::COMMIT;
+	operation.commit = commit;
+	shared->operation_queues[root_tag].push_back(operation);
 	for (auto it = event_targets.begin(); it != event_targets.end();) {
 		it = it->second.expired() ? event_targets.erase(it) : std::next(it);
 	}
@@ -640,7 +709,10 @@ facebook::jsi::Value FabricUIManager::set_native_props(facebook::jsi::Runtime &r
 	}
 	request.kind = RNImperativeRequestKind::DIRECT_PROPS;
 	request.payload = props_from(rt, p_args[1]);
-	shared->imperative_queue.push_back(request);
+	RNSurfaceOperation operation;
+	operation.kind = RNSurfaceOperationKind::IMPERATIVE;
+	operation.imperative = request;
+	shared->operation_queues[request.root_tag].push_back(operation);
 	return facebook::jsi::Value::undefined();
 }
 
@@ -663,7 +735,10 @@ facebook::jsi::Value FabricUIManager::dispatch_command(facebook::jsi::Runtime &r
 	request.kind = RNImperativeRequestKind::COMMAND;
 	request.command_name = string_from_utf8(p_args[1].getString(rt).utf8(rt));
 	request.payload = jsi_to_variant(rt, p_args[2], 0);
-	shared->imperative_queue.push_back(request);
+	RNSurfaceOperation operation;
+	operation.kind = RNSurfaceOperationKind::IMPERATIVE;
+	operation.imperative = request;
+	shared->operation_queues[request.root_tag].push_back(operation);
 	return facebook::jsi::Value::undefined();
 }
 
@@ -698,16 +773,19 @@ void FabricUIManager::dispatch_event_locked(facebook::jsi::Runtime &p_runtime, c
 		return;
 	}
 	auto snapshot = shared->snapshots.find(p_event.root_tag);
-	const bool removed_capture_target = p_event.name == "topLostPointerCapture";
-	if (snapshot == shared->snapshots.end() || !snapshot->second || (!removed_capture_target && !snapshot->second->nodes.has(p_event.tag))) {
+	const bool retained_removed_target = bool(p_event.retained_target);
+	if (snapshot == shared->snapshots.end() || !snapshot->second || (!retained_removed_target && !snapshot->second->nodes.has(p_event.tag))) {
 		return;
 	}
-	auto target_entry = event_targets.find({ p_event.root_tag, p_event.tag });
-	if (target_entry == event_targets.end()) {
-		return;
+	std::shared_ptr<RNEventTarget> target = p_event.retained_target;
+	if (!target) {
+		auto target_entry = event_targets.find({ p_event.root_tag, p_event.tag });
+		if (target_entry == event_targets.end()) {
+			return;
+		}
+		target = target_entry->second.lock();
 	}
-	auto target = target_entry->second.lock();
-	if (!target || target->get_generation() != p_generation || target->get_surface_epoch() != p_event.surface_epoch) {
+	if (!target || target->get_tag() != p_event.tag || target->get_root_tag() != p_event.root_tag || target->get_generation() != p_generation || target->get_surface_epoch() != p_event.surface_epoch) {
 		return;
 	}
 	facebook::jsi::Value instance_handle = target->lock(p_runtime);
@@ -769,8 +847,7 @@ void FabricUIManager::before_runtime_reset_locked(facebook::jsi::Runtime &p_runt
 	current_event_priority = EVENT_PRIORITY_DEFAULT;
 	if (auto shared = state.lock()) {
 		shared->event_queue.clear();
-		shared->commit_queue.clear();
-		shared->imperative_queue.clear();
+		shared->operation_queues.clear();
 		shared->desired_nodes.clear();
 		shared->snapshots.clear();
 		shared->pointer_capture.clear();

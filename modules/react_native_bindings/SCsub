@@ -54,6 +54,7 @@ module_source_dirs = [
 	"editor",
 	"fabric",
 	"input",
+	"mounting",
 	"root_view",
 	"runtime",
 	"singletons",
