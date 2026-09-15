@@ -2,6 +2,7 @@
 
 #include "core/object/ref_counted.h"
 #include "core/string/ustring.h"
+#include "core/templates/hash_map.h"
 #include "core/templates/vector.h"
 #include "core/variant/dictionary.h"
 
@@ -27,7 +28,7 @@ public:
 	Dictionary props;
 	Vector<Ref<RNShadowNode>> children;
 	std::shared_ptr<RNEventTarget> event_target;
-	Vector<String> declarative_prop_keys;
+	HashMap<String, uint64_t> declarative_prop_revisions;
 	int validated_depth = 1;
 	bool children_replaced = false;
 	bool structurally_valid = true;

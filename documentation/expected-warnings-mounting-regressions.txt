@@ -1,0 +1,2 @@
+# The regression smoke rejects one prop update to verify override recovery.
+^ERROR: React Native surface [0-9]+ revision [0-9]+ rejected: surface [0-9]+ revision [0-9]+ failed at mutation 0 \(update\)$

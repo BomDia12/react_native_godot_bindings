@@ -17,6 +17,7 @@ class FabricUIManager : public facebook::jsi::HostObject, public HermesRuntimeLi
 	std::unordered_map<int, Ref<RNShadowNode>> virtual_roots;
 	std::unordered_map<int, int> responder_tags;
 	int current_event_priority = 0;
+	uint64_t next_prop_revision = 1;
 
 	facebook::jsi::Value create_node(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
 	facebook::jsi::Value clone_node(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc, bool new_children, bool new_props);

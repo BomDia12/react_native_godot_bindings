@@ -84,6 +84,10 @@ RNHitTestResult RNInputRouter::hit_test_node(const RNSurfaceSnapshot &p_snapshot
 	if (!node || !node->visible || !p_clip.has_point(p_point) || node->pointer_events == "none") {
 		return RNHitTestResult();
 	}
+	Control *control = Object::cast_to<Control>(ObjectDB::get_instance(node->object_id));
+	if (control && !control->is_visible_in_tree()) {
+		return RNHitTestResult();
+	}
 	Rect2 child_clip = p_clip;
 	if (node->clips_contents) {
 		child_clip = clipped(child_clip, node->root_rect);

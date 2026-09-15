@@ -164,8 +164,12 @@ void RNMountingManager::remove_touched_overrides(const Ref<RNShadowNode> &p_node
 	}
 	Dictionary *overrides = r_overrides.getptr(p_node->tag);
 	if (overrides) {
-		for (const String &key : p_node->declarative_prop_keys) {
-			overrides->erase(key);
+		const RNMountedNode *mounted = mounted_nodes.getptr(p_node->tag);
+		for (const KeyValue<String, uint64_t> &entry : p_node->declarative_prop_revisions) {
+			const uint64_t *published = mounted ? mounted->shadow_node->declarative_prop_revisions.getptr(entry.key) : nullptr;
+			if (!published || *published != entry.value) {
+				overrides->erase(entry.key);
+			}
 		}
 		if (overrides->is_empty()) {
 			r_overrides.erase(p_node->tag);
