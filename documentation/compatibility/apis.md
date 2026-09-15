@@ -13,7 +13,7 @@ development-only compatibility getter throws when accessed.
 | API-ALERT | `Alert` | pending | No native service. | none | none |
 | API-ANIMATED | `Animated` | pending | Animation integration is not verified. | none | none |
 | API-APPEARANCE | `Appearance` | pending | A fixed preamble shim is not production support. | none | none |
-| API-APP-REGISTRY | `AppRegistry` | partially supported | The fixture registers and starts one Fabric application surface. | [entry](../../samples/view-text/godot.entry.js) | [BASELINE-SMOKE](test-coverage.md) |
+| API-APP-REGISTRY | `AppRegistry` | partially supported | Registers components and starts independent Fabric surfaces; Godot assigns process-wide root tags, isolates surface failures, and does not implement the full native lifecycle contract. | [bundle entry](../../samples/view-text/godot.entry.js), [applications](../../samples/view-text/multi_root.entry.js), [root view](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [MULTI-ROOT-SMOKE](test-coverage.md) |
 | API-APP-STATE | `AppState` | pending | No native service. | none | none |
 | API-ASSET-REGISTRY | `AssetRegistry` | pending | React Native asset registration and Godot resource loading are not integrated. | none | none |
 | API-CLIPBOARD | `Clipboard` | pending | No native service. | none | none |
@@ -26,7 +26,7 @@ development-only compatibility getter throws when accessed.
 | API-DEV-SETTINGS | `DevSettings` | pending | Developer service is absent. | none | none |
 | API-DIMENSIONS | `Dimensions` | pending | Fixed fixture constants do not track Godot display state. | none | none |
 | API-EASING | `Easing` | pending | JS implementation is not verified. | none | none |
-| API-FIND-NODE | `findNodeHandle` | pending | Public instance and ref contract are absent. | none | none |
+| API-FIND-NODE | `findNodeHandle` | partially supported | Returns the pinned numeric tag for tested host, composite, and saved unmounted refs and preserves numeric/null inputs; broader renderer identity semantics are not verified. | [root view registry](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [MULTI-ROOT-SMOKE](test-coverage.md) |
 | API-I18N | `I18nManager` | pending | RTL and locale integration are absent. | none | none |
 | API-KEYBOARD | `Keyboard` | pending | No native service. | none | none |
 | API-LAYOUT-ANIMATION | `LayoutAnimation` | pending | Layout animation is absent. | none | none |
@@ -51,7 +51,7 @@ development-only compatibility getter throws when accessed.
 | API-SYSTRACE | `Systrace` | pending | No tracing integration. | none | none |
 | API-TURBO-REGISTRY | `TurboModuleRegistry` | pending | Preamble shims are not a general registry. | none | none |
 | API-UI-MANAGER | `UIManager` | pending | Legacy Paper UIManager is absent. | none | none |
-| API-BATCHED-UPDATES | `unstable_batchedUpdates` | pending | Renderer behavior is not verified. | none | none |
+| API-BATCHED-UPDATES | `unstable_batchedUpdates` | partially supported | The public callback batches two state updates into one observed render in the fixture; broader scheduler and bookkeeping semantics are not verified. | [multi-root entry](../../samples/view-text/multi_root.entry.js) | [MULTI-ROOT-SMOKE](test-coverage.md) |
 | API-ANIMATED-VALUE | `useAnimatedValue` | pending | Animation integration is not verified. | none | none |
 | API-ANIMATED-VALUE-XY | `useAnimatedValueXY` | pending | Animation integration is not verified. | none | none |
 | API-ANIMATED-COLOR | `useAnimatedColor` | pending | Animation integration is not verified. | none | none |

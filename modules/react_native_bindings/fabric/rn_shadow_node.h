@@ -21,10 +21,15 @@ class RNShadowNode : public RefCounted {
 
 public:
 	int tag = 0;
+	int root_tag = 0;
+	uint64_t runtime_generation = 0;
+	uint64_t surface_epoch = 0;
+	uint64_t revision = 0;
 	String view_name;
 	Dictionary props;
 	Vector<Ref<RNShadowNode>> children;
 	std::shared_ptr<RNEventTarget> event_target;
+	Vector<String> declarative_prop_keys;
 
 	// Layout relative to this node's Yoga parent, filled in by RNLayout::calculate().
 	// Matches what Control::set_position() expects from a Godot child. Not part of the

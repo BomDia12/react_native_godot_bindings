@@ -19,7 +19,7 @@ jobs:
       CC: gcc-13
       CXX: g++-13
       CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 500M
+      CCACHE_MAXSIZE: 1G
     steps:
       - uses: actions/checkout@v6
         with:
@@ -134,12 +134,13 @@ jobs:
 
       - name: Build Godot and module
         run: |
+          ccache --zero-stats
           set -o pipefail
           scripts/build_godot.sh -j2 \
             cpp_compiler_launcher=ccache \
             c_compiler_launcher=ccache \
             cache_path=${{ github.workspace }}/.scons-cache \
-            cache_limit=4 \
+            cache_limit=6 \
             accesskit=no \
             module_mono_enabled=no \
             module_openxr_enabled=no \
@@ -152,6 +153,10 @@ jobs:
             module_webrtc_enabled=no \
             module_mobile_vr_enabled=no \
             2>&1 | tee godot-build.log
+
+      - name: Show compiler cache statistics
+        if: always()
+        run: ccache --show-stats
 
       - name: Run module unit tests
         run: |

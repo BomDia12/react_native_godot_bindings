@@ -1,0 +1,4 @@
+# The fixture intentionally starts an unregistered application key.
+^WARNING: "MissingApplication" has not been registered\. This can happen if:$
+# The fixture intentionally renders a component that throws inside its surface boundary.
+^WARNING: ReactNativeRootView [0-9]+ failed inside its error boundary: intentional surface failure$

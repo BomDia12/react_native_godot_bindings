@@ -54,6 +54,7 @@ class HermesRuntimeSingleton : public Object {
 	void install_host_objects_locked();
 	void run_pre_reset_hooks_locked();
 	bool is_lifecycle_registered_locked(const std::shared_ptr<class HermesRuntimeLifecycle> &lifecycle) const;
+	bool require_main_thread(const char *p_method) const;
 	facebook::jsi::Value handle_import_module(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
 	Variant filesystem_import_resolver(const String &path);
 
@@ -93,4 +94,5 @@ public:
 	// Host functions on it must never call back into this singleton's public API:
 	// they run inside evaluate_locked() with runtime_mutex held and would self-deadlock.
 	void install_host_object(const String &name, std::shared_ptr<facebook::jsi::HostObject> object);
+	void uninstall_host_object(const String &name);
 };

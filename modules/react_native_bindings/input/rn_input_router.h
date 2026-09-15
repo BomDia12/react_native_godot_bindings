@@ -23,6 +23,22 @@ private:
 		float pressure = 0.5f;
 		float size = 1.0f;
 	};
+	struct PointerSample {
+		int tag = 0;
+		Point2 root_position;
+		Point2 screen_position;
+		Point2 target_origin;
+		int button = -1;
+		int buttons = 0;
+		String pointer_type;
+		int pointer_id = 0;
+		float pressure = 0.0f;
+		float width = 1.0f;
+		float height = 1.0f;
+		bool primary = false;
+		const InputEventWithModifiers *modifiers = nullptr;
+		uint64_t timestamp = 0;
+	};
 
 	int hover_tag = 0;
 	int mouse_active_tag = 0;
@@ -34,8 +50,9 @@ private:
 
 	static int hit_test_node(const Ref<RNShadowNode> &p_node, const Point2 &p_point, const Point2 &p_parent_origin, const Rect2 &p_clip, const RNRegistry *p_registry);
 	static bool find_origin(const Ref<RNShadowNode> &p_node, int p_tag, const Point2 &p_parent_origin, Point2 &r_origin);
-	static Dictionary pointer_payload(int p_tag, const Point2 &p_root_position, const Point2 &p_screen_position, const Point2 &p_target_origin, int p_button, int p_buttons, const String &p_pointer_type, int p_pointer_id, float p_pressure, float p_width, float p_height, bool p_primary, const InputEventWithModifiers *p_modifiers, uint64_t p_timestamp);
-	static Dictionary touch_value(int p_tag, int p_identifier, int p_root_tag, const Point2 &p_root_position, const Point2 &p_screen_position, const Point2 &p_target_origin, float p_pressure, uint64_t p_timestamp);
+	static Dictionary pointer_payload(const PointerSample &p_sample);
+	static Dictionary touch_value(const PointerSample &p_sample, int p_root_tag);
+	static Dictionary touch_payload(const Dictionary &p_touch, const Array &p_touches);
 	static RNNativeEvent event(int p_tag, const String &p_name, int p_priority, uint64_t p_generation, const Dictionary &p_payload);
 	static int mouse_button(MouseButton p_button);
 	static int mouse_button_mask(MouseButton p_button);

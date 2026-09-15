@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://smoke/tests/pressable_interaction/pressable_interaction.gd" id="1"]
 
 [node name="SmokeMain" type="ReactNativeRootView"]
+application_key = "GodotInteractionApp"
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0

@@ -70,16 +70,11 @@ const MODULES = {
   },
   SourceCode: {getConstants: () => ({scriptURL: null})},
   NativeMicrotasksCxx: {queueMicrotask: callback => enqueueImmediate(callback)},
-  NativeDOMCxx: {
-    linkRootNode: rootTag => ({rootTag}),
-    getParentNode: () => null,
-    getChildNodes: () => [],
-    isConnected: () => true,
-	measure: (node, callback) => global.nativeFabricUIManager.measure(node, callback),
+  NativeDOMCxx: global.__godotNativeDOM,
+  NativeReactNativeFeatureFlagsCxx: {
+    shouldPressibilityUseW3CPointerEventsForHover: () => true,
+    enableImperativeFocus: () => true,
   },
-	NativeReactNativeFeatureFlagsCxx: {
-		shouldPressibilityUseW3CPointerEventsForHover: () => true,
-	},
   ExceptionsManager: {
     reportException: () => {},
     reportFatalException: () => {},

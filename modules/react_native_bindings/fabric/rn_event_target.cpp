@@ -9,13 +9,15 @@ public:
 	std::optional<facebook::jsi::WeakObject> instance_handle;
 };
 
-RNEventTarget::RNEventTarget(int p_tag, uint64_t p_generation) :
-		tag(p_tag), generation(p_generation), impl(std::make_unique<Impl>()) {
+RNEventTarget::RNEventTarget(int p_tag, uint64_t p_generation, int p_root_tag, uint64_t p_surface_epoch) :
+		tag(p_tag), root_tag(p_root_tag), generation(p_generation), surface_epoch(p_surface_epoch), impl(std::make_unique<Impl>()) {
 }
 
-RNEventTarget::RNEventTarget(int p_tag, uint64_t p_generation, facebook::jsi::Runtime &p_runtime, const facebook::jsi::Object &p_instance_handle) :
+RNEventTarget::RNEventTarget(int p_tag, uint64_t p_generation, int p_root_tag, uint64_t p_surface_epoch, facebook::jsi::Runtime &p_runtime, const facebook::jsi::Object &p_instance_handle) :
 		tag(p_tag),
+		root_tag(p_root_tag),
 		generation(p_generation),
+		surface_epoch(p_surface_epoch),
 		impl(std::make_unique<Impl>()) {
 	impl->instance_handle.emplace(p_runtime, p_instance_handle);
 }
@@ -35,4 +37,8 @@ facebook::jsi::Value RNEventTarget::lock(facebook::jsi::Runtime &p_runtime) cons
 
 void RNEventTarget::reset() {
 	impl->instance_handle.reset();
+}
+
+void RNEventTarget::set_instance_handle(facebook::jsi::Runtime &p_runtime, const facebook::jsi::Object &p_instance_handle) {
+	impl->instance_handle.emplace(p_runtime, p_instance_handle);
 }

@@ -4,6 +4,9 @@ import './godot.preamble';
 import React from 'react';
 import {AppRegistry, StyleSheet, Text, View} from 'react-native';
 
+import './interaction.entry';
+import './multi_root.entry';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -25,10 +28,39 @@ const App = () => (
 
 AppRegistry.registerComponent('GodotApp', () => App);
 
-// ReactNativeRootView calls this after evaluating the bundle.
-global.__godotRunApplication = rootTag =>
-  AppRegistry.runApplication('GodotApp', {
+global.__godotBoundaryErrors = [];
+global.__godotBoundaryCaught = false;
+
+class SurfaceErrorBoundary extends React.Component {
+  state = {failed: false};
+
+  componentDidCatch(error, info) {
+    global.__godotBoundaryCaught = true;
+    global.__godotBoundaryErrors.push(this.props.rootTag);
+    global.nativeFabricUIManager.__godotReportSurfaceError(
+      this.props.rootTag,
+      String(error?.message ?? error),
+      info?.componentStack ?? '',
+    );
+    this.setState({failed: true});
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+AppRegistry.setWrapperComponentProvider(parameters => props => (
+  <SurfaceErrorBoundary rootTag={parameters.rootTag} {...props} />
+));
+
+global.__godotRunApplication = (applicationKey, rootTag) =>
+  AppRegistry.runApplication(applicationKey, {
     rootTag,
     initialProps: {},
     fabric: true,
   });
+
+global.__godotStopApplication = rootTag => {
+  global.RN$stopSurface(rootTag);
+};

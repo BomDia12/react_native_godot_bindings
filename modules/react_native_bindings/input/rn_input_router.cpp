@@ -54,6 +54,38 @@ uint64_t timestamp_now() {
 	return OS::get_singleton()->get_ticks_msec();
 }
 
+struct KeyNames {
+	Key key;
+	const char *name;
+	const char *code;
+};
+
+const KeyNames *special_key_names(Key p_key) {
+	static constexpr KeyNames keys[] = {
+		{ Key::ENTER, "Enter", "Enter" },
+		{ Key::KP_ENTER, "Enter", "Enter" },
+		{ Key::SPACE, " ", "Space" },
+		{ Key::ESCAPE, "Escape", "Escape" },
+		{ Key::TAB, "Tab", "Tab" },
+		{ Key::BACKSPACE, "Backspace", "Backspace" },
+		{ Key::KEY_DELETE, "Delete", "Delete" },
+		{ Key::LEFT, "ArrowLeft", "ArrowLeft" },
+		{ Key::RIGHT, "ArrowRight", "ArrowRight" },
+		{ Key::UP, "ArrowUp", "ArrowUp" },
+		{ Key::DOWN, "ArrowDown", "ArrowDown" },
+		{ Key::HOME, "Home", "Home" },
+		{ Key::END, "End", "End" },
+		{ Key::PAGEUP, "PageUp", "PageUp" },
+		{ Key::PAGEDOWN, "PageDown", "PageDown" },
+	};
+	for (const KeyNames &entry : keys) {
+		if (entry.key == p_key) {
+			return &entry;
+		}
+	}
+	return nullptr;
+}
+
 } // namespace
 
 RNNativeEvent RNInputRouter::event(int p_tag, const String &p_name, int p_priority, uint64_t p_generation, const Dictionary &p_payload) {
@@ -149,55 +181,64 @@ Point2 RNInputRouter::target_origin(const Ref<RNShadowNode> &p_tree, int p_tag) 
 	return origin;
 }
 
-Dictionary RNInputRouter::pointer_payload(int p_tag, const Point2 &p_root_position, const Point2 &p_screen_position, const Point2 &p_target_origin, int p_button, int p_buttons, const String &p_pointer_type, int p_pointer_id, float p_pressure, float p_width, float p_height, bool p_primary, const InputEventWithModifiers *p_modifiers, uint64_t p_timestamp) {
+Dictionary RNInputRouter::pointer_payload(const PointerSample &p_sample) {
 	Dictionary payload;
-	payload["target"] = p_tag;
-	payload["timestamp"] = int64_t(p_timestamp);
+	payload["target"] = p_sample.tag;
+	payload["timestamp"] = int64_t(p_sample.timestamp);
 	payload["detail"] = 0;
-	payload["screenX"] = p_screen_position.x;
-	payload["screenY"] = p_screen_position.y;
-	payload["clientX"] = p_root_position.x;
-	payload["clientY"] = p_root_position.y;
-	payload["x"] = p_root_position.x;
-	payload["y"] = p_root_position.y;
-	payload["pageX"] = p_root_position.x;
-	payload["pageY"] = p_root_position.y;
-	payload["offsetX"] = p_root_position.x - p_target_origin.x;
-	payload["offsetY"] = p_root_position.y - p_target_origin.y;
-	payload["altKey"] = p_modifiers && p_modifiers->is_alt_pressed();
-	payload["ctrlKey"] = p_modifiers && p_modifiers->is_ctrl_pressed();
-	payload["metaKey"] = p_modifiers && p_modifiers->is_meta_pressed();
-	payload["shiftKey"] = p_modifiers && p_modifiers->is_shift_pressed();
-	payload["button"] = p_button;
-	payload["buttons"] = p_buttons;
+	payload["screenX"] = p_sample.screen_position.x;
+	payload["screenY"] = p_sample.screen_position.y;
+	payload["clientX"] = p_sample.root_position.x;
+	payload["clientY"] = p_sample.root_position.y;
+	payload["x"] = p_sample.root_position.x;
+	payload["y"] = p_sample.root_position.y;
+	payload["pageX"] = p_sample.root_position.x;
+	payload["pageY"] = p_sample.root_position.y;
+	payload["offsetX"] = p_sample.root_position.x - p_sample.target_origin.x;
+	payload["offsetY"] = p_sample.root_position.y - p_sample.target_origin.y;
+	payload["altKey"] = p_sample.modifiers && p_sample.modifiers->is_alt_pressed();
+	payload["ctrlKey"] = p_sample.modifiers && p_sample.modifiers->is_ctrl_pressed();
+	payload["metaKey"] = p_sample.modifiers && p_sample.modifiers->is_meta_pressed();
+	payload["shiftKey"] = p_sample.modifiers && p_sample.modifiers->is_shift_pressed();
+	payload["button"] = p_sample.button;
+	payload["buttons"] = p_sample.buttons;
 	payload["relatedTarget"] = Variant();
-	payload["pointerId"] = p_pointer_id;
-	payload["width"] = p_width;
-	payload["height"] = p_height;
-	payload["pressure"] = p_pressure;
+	payload["pointerId"] = p_sample.pointer_id;
+	payload["width"] = p_sample.width;
+	payload["height"] = p_sample.height;
+	payload["pressure"] = p_sample.pressure;
 	payload["tangentialPressure"] = 0.0;
 	payload["tiltX"] = 0.0;
 	payload["tiltY"] = 0.0;
 	payload["twist"] = 0.0;
-	payload["pointerType"] = p_pointer_type;
-	payload["isPrimary"] = p_primary;
+	payload["pointerType"] = p_sample.pointer_type;
+	payload["isPrimary"] = p_sample.primary;
 	return payload;
 }
 
-Dictionary RNInputRouter::touch_value(int p_tag, int p_identifier, int p_root_tag, const Point2 &p_root_position, const Point2 &p_screen_position, const Point2 &p_target_origin, float p_pressure, uint64_t p_timestamp) {
+Dictionary RNInputRouter::touch_value(const PointerSample &p_sample, int p_root_tag) {
 	Dictionary touch;
-	touch["identifier"] = p_identifier;
-	touch["locationX"] = p_root_position.x - p_target_origin.x;
-	touch["locationY"] = p_root_position.y - p_target_origin.y;
-	touch["pageX"] = p_root_position.x;
-	touch["pageY"] = p_root_position.y;
-	touch["screenX"] = p_screen_position.x;
-	touch["screenY"] = p_screen_position.y;
-	touch["target"] = p_tag;
+	touch["identifier"] = p_sample.pointer_id;
+	touch["locationX"] = p_sample.root_position.x - p_sample.target_origin.x;
+	touch["locationY"] = p_sample.root_position.y - p_sample.target_origin.y;
+	touch["pageX"] = p_sample.root_position.x;
+	touch["pageY"] = p_sample.root_position.y;
+	touch["screenX"] = p_sample.screen_position.x;
+	touch["screenY"] = p_sample.screen_position.y;
+	touch["target"] = p_sample.tag;
 	touch["targetSurface"] = p_root_tag;
-	touch["timestamp"] = int64_t(p_timestamp);
-	touch["force"] = p_pressure;
+	touch["timestamp"] = int64_t(p_sample.timestamp);
+	touch["force"] = p_sample.pressure;
 	return touch;
+}
+
+Dictionary RNInputRouter::touch_payload(const Dictionary &p_touch, const Array &p_touches) {
+	Dictionary payload = p_touch.duplicate(true);
+	Array changed;
+	changed.push_back(p_touch.duplicate(true));
+	payload["changedTouches"] = changed;
+	payload["touches"] = p_touches;
+	return payload;
 }
 
 int RNInputRouter::mouse_button(MouseButton p_button) {
@@ -233,12 +274,12 @@ void RNInputRouter::append_mouse_hover(RouteResult &r_result, const Ref<RNShadow
 	}
 
 	if (hover_tag != 0) {
-		const Dictionary payload = pointer_payload(hover_tag, p_root_position, p_screen_position, target_origin(p_tree, hover_tag), -1, mouse_buttons, "mouse", 1, 0.0f, 1.0f, 1.0f, true, p_modifiers, p_timestamp);
+		const Dictionary payload = pointer_payload({ hover_tag, p_root_position, p_screen_position, target_origin(p_tree, hover_tag), -1, mouse_buttons, "mouse", 1, 0.0f, 1.0f, 1.0f, true, p_modifiers, p_timestamp });
 		r_result.events.push_back(event(hover_tag, "topPointerOut", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 		r_result.events.push_back(event(hover_tag, "topPointerLeave", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 	}
 	if (next_hover != 0) {
-		const Dictionary payload = pointer_payload(next_hover, p_root_position, p_screen_position, target_origin(p_tree, next_hover), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, p_modifiers, p_timestamp);
+		const Dictionary payload = pointer_payload({ next_hover, p_root_position, p_screen_position, target_origin(p_tree, next_hover), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, p_modifiers, p_timestamp });
 		r_result.events.push_back(event(next_hover, "topPointerOver", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 		r_result.events.push_back(event(next_hover, "topPointerEnter", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 	}
@@ -249,7 +290,8 @@ Array RNInputRouter::current_touches(const Ref<RNShadowNode> &p_tree, int p_root
 	Array touches;
 	for (const KeyValue<int, TouchContact> &entry : touch_contacts) {
 		const TouchContact &contact = entry.value;
-		touches.push_back(touch_value(contact.tag, entry.key, p_root_tag, contact.root_position, contact.screen_position, target_origin(p_tree, contact.tag), contact.pressure, p_timestamp));
+		PointerSample sample{ contact.tag, contact.root_position, contact.screen_position, target_origin(p_tree, contact.tag), -1, 0, "touch", entry.key, contact.pressure, contact.size, contact.size, entry.key == primary_touch_id, nullptr, p_timestamp };
+		touches.push_back(touch_value(sample, p_root_tag));
 	}
 	return touches;
 }
@@ -264,16 +306,17 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 		append_mouse_hover(result, p_tree, p_registry, p_root_size, p_root_position, p_screen_position, motion.ptr(), p_generation, timestamp);
 		const int target = mouse_active_tag != 0 ? mouse_active_tag : hit_test(p_tree, p_registry, p_root_size, p_root_position);
 		if (target != 0) {
-			const Dictionary payload = pointer_payload(target, p_root_position, p_screen_position, target_origin(p_tree, target), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, motion.ptr(), timestamp);
+			PointerSample sample{ target, p_root_position, p_screen_position, target_origin(p_tree, target), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, motion.ptr(), timestamp };
+			const Dictionary payload = pointer_payload(sample);
 			result.events.push_back(event(target, "topPointerMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 			if (mouse_active_tag != 0) {
-				Dictionary touch = touch_value(target, 0, p_root_tag, p_root_position, p_screen_position, target_origin(p_tree, target), 0.5f, timestamp);
-				Array changed;
-				changed.push_back(touch.duplicate(true));
-				Array touches = changed.duplicate(true);
-				touch["changedTouches"] = changed;
-				touch["touches"] = touches;
-				result.events.push_back(event(target, "topTouchMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, touch));
+				sample.pointer_id = 0;
+				sample.pressure = 0.5f;
+				const Dictionary touch = touch_value(sample, p_root_tag);
+				Array touches;
+				touches.push_back(touch.duplicate(true));
+				const Dictionary touch_event_payload = touch_payload(touch, touches);
+				result.events.push_back(event(target, "topTouchMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, touch_event_payload));
 			}
 			result.accepted = true;
 		}
@@ -304,38 +347,34 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 		}
 
 		const Point2 origin = target_origin(p_tree, target);
+		PointerSample sample{ target, p_root_position, p_screen_position, origin, button, mouse_buttons, "mouse", 1, button_event->is_pressed() ? 0.5f : 0.0f, 1.0f, 1.0f, true, button_event.ptr(), timestamp };
 		if (button_event->is_pressed()) {
-			const Dictionary payload = pointer_payload(target, p_root_position, p_screen_position, origin, button, mouse_buttons, "mouse", 1, 0.5f, 1.0f, 1.0f, true, button_event.ptr(), timestamp);
+			const Dictionary payload = pointer_payload(sample);
 			result.events.push_back(event(target, "topPointerDown", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, payload));
 			if (button == 0) {
 				mouse_active_tag = target;
 				result.focus_tag = target;
-				Dictionary touch = touch_value(target, 0, p_root_tag, p_root_position, p_screen_position, origin, 0.5f, timestamp);
+				sample.pointer_id = 0;
+				const Dictionary touch = touch_value(sample, p_root_tag);
 				Array values;
 				values.push_back(touch.duplicate(true));
-				touch["changedTouches"] = values;
-				touch["touches"] = values.duplicate(true);
-				result.events.push_back(event(target, "topTouchStart", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch));
+				result.events.push_back(event(target, "topTouchStart", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, values.duplicate(true))));
 			}
 		} else {
 			if (button == 0 && button_event->is_canceled()) {
-				Dictionary touch = touch_value(target, 0, p_root_tag, p_root_position, p_screen_position, origin, 0.0f, timestamp);
-				Array changed;
-				changed.push_back(touch.duplicate(true));
-				touch["changedTouches"] = changed;
-				touch["touches"] = Array();
-				result.events.push_back(event(target, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch));
-				result.events.push_back(event(target, "topPointerCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(target, p_root_position, p_screen_position, origin, button, mouse_buttons, "mouse", 1, 0.0f, 1.0f, 1.0f, true, button_event.ptr(), timestamp)));
+				sample.pointer_id = 0;
+				const Dictionary touch = touch_value(sample, p_root_tag);
+				result.events.push_back(event(target, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, Array())));
+				sample.pointer_id = 1;
+				result.events.push_back(event(target, "topPointerCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(sample)));
 			} else {
 				if (button == 0) {
-					Dictionary touch = touch_value(target, 0, p_root_tag, p_root_position, p_screen_position, origin, 0.0f, timestamp);
-					Array changed;
-					changed.push_back(touch.duplicate(true));
-					touch["changedTouches"] = changed;
-					touch["touches"] = Array();
-					result.events.push_back(event(target, "topTouchEnd", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch));
+					sample.pointer_id = 0;
+					const Dictionary touch = touch_value(sample, p_root_tag);
+					result.events.push_back(event(target, "topTouchEnd", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, Array())));
 				}
-				const Dictionary payload = pointer_payload(target, p_root_position, p_screen_position, origin, button, mouse_buttons, "mouse", 1, 0.0f, 1.0f, 1.0f, true, button_event.ptr(), timestamp);
+				sample.pointer_id = 1;
+				const Dictionary payload = pointer_payload(sample);
 				result.events.push_back(event(target, "topPointerUp", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, payload));
 				if (button == 0 && hit == mouse_active_tag) {
 					Dictionary click = payload.duplicate(true);
@@ -367,14 +406,11 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 			if (is_first_contact) {
 				primary_touch_id = index;
 			}
-			const Dictionary pointer = pointer_payload(target, p_root_position, p_screen_position, target_origin(p_tree, target), 0, 1, "touch", index, 0.5f, 1.0f, 1.0f, index == primary_touch_id, nullptr, timestamp);
+			PointerSample sample{ target, p_root_position, p_screen_position, target_origin(p_tree, target), 0, 1, "touch", index, 0.5f, 1.0f, 1.0f, index == primary_touch_id, nullptr, timestamp };
+			const Dictionary pointer = pointer_payload(sample);
 			result.events.push_back(event(target, "topPointerDown", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer));
-			Dictionary touch = touch_value(target, index, p_root_tag, p_root_position, p_screen_position, target_origin(p_tree, target), 0.5f, timestamp);
-			Array changed;
-			changed.push_back(touch.duplicate(true));
-			touch["changedTouches"] = changed;
-			touch["touches"] = current_touches(p_tree, p_root_tag, timestamp);
-			result.events.push_back(event(target, "topTouchStart", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch));
+			const Dictionary touch = touch_value(sample, p_root_tag);
+			result.events.push_back(event(target, "topTouchStart", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, current_touches(p_tree, p_root_tag, timestamp))));
 			result.focus_tag = target;
 			result.accepted = true;
 			return result;
@@ -394,14 +430,12 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 		if (was_primary) {
 			primary_touch_id = -1;
 		}
-		Dictionary touch = touch_value(ended.tag, index, p_root_tag, p_root_position, p_screen_position, target_origin(p_tree, ended.tag), 0.0f, timestamp);
-		Array changed;
-		changed.push_back(touch.duplicate(true));
-		touch["changedTouches"] = changed;
-		touch["touches"] = current_touches(p_tree, p_root_tag, timestamp);
+		PointerSample sample{ ended.tag, p_root_position, p_screen_position, target_origin(p_tree, ended.tag), 0, 0, "touch", index, 0.0f, 1.0f, 1.0f, was_primary, nullptr, timestamp };
+		const Dictionary touch = touch_value(sample, p_root_tag);
+		const Dictionary payload = touch_payload(touch, current_touches(p_tree, p_root_tag, timestamp));
 		const bool canceled = screen_touch->is_canceled();
-		result.events.push_back(event(ended.tag, canceled ? "topTouchCancel" : "topTouchEnd", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch));
-		result.events.push_back(event(ended.tag, canceled ? "topPointerCancel" : "topPointerUp", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(ended.tag, p_root_position, p_screen_position, target_origin(p_tree, ended.tag), 0, 0, "touch", index, 0.0f, 1.0f, 1.0f, was_primary, nullptr, timestamp)));
+		result.events.push_back(event(ended.tag, canceled ? "topTouchCancel" : "topTouchEnd", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, payload));
+		result.events.push_back(event(ended.tag, canceled ? "topPointerCancel" : "topPointerUp", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(sample)));
 		result.accepted = true;
 		return result;
 	}
@@ -415,51 +449,18 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 		contact->screen_position = p_screen_position;
 		contact->pressure = drag->get_pressure() > 0.0f ? drag->get_pressure() : 0.5f;
 		const int target = contact->tag;
-		result.events.push_back(event(target, "topPointerMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, pointer_payload(target, p_root_position, p_screen_position, target_origin(p_tree, target), -1, 1, "touch", drag->get_index(), contact->pressure, 1.0f, 1.0f, drag->get_index() == primary_touch_id, nullptr, timestamp)));
-		Dictionary touch = touch_value(target, drag->get_index(), p_root_tag, p_root_position, p_screen_position, target_origin(p_tree, target), contact->pressure, timestamp);
-		Array changed;
-		changed.push_back(touch.duplicate(true));
-		touch["changedTouches"] = changed;
-		touch["touches"] = current_touches(p_tree, p_root_tag, timestamp);
-		result.events.push_back(event(target, "topTouchMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, touch));
+		PointerSample sample{ target, p_root_position, p_screen_position, target_origin(p_tree, target), -1, 1, "touch", drag->get_index(), contact->pressure, 1.0f, 1.0f, drag->get_index() == primary_touch_id, nullptr, timestamp };
+		result.events.push_back(event(target, "topPointerMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, pointer_payload(sample)));
+		const Dictionary touch = touch_value(sample, p_root_tag);
+		result.events.push_back(event(target, "topTouchMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, touch_payload(touch, current_touches(p_tree, p_root_tag, timestamp))));
 		result.accepted = true;
 	}
 	return result;
 }
 
 String RNInputRouter::key_name(const Ref<InputEventKey> &p_key) {
-	switch (p_key->get_keycode()) {
-		case Key::ENTER:
-		case Key::KP_ENTER:
-			return "Enter";
-		case Key::SPACE:
-			return " ";
-		case Key::ESCAPE:
-			return "Escape";
-		case Key::TAB:
-			return "Tab";
-		case Key::BACKSPACE:
-			return "Backspace";
-		case Key::KEY_DELETE:
-			return "Delete";
-		case Key::LEFT:
-			return "ArrowLeft";
-		case Key::RIGHT:
-			return "ArrowRight";
-		case Key::UP:
-			return "ArrowUp";
-		case Key::DOWN:
-			return "ArrowDown";
-		case Key::HOME:
-			return "Home";
-		case Key::END:
-			return "End";
-		case Key::PAGEUP:
-			return "PageUp";
-		case Key::PAGEDOWN:
-			return "PageDown";
-		default:
-			break;
+	if (const KeyNames *names = special_key_names(p_key->get_keycode())) {
+		return names->name;
 	}
 	if (p_key->get_unicode() != 0) {
 		return String::chr(p_key->get_unicode());
@@ -477,38 +478,8 @@ String RNInputRouter::code_name(const Ref<InputEventKey> &p_key) {
 	if (code >= int(Key::KEY_0) && code <= int(Key::KEY_9)) {
 		return "Digit" + String::chr(char32_t(code));
 	}
-	switch (physical) {
-		case Key::ENTER:
-		case Key::KP_ENTER:
-			return "Enter";
-		case Key::SPACE:
-			return "Space";
-		case Key::ESCAPE:
-			return "Escape";
-		case Key::TAB:
-			return "Tab";
-		case Key::BACKSPACE:
-			return "Backspace";
-		case Key::KEY_DELETE:
-			return "Delete";
-		case Key::LEFT:
-			return "ArrowLeft";
-		case Key::RIGHT:
-			return "ArrowRight";
-		case Key::UP:
-			return "ArrowUp";
-		case Key::DOWN:
-			return "ArrowDown";
-		case Key::HOME:
-			return "Home";
-		case Key::END:
-			return "End";
-		case Key::PAGEUP:
-			return "PageUp";
-		case Key::PAGEDOWN:
-			return "PageDown";
-		default:
-			break;
+	if (const KeyNames *names = special_key_names(physical)) {
+		return names->code;
 	}
 	const String value = keycode_get_string(physical);
 	return value.is_empty() ? "Unidentified" : value;
@@ -544,25 +515,25 @@ RNInputRouter::RouteResult RNInputRouter::route_key(const Ref<InputEventKey> &p_
 Vector<RNNativeEvent> RNInputRouter::cancel_all(const Ref<RNShadowNode> &p_tree, int p_root_tag, uint64_t p_generation) {
 	Vector<RNNativeEvent> result;
 	const uint64_t timestamp = timestamp_now();
+	if (hover_tag != 0) {
+		const Dictionary payload = pointer_payload({ hover_tag, mouse_root_position, mouse_screen_position, target_origin(p_tree, hover_tag), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, nullptr, timestamp });
+		result.push_back(event(hover_tag, "topPointerOut", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
+		result.push_back(event(hover_tag, "topPointerLeave", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
+	}
 	if (mouse_active_tag != 0) {
 		const Point2 origin = target_origin(p_tree, mouse_active_tag);
-		Dictionary touch = touch_value(mouse_active_tag, 0, p_root_tag, mouse_root_position, mouse_screen_position, origin, 0.0f, timestamp);
-		Array changed;
-		changed.push_back(touch.duplicate(true));
-		touch["changedTouches"] = changed;
-		touch["touches"] = Array();
-		result.push_back(event(mouse_active_tag, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch));
-		result.push_back(event(mouse_active_tag, "topPointerCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(mouse_active_tag, mouse_root_position, mouse_screen_position, origin, 0, 0, "mouse", 1, 0.0f, 1.0f, 1.0f, true, nullptr, timestamp)));
+		PointerSample sample{ mouse_active_tag, mouse_root_position, mouse_screen_position, origin, 0, 0, "mouse", 0, 0.0f, 1.0f, 1.0f, true, nullptr, timestamp };
+		const Dictionary touch = touch_value(sample, p_root_tag);
+		result.push_back(event(mouse_active_tag, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, Array())));
+		sample.pointer_id = 1;
+		result.push_back(event(mouse_active_tag, "topPointerCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(sample)));
 	}
 	for (const KeyValue<int, TouchContact> &entry : touch_contacts) {
 		const TouchContact &contact = entry.value;
-		Dictionary touch = touch_value(contact.tag, entry.key, p_root_tag, contact.root_position, contact.screen_position, target_origin(p_tree, contact.tag), 0.0f, timestamp);
-		Array changed;
-		changed.push_back(touch.duplicate(true));
-		touch["changedTouches"] = changed;
-		touch["touches"] = Array();
-		result.push_back(event(contact.tag, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch));
-		result.push_back(event(contact.tag, "topPointerCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(contact.tag, contact.root_position, contact.screen_position, target_origin(p_tree, contact.tag), 0, 0, "touch", entry.key, 0.0f, contact.size, contact.size, entry.key == primary_touch_id, nullptr, timestamp)));
+		PointerSample sample{ contact.tag, contact.root_position, contact.screen_position, target_origin(p_tree, contact.tag), 0, 0, "touch", entry.key, 0.0f, contact.size, contact.size, entry.key == primary_touch_id, nullptr, timestamp };
+		const Dictionary touch = touch_value(sample, p_root_tag);
+		result.push_back(event(contact.tag, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, Array())));
+		result.push_back(event(contact.tag, "topPointerCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(sample)));
 	}
 	clear();
 	return result;

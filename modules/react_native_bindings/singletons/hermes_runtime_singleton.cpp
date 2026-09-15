@@ -6,6 +6,7 @@
 #include "core/error/error_macros.h"
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
+#include "core/os/thread.h"
 #include "core/string/print_string.h"
 #include "core/string/string_name.h"
 
@@ -80,26 +81,31 @@ void HermesRuntimeSingleton::_bind_methods() {
 }
 
 Variant HermesRuntimeSingleton::evaluate(const String &p_code, const String &p_source) {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("evaluate"), Variant(), "HermesRuntime.evaluate() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	return evaluate_locked(p_code, p_source);
 }
 
 Variant HermesRuntimeSingleton::call_function(const String &p_function_name, const Array &p_args) {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("call_function"), Variant(), "HermesRuntime.call_function() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	return call_function_locked(p_function_name, p_args);
 }
 
 void HermesRuntimeSingleton::set_global(const String &p_name, const Variant &p_value) {
+	ERR_FAIL_COND_MSG(!require_main_thread("set_global"), "HermesRuntime.set_global() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	set_global_locked(p_name, p_value);
 }
 
 Variant HermesRuntimeSingleton::get_global(const String &p_name) {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("get_global"), Variant(), "HermesRuntime.get_global() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	return get_global_locked(p_name);
 }
 
 void HermesRuntimeSingleton::reset() {
+	ERR_FAIL_COND_MSG(!require_main_thread("reset"), "HermesRuntime.reset() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	run_pre_reset_hooks_locked();
 	runtime.reset();
@@ -109,11 +115,13 @@ void HermesRuntimeSingleton::reset() {
 }
 
 uint64_t HermesRuntimeSingleton::get_runtime_generation() const {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("get_runtime_generation"), 0, "HermesRuntime.get_runtime_generation() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	return runtime_generation;
 }
 
 void HermesRuntimeSingleton::dispatch_queued_events(const std::shared_ptr<FabricUIManager> &p_ui_manager) {
+	ERR_FAIL_COND_MSG(!require_main_thread("dispatch_queued_events"), "HermesRuntime.dispatch_queued_events() must run on Godot's main thread.");
 	if (!p_ui_manager) {
 		return;
 	}
@@ -126,11 +134,13 @@ void HermesRuntimeSingleton::dispatch_queued_events(const std::shared_ptr<Fabric
 }
 
 bool HermesRuntimeSingleton::is_ready() const {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("is_ready"), false, "HermesRuntime.is_ready() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	return runtime != nullptr;
 }
 
 String HermesRuntimeSingleton::get_last_error() const {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("get_last_error"), String(), "HermesRuntime.get_last_error() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	return last_error;
 }
@@ -147,6 +157,7 @@ void HermesRuntimeSingleton::ensure_runtime_locked() {
 }
 
 void HermesRuntimeSingleton::install_host_object(const String &p_name, std::shared_ptr<facebook::jsi::HostObject> p_object) {
+	ERR_FAIL_COND_MSG(!require_main_thread("install_host_object"), "HermesRuntime.install_host_object() must run on Godot's main thread.");
 	ERR_FAIL_COND_MSG(p_name.is_empty(), "HermesRuntime: host object name is empty.");
 	ERR_FAIL_COND_MSG(p_object == nullptr, "HermesRuntime: host object is null.");
 
@@ -166,6 +177,29 @@ void HermesRuntimeSingleton::install_host_object(const String &p_name, std::shar
 		last_error = _string_from_utf8(std::string(p_error.what()));
 		WARN_PRINT(last_error);
 	}
+}
+
+void HermesRuntimeSingleton::uninstall_host_object(const String &p_name) {
+	ERR_FAIL_COND_MSG(!require_main_thread("uninstall_host_object"), "HermesRuntime.uninstall_host_object() must run on Godot's main thread.");
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	host_objects.erase(p_name);
+	if (!runtime) {
+		return;
+	}
+	try {
+		runtime->global().setProperty(*runtime, _to_utf8(p_name).c_str(), facebook::jsi::Value::undefined());
+	} catch (const facebook::jsi::JSIException &p_error) {
+		last_error = _string_from_utf8(std::string(p_error.what()));
+		WARN_PRINT(last_error);
+	}
+}
+
+bool HermesRuntimeSingleton::require_main_thread(const char *p_method) const {
+	(void)p_method;
+	if (Thread::is_main_thread()) {
+		return true;
+	}
+	return false;
 }
 
 bool HermesRuntimeSingleton::is_lifecycle_registered_locked(const std::shared_ptr<HermesRuntimeLifecycle> &p_lifecycle) const {
@@ -548,17 +582,20 @@ facebook::jsi::Value HermesRuntimeSingleton::handle_import_module(facebook::jsi:
 }
 
 void HermesRuntimeSingleton::set_import_resolver(const Callable &p_resolver) {
+	ERR_FAIL_COND_MSG(!require_main_thread("set_import_resolver"), "HermesRuntime.set_import_resolver() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	import_resolver = p_resolver;
 	install_import_function_locked();
 }
 
 Callable HermesRuntimeSingleton::get_import_resolver() const {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("get_import_resolver"), Callable(), "HermesRuntime.get_import_resolver() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	return import_resolver;
 }
 
 void HermesRuntimeSingleton::use_filesystem_import_resolver() {
+	ERR_FAIL_COND_MSG(!require_main_thread("use_filesystem_import_resolver"), "HermesRuntime.use_filesystem_import_resolver() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	import_resolver = callable_mp(this, &HermesRuntimeSingleton::filesystem_import_resolver);
 	install_import_function_locked();

@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://smoke/tests/multi_root/multi_root.gd" id="1"]
+
+[node name="MultiRootSmoke" type="Node"]
+script = ExtResource("1")
+
+[node name="Left" type="ReactNativeRootView" parent="."]
+offset_right = 300.0
+offset_bottom = 200.0
+application_key = "GodotLeftApp"
+
+[node name="Right" type="ReactNativeRootView" parent="."]
+offset_left = 320.0
+offset_right = 620.0
+offset_bottom = 200.0
+application_key = "GodotRightApp"
