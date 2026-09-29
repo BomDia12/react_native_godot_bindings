@@ -80,6 +80,18 @@ func _ready() -> void:
 	await frames()
 	if not expect_opacity(0.9, "clearing an override did not restore declarative props"):
 		return
+	action("direct")
+	await frames()
+	action("remove-leaf")
+	await frames()
+	if not expect(not is_instance_valid(host), "removed host remained mounted"):
+		return
+	action("restore-leaf")
+	await frames()
+	host = surface.get_node("ReactNativeMountContainer").get_child(0)
+	original_id = host.get_instance_id()
+	if not expect_opacity(0.9, "removed host retained a stale direct override"):
+		return
 	for hidden_node in [surface, self, host]:
 		hidden_node.hide()
 		action("clear-events")

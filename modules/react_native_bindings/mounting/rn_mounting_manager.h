@@ -6,6 +6,8 @@
 #include "rn_mounting_transaction.h"
 #include "rn_tree_differ.h"
 
+#include "core/templates/hash_set.h"
+
 #include <memory>
 
 class Control;
@@ -60,7 +62,7 @@ class RNMountingManager {
 	Control *host_for_tag(int p_tag) const;
 	void ensure_mount_container();
 	Ref<RNShadowNode> build_effective_tree(const Ref<RNShadowNode> &p_node, const HashMap<int, Dictionary> &p_overrides) const;
-	void remove_touched_overrides(const Ref<RNShadowNode> &p_node, HashMap<int, Dictionary> &r_overrides) const;
+	void reconcile_overrides(const Ref<RNShadowNode> &p_node, HashMap<int, Dictionary> &r_overrides, HashSet<int> &r_live_tags) const;
 	Control *create_host(const Ref<RNShadowNode> &p_node);
 	void apply_host_props(Control *p_host, const Ref<RNShadowNode> &p_node, bool p_branch_targetable);
 	void apply_layout(Control *p_host, const Rect2 &p_layout);

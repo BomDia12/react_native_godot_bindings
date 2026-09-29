@@ -158,10 +158,11 @@ Ref<RNShadowNode> RNMountingManager::build_effective_tree(const Ref<RNShadowNode
 	return result;
 }
 
-void RNMountingManager::remove_touched_overrides(const Ref<RNShadowNode> &p_node, HashMap<int, Dictionary> &r_overrides) const {
+void RNMountingManager::reconcile_overrides(const Ref<RNShadowNode> &p_node, HashMap<int, Dictionary> &r_overrides, HashSet<int> &r_live_tags) const {
 	if (p_node.is_null()) {
 		return;
 	}
+	r_live_tags.insert(p_node->tag);
 	Dictionary *overrides = r_overrides.getptr(p_node->tag);
 	if (overrides) {
 		const RNMountedNode *mounted = mounted_nodes.getptr(p_node->tag);
@@ -176,7 +177,7 @@ void RNMountingManager::remove_touched_overrides(const Ref<RNShadowNode> &p_node
 		}
 	}
 	for (const Ref<RNShadowNode> &child : p_node->children) {
-		remove_touched_overrides(child, r_overrides);
+		reconcile_overrides(child, r_overrides, r_live_tags);
 	}
 }
 
@@ -684,7 +685,17 @@ bool RNMountingManager::commit(const RNPendingCommit &p_commit, const Size2 &p_c
 		return true;
 	}
 	HashMap<int, Dictionary> next_overrides = copy_overrides(direct_prop_overrides);
-	remove_touched_overrides(p_commit.tree, next_overrides);
+	HashSet<int> live_tags;
+	reconcile_overrides(p_commit.tree, next_overrides, live_tags);
+	Vector<int> stale_override_tags;
+	for (const KeyValue<int, Dictionary> &entry : next_overrides) {
+		if (!live_tags.has(entry.key)) {
+			stale_override_tags.push_back(entry.key);
+		}
+	}
+	for (int tag : stale_override_tags) {
+		next_overrides.erase(tag);
+	}
 	Ref<RNShadowNode> effective = build_effective_tree(p_commit.tree, next_overrides);
 	RNMountingTransaction transaction;
 	transaction.runtime_generation = p_commit.runtime_generation;

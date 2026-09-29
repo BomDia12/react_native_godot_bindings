@@ -37,7 +37,7 @@ development-only compatibility getter throws when accessed.
 | API-NATIVE-EVENT | `NativeEventEmitter` | pending | Native event bridge is absent. | none | none |
 | API-NATIVE-MODULES | `NativeModules` | pending | General native-module bridge is absent. | none | none |
 | API-NETWORKING | `Networking` | pending | Networking implementation is absent. | none | none |
-| API-PAN-RESPONDER | `PanResponder` | pending | Public PanResponder gesture behavior is not verified; Godot does provide the routed input and responder events used by the supported Pressable subset. | none | none |
+| API-PAN-RESPONDER | `PanResponder` | pending | PanResponder creation, responder negotiation, and gesture-state calculations are not verified; routed Godot input events do not establish the tagged PanResponder contract. | none | none |
 | API-PIXEL-RATIO | `PixelRatio` | pending | Fixed fixture scale is not native support. | none | none |
 | API-PLATFORM | `Platform` | pending | Supported bundle currently reports Android, not Godot. | none | none |
 | API-PLATFORM-COLOR | `PlatformColor` | pending | No Godot color contract is implemented. | none | none |

@@ -5,12 +5,12 @@
   let leaf;
   let sibling;
 
-  const commit = () => {
+  const commitChildren = childrenToCommit => {
     const children = ui.createChildSet(rootTag);
-    ui.appendChildToSet(children, leaf);
-    ui.appendChildToSet(children, sibling);
+    childrenToCommit.forEach(child => ui.appendChildToSet(children, child));
     ui.completeRoot(rootTag, children);
   };
+  const commit = () => commitChildren([leaf, sibling]);
 
   globalThis.__godotMountingRegressionEvents = [];
   globalThis.__godotMountingRegression = (action, tag) => {
@@ -66,6 +66,12 @@
         break;
       case 'clear':
         ui.setNativeProps(leaf, {opacity: null});
+        break;
+      case 'remove-leaf':
+        commitChildren([sibling]);
+        break;
+      case 'restore-leaf':
+        commit();
         break;
       case 'clear-events':
         globalThis.__godotMountingRegressionEvents.length = 0;
