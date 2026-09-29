@@ -58,8 +58,8 @@ to a single platform are out of scope and are not listed: `borderCurve`,
 | STYLE-BLEND | `mixBlendMode` | pending | Public blend-mode key has no Godot behavior or automated coverage. | none | none |
 | STYLE-EXPERIMENTAL-BACKGROUND | `experimental_background*` | pending | Public experimental background keys have no Godot behavior or automated coverage. | none | none |
 | STYLE-ISOLATION | `isolation` | pending | Public isolation key has no Godot behavior or automated coverage. | none | none |
-| STYLE-FONT-SIZE | `fontSize` | partially supported | Numeric size overrides the fallback font; broader typography is absent. | [renderer](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [BASELINE-SMOKE](test-coverage.md) |
-| STYLE-COLOR | `color` | partially supported | Android processed numeric text color is supported; dynamic colors are absent. | [renderer](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [BASELINE-SMOKE](test-coverage.md) |
+| STYLE-FONT-SIZE | `fontSize` | partially supported | Numeric size overrides the fallback font; broader typography is absent. | [mounting manager](../../modules/react_native_bindings/mounting/rn_mounting_manager.cpp) | [BASELINE-SMOKE](test-coverage.md) |
+| STYLE-COLOR | `color` | partially supported | Android processed numeric text color is supported; dynamic colors are absent. | [mounting manager](../../modules/react_native_bindings/mounting/rn_mounting_manager.cpp) | [BASELINE-SMOKE](test-coverage.md) |
 | STYLE-Z-INDEX | `zIndex` | pending | Public stacking key has no Godot behavior or automated coverage. | none | none |
 | STYLE-TRANSFORM | `transform/transformOrigin` | pending | Public transforms and transform origins have no Godot behavior or automated coverage. | none | none |
 | STYLE-DEPRECATED-TRANSFORMS | `transformMatrix/rotation/scaleX/scaleY/translateX/translateY` | pending | Deprecated public transform keys have no Godot behavior or automated coverage. | none | none |

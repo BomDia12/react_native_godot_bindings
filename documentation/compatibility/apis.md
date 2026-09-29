@@ -37,7 +37,7 @@ development-only compatibility getter throws when accessed.
 | API-NATIVE-EVENT | `NativeEventEmitter` | pending | Native event bridge is absent. | none | none |
 | API-NATIVE-MODULES | `NativeModules` | pending | General native-module bridge is absent. | none | none |
 | API-NETWORKING | `Networking` | pending | Networking implementation is absent. | none | none |
-| API-PAN-RESPONDER | `PanResponder` | pending | Input and responder path are absent. | none | none |
+| API-PAN-RESPONDER | `PanResponder` | pending | Public PanResponder gesture behavior is not verified; Godot does provide the routed input and responder events used by the supported Pressable subset. | none | none |
 | API-PIXEL-RATIO | `PixelRatio` | pending | Fixed fixture scale is not native support. | none | none |
 | API-PLATFORM | `Platform` | pending | Supported bundle currently reports Android, not Godot. | none | none |
 | API-PLATFORM-COLOR | `PlatformColor` | pending | No Godot color contract is implemented. | none | none |
@@ -56,7 +56,7 @@ development-only compatibility getter throws when accessed.
 | API-ANIMATED-VALUE-XY | `useAnimatedValueXY` | pending | Animation integration is not verified. | none | none |
 | API-ANIMATED-COLOR | `useAnimatedColor` | pending | Animation integration is not verified. | none | none |
 | API-COLOR-SCHEME | `useColorScheme` | pending | Appearance service is absent. | none | none |
-| API-PRESSABILITY | `usePressability` | partially supported | Works through the routed mouse, touch, keyboard, focus, hover, and responder subset; durable native identity, complete measurement, pointer capture, long-press edge cases, production feature flags, and broader platform coverage are absent. | [input router](../../modules/react_native_bindings/input/rn_input_router.cpp), [event bridge](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp) | [PRESSABLE-SMOKE](test-coverage.md) |
+| API-PRESSABILITY | `usePressability` | partially supported | Returns handlers that work through routed mouse, touch, keyboard, focus, hover, and responder events on retained View hosts; long-press and press-retention edge cases, production feature flags, and broader platform coverage remain unverified. | [input router](../../modules/react_native_bindings/input/rn_input_router.cpp), [event bridge](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp), [mounting manager](../../modules/react_native_bindings/mounting/rn_mounting_manager.cpp) | [PRESSABLE-SMOKE](test-coverage.md) |
 | API-WINDOW-DIMENSIONS | `useWindowDimensions` | pending | Native dimensions service is absent. | none | none |
 | API-UTF-SEQUENCE | `UTFSequence` | pending | JS export is not verified. | none | none |
 | API-VIBRATION | `Vibration` | pending | No native service. | none | none |
