@@ -35,7 +35,7 @@ func find_styled_panel(node: Node) -> Panel:
 
 func has_only_expected_node_types(node: Node) -> bool:
 	for child in node.get_children():
-		if not child is Panel and not child is Label:
+		if not child is Panel and not child is Label and not (child is Control and child.name == "ReactNativeMountContainer"):
 			return false
 		if not has_only_expected_node_types(child):
 			return false
@@ -43,10 +43,13 @@ func has_only_expected_node_types(node: Node) -> bool:
 	return true
 
 func validate_smoke() -> String:
-	if get_child_count() != 1 or not get_child(0) is Panel:
-		return "expected exactly one mounted root Panel"
+	if get_child_count() != 1 or not get_child(0) is Control or get_child(0).name != "ReactNativeMountContainer":
+		return "expected the internal mount container"
+	var container := get_child(0) as Control
+	if container.get_child_count() != 1 or not container.get_child(0) is Panel:
+		return "expected exactly one mounted root Panel in the internal container"
 
-	var mounted_root := get_child(0) as Panel
+	var mounted_root := container.get_child(0) as Panel
 	if not has_only_expected_node_types(self):
 		return "mounted tree contains an unexpected native node type"
 

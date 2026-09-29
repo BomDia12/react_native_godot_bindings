@@ -118,7 +118,7 @@ func _process(_delta: float) -> void:
 			if side("right").get("renders", 0) != 2:
 				fail("unstable_batchedUpdates produced more than one render")
 				return
-			right_native_id = right.get_child(0).get_instance_id()
+			right_native_id = target(right).get_instance_id()
 			call_fixture("__godotMultiRootSetProps", "left")
 			call_fixture("__godotMultiRootFocus", "left")
 			advance()
@@ -128,9 +128,9 @@ func _process(_delta: float) -> void:
 				if frames - stage_frame > 30:
 					fail("setNativeProps did not update layout and opacity: width=%s opacity=%s events=%s" % [left_target.size.x if left_target != null else -1, left_target.modulate.a if left_target != null else -1, side("left").get("events", [])])
 				return
-			if "layout:101" not in side("left").get("events", []) or "layout:100" in side("left").get("events", []):
+			if "layout:90" not in side("left").get("events", []) or "layout:100" not in side("left").get("events", []) or "layout:101" not in side("left").get("events", []):
 				if frames - stage_frame > 30:
-					fail("setNativeProps requests were not coalesced: %s" % [side("left").get("events", [])])
+					fail("setNativeProps barriers did not preserve request order: %s" % [side("left").get("events", [])])
 				return
 			if "focus" not in side("left").get("events", []):
 				if frames - stage_frame > 30:
@@ -188,15 +188,15 @@ func _process(_delta: float) -> void:
 			if left.get_root_tag() == old_left_tag or not remember_tag(left.get_root_tag()):
 				fail("soft reload reused a root tag")
 				return
-			if side("right").get("count", 0) != 2 or right.get_child(0).get_instance_id() != right_native_id:
+			if side("right").get("count", 0) != 2 or target(right).get_instance_id() != right_native_id:
 				fail("soft reload changed the peer root")
 				return
 			left.application_key = "MissingApplication"
 			advance()
 		5:
-			if left.get_child_count() != 0:
+			if target(left) != null:
 				return
-			if side("right").get("count", 0) != 2 or right.get_child(0).get_instance_id() != right_native_id:
+			if side("right").get("count", 0) != 2 or target(right).get_instance_id() != right_native_id:
 				fail("an invalid key changed the peer root")
 				return
 			if not remember_tag(left.get_root_tag()):
@@ -205,7 +205,7 @@ func _process(_delta: float) -> void:
 			left.application_key = "GodotLeftApp"
 			advance()
 		6:
-			if side("left").get("count", -1) != 0 or left.get_child_count() == 0:
+			if side("left").get("count", -1) != 0 or target(left) == null:
 				return
 			if not remember_tag(left.get_root_tag()):
 				fail("corrected key reused a root tag")
@@ -213,13 +213,13 @@ func _process(_delta: float) -> void:
 			remove_child(left)
 			advance()
 		7:
-			if side("right").get("count", 0) != 2 or right.get_child(0).get_instance_id() != right_native_id:
+			if side("right").get("count", 0) != 2 or target(right).get_instance_id() != right_native_id:
 				fail("removing one root changed its peer")
 				return
 			add_child(left)
 			advance()
 		8:
-			if side("left").get("count", -1) != 0 or left.get_child_count() == 0:
+			if side("left").get("count", -1) != 0 or target(left) == null:
 				return
 			if not remember_tag(left.get_root_tag()):
 				fail("scene re-entry reused a root tag")
@@ -243,13 +243,13 @@ func _process(_delta: float) -> void:
 			if target(left) != null:
 				fail("component error left failed surface content mounted")
 				return
-			if side("right").get("count", -1) != 0 or right.get_child_count() == 0:
+			if side("right").get("count", -1) != 0 or target(right) == null:
 				fail("component error escaped its surface boundary")
 				return
 			left.application_key = "GodotLeftApp"
 			advance()
 		11:
-			if side("left").get("count", -1) != 0 or left.get_child_count() == 0:
+			if side("left").get("count", -1) != 0 or target(left) == null:
 				return
 			timer_start = int(HermesRuntime.get_global("__godotMultiTimerTicks"))
 			advance()
@@ -271,7 +271,7 @@ func _process(_delta: float) -> void:
 			left.application_key = "MissingApplication"
 			advance()
 		14:
-			if left.get_child_count() != 0:
+			if target(left) != null:
 				return
 			if not remember_tag(left.get_root_tag()):
 				fail("stress failure reused a root tag")
@@ -287,7 +287,7 @@ func _process(_delta: float) -> void:
 			remove_child(left)
 			advance()
 		16:
-			if left.get_root_tag() != 0 or left.get_child_count() != 0:
+			if left.get_root_tag() != 0 or target(left) != null:
 				return
 			if target(right) == null:
 				fail("stress removal changed the peer root")

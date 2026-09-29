@@ -17,6 +17,7 @@ class FabricUIManager : public facebook::jsi::HostObject, public HermesRuntimeLi
 	std::unordered_map<int, Ref<RNShadowNode>> virtual_roots;
 	std::unordered_map<int, int> responder_tags;
 	int current_event_priority = 0;
+	uint64_t next_prop_revision = 1;
 
 	facebook::jsi::Value create_node(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
 	facebook::jsi::Value clone_node(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc, bool new_children, bool new_props);
@@ -52,6 +53,7 @@ public:
 
 	void register_surface(const RNSurfaceRoute &p_route);
 	void remove_surface(int p_root_tag, uint64_t p_epoch);
+	void reconcile_surface(const RNSurfaceSnapshot &p_snapshot);
 	facebook::jsi::Value link_root_node(facebook::jsi::Runtime &p_runtime, int p_root_tag, const facebook::jsi::Object &p_instance_handle);
 	void dispatch_queued_events_locked(facebook::jsi::Runtime &p_runtime, uint64_t p_generation);
 	void before_runtime_reset_locked(facebook::jsi::Runtime &p_runtime, uint64_t p_generation) override;
@@ -73,4 +75,6 @@ public:
 	uint64_t runtime_generation = 0;
 	uint64_t surface_epoch = 0;
 	Vector<Ref<RNShadowNode>> children;
+	bool structurally_valid = true;
+	String structural_error;
 };

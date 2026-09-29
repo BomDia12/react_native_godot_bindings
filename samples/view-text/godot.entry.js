@@ -6,6 +6,7 @@ import {AppRegistry, StyleSheet, Text, View} from 'react-native';
 
 import './interaction.entry';
 import './multi_root.entry';
+import './transaction.entry';
 
 const styles = StyleSheet.create({
   container: {

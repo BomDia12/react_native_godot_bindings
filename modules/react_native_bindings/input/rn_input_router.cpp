@@ -8,28 +8,13 @@
 
 namespace {
 
-String pointer_events_of(const Ref<RNShadowNode> &p_node) {
-	return String(p_node->props.get("pointerEvents", "auto")).to_lower();
-}
-
-bool node_is_visible(const Ref<RNShadowNode> &p_node, const RNRegistry *p_registry) {
-	if (String(p_node->props.get("display", "flex")) == "none") {
-		return false;
-	}
-	if (!p_registry) {
-		return true;
-	}
-	Control *control = Object::cast_to<Control>(p_registry->get_node(p_node->tag));
-	return !control || control->is_visible_in_tree();
-}
-
 Rect2 clipped(const Rect2 &p_left, const Rect2 &p_right) {
 	return p_left.intersection(p_right);
 }
 
-Rect2 hit_rect(const Ref<RNShadowNode> &p_node, const Point2 &p_origin) {
-	Rect2 result(p_origin, p_node->layout.size);
-	const Variant hit_slop_value = p_node->props.get("hitSlop", Variant());
+Rect2 hit_rect(const RNMountedNodeSnapshot &p_node) {
+	Rect2 result = p_node.root_rect;
+	const Variant hit_slop_value = p_node.hit_slop;
 	if (hit_slop_value.get_type() == Variant::INT || hit_slop_value.get_type() == Variant::FLOAT) {
 		const float amount = float(hit_slop_value);
 		result.position -= Point2(amount, amount);
@@ -44,10 +29,6 @@ Rect2 hit_rect(const Ref<RNShadowNode> &p_node, const Point2 &p_origin) {
 		result.size += Size2(left + right, top + bottom);
 	}
 	return result;
-}
-
-bool clips_children(const Ref<RNShadowNode> &p_node) {
-	return String(p_node->props.get("overflow", "visible")) == "hidden";
 }
 
 uint64_t timestamp_now() {
@@ -98,87 +79,50 @@ RNNativeEvent RNInputRouter::event(int p_tag, const String &p_name, int p_priori
 	return result;
 }
 
-int RNInputRouter::hit_test_node(const Ref<RNShadowNode> &p_node, const Point2 &p_point, const Point2 &p_parent_origin, const Rect2 &p_clip, const RNRegistry *p_registry) {
-	if (p_node.is_null() || !node_is_visible(p_node, p_registry) || !p_clip.has_point(p_point)) {
-		return 0;
+RNHitTestResult RNInputRouter::hit_test_node(const RNSurfaceSnapshot &p_snapshot, int p_tag, const Point2 &p_point, const Rect2 &p_clip) {
+	const RNMountedNodeSnapshot *node = p_snapshot.nodes.getptr(p_tag);
+	if (!node || !node->visible || !p_clip.has_point(p_point) || node->pointer_events == "none") {
+		return RNHitTestResult();
 	}
-
-	const Point2 origin = p_parent_origin + p_node->layout.position;
-	const Rect2 bounds(origin, p_node->layout.size);
-	const String pointer_events = pointer_events_of(p_node);
-	if (pointer_events == "none") {
-		return 0;
+	Control *control = Object::cast_to<Control>(ObjectDB::get_instance(node->object_id));
+	if (control && !control->is_visible_in_tree()) {
+		return RNHitTestResult();
 	}
-
 	Rect2 child_clip = p_clip;
-	if (clips_children(p_node)) {
-		child_clip = clipped(child_clip, bounds);
+	if (node->clips_contents) {
+		child_clip = clipped(child_clip, node->root_rect);
 	}
-
-	if (pointer_events != "box-only") {
-		for (int i = p_node->children.size() - 1; i >= 0; --i) {
-			const int child_tag = hit_test_node(p_node->children[i], p_point, origin, child_clip, p_registry);
-			if (child_tag != 0) {
-				return child_tag;
+	if (node->pointer_events != "box-only") {
+		for (int i = node->child_tags.size() - 1; i >= 0; --i) {
+			RNHitTestResult child = hit_test_node(p_snapshot, node->child_tags[i], p_point, child_clip);
+			if (child.tag != 0) {
+				return child;
 			}
 		}
 	}
-
-	if (pointer_events != "box-none" && p_node->view_name == "RCTView" && hit_rect(p_node, origin).has_point(p_point)) {
-		return p_node->tag;
+	if (node->self_targetable && hit_rect(*node).has_point(p_point)) {
+		return RNHitTestResult{ node->tag, node->root_rect.position };
 	}
-	return 0;
+	return RNHitTestResult();
 }
 
-int RNInputRouter::hit_test(const Ref<RNShadowNode> &p_tree, const RNRegistry &p_registry, const Size2 &p_root_size, const Point2 &p_point) const {
-	if (p_tree.is_null()) {
-		return 0;
+RNHitTestResult RNInputRouter::hit_test(const RNSurfaceSnapshot &p_snapshot, const Point2 &p_point) {
+	const RNMountedNodeSnapshot *root = p_snapshot.nodes.getptr(p_snapshot.root_tag);
+	if (!root) {
+		return RNHitTestResult();
 	}
-	const Rect2 root_bounds(Point2(), p_root_size);
-	for (int i = p_tree->children.size() - 1; i >= 0; --i) {
-		const int tag = hit_test_node(p_tree->children[i], p_point, Point2(), root_bounds, &p_registry);
-		if (tag != 0) {
-			return tag;
+	for (int i = root->child_tags.size() - 1; i >= 0; --i) {
+		RNHitTestResult result = hit_test_node(p_snapshot, root->child_tags[i], p_point, root->root_rect);
+		if (result.tag != 0) {
+			return result;
 		}
 	}
-	return 0;
+	return RNHitTestResult();
 }
 
-int RNInputRouter::hit_test(const Ref<RNShadowNode> &p_tree, const Size2 &p_root_size, const Point2 &p_point) {
-	if (p_tree.is_null()) {
-		return 0;
-	}
-	const Rect2 root_bounds(Point2(), p_root_size);
-	for (int i = p_tree->children.size() - 1; i >= 0; --i) {
-		const int tag = hit_test_node(p_tree->children[i], p_point, Point2(), root_bounds, nullptr);
-		if (tag != 0) {
-			return tag;
-		}
-	}
-	return 0;
-}
-
-bool RNInputRouter::find_origin(const Ref<RNShadowNode> &p_node, int p_tag, const Point2 &p_parent_origin, Point2 &r_origin) {
-	if (p_node.is_null()) {
-		return false;
-	}
-	const Point2 origin = p_parent_origin + p_node->layout.position;
-	if (p_node->tag == p_tag) {
-		r_origin = origin;
-		return true;
-	}
-	for (const Ref<RNShadowNode> &child : p_node->children) {
-		if (find_origin(child, p_tag, origin, r_origin)) {
-			return true;
-		}
-	}
-	return false;
-}
-
-Point2 RNInputRouter::target_origin(const Ref<RNShadowNode> &p_tree, int p_tag) const {
-	Point2 origin;
-	find_origin(p_tree, p_tag, Point2(), origin);
-	return origin;
+Point2 RNInputRouter::target_origin(const RNSurfaceSnapshot &p_snapshot, int p_tag) {
+	const RNMountedNodeSnapshot *node = p_snapshot.nodes.getptr(p_tag);
+	return node ? node->root_rect.position : Point2();
 }
 
 Dictionary RNInputRouter::pointer_payload(const PointerSample &p_sample) {
@@ -267,46 +211,48 @@ int RNInputRouter::mouse_button_mask(MouseButton p_button) {
 	return 0;
 }
 
-void RNInputRouter::append_mouse_hover(RouteResult &r_result, const Ref<RNShadowNode> &p_tree, const RNRegistry &p_registry, const Size2 &p_root_size, const Point2 &p_root_position, const Point2 &p_screen_position, const InputEventWithModifiers *p_modifiers, uint64_t p_generation, uint64_t p_timestamp) {
-	const int next_hover = hit_test(p_tree, p_registry, p_root_size, p_root_position);
+void RNInputRouter::append_mouse_hover(RouteResult &r_result, const RNSurfaceSnapshot &p_snapshot, const RNHitTestResult &p_hit, const Point2 &p_root_position, const Point2 &p_screen_position, const InputEventWithModifiers *p_modifiers, uint64_t p_generation, uint64_t p_timestamp) {
+	const int next_hover = p_hit.tag;
 	if (next_hover == hover_tag) {
 		return;
 	}
 
 	if (hover_tag != 0) {
-		const Dictionary payload = pointer_payload({ hover_tag, p_root_position, p_screen_position, target_origin(p_tree, hover_tag), -1, mouse_buttons, "mouse", 1, 0.0f, 1.0f, 1.0f, true, p_modifiers, p_timestamp });
+		const Dictionary payload = pointer_payload({ hover_tag, p_root_position, p_screen_position, target_origin(p_snapshot, hover_tag), -1, mouse_buttons, "mouse", 1, 0.0f, 1.0f, 1.0f, true, p_modifiers, p_timestamp });
 		r_result.events.push_back(event(hover_tag, "topPointerOut", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 		r_result.events.push_back(event(hover_tag, "topPointerLeave", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 	}
 	if (next_hover != 0) {
-		const Dictionary payload = pointer_payload({ next_hover, p_root_position, p_screen_position, target_origin(p_tree, next_hover), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, p_modifiers, p_timestamp });
+		const Dictionary payload = pointer_payload({ next_hover, p_root_position, p_screen_position, p_hit.root_origin, -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, p_modifiers, p_timestamp });
 		r_result.events.push_back(event(next_hover, "topPointerOver", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 		r_result.events.push_back(event(next_hover, "topPointerEnter", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 	}
 	hover_tag = next_hover;
 }
 
-Array RNInputRouter::current_touches(const Ref<RNShadowNode> &p_tree, int p_root_tag, uint64_t p_timestamp) const {
+Array RNInputRouter::current_touches(const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_timestamp) const {
 	Array touches;
 	for (const KeyValue<int, TouchContact> &entry : touch_contacts) {
 		const TouchContact &contact = entry.value;
-		PointerSample sample{ contact.tag, contact.root_position, contact.screen_position, target_origin(p_tree, contact.tag), -1, 0, "touch", entry.key, contact.pressure, contact.size, contact.size, entry.key == primary_touch_id, nullptr, p_timestamp };
+		PointerSample sample{ contact.tag, contact.root_position, contact.screen_position, target_origin(p_snapshot, contact.tag), -1, 0, "touch", entry.key, contact.pressure, contact.size, contact.size, entry.key == primary_touch_id, nullptr, p_timestamp };
 		touches.push_back(touch_value(sample, p_root_tag));
 	}
 	return touches;
 }
 
-RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p_event, const Ref<RNShadowNode> &p_tree, const RNRegistry &p_registry, const Size2 &p_root_size, int p_root_tag, uint64_t p_generation, const Point2 &p_root_position, const Point2 &p_screen_position) {
+RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p_event, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation, const Point2 &p_root_position, const Point2 &p_screen_position) {
 	RouteResult result;
 	const uint64_t timestamp = timestamp_now();
+	const RNHitTestResult hit = hit_test(p_snapshot, p_root_position);
 
 	if (Ref<InputEventMouseMotion> motion = p_event; motion.is_valid()) {
 		mouse_root_position = p_root_position;
 		mouse_screen_position = p_screen_position;
-		append_mouse_hover(result, p_tree, p_registry, p_root_size, p_root_position, p_screen_position, motion.ptr(), p_generation, timestamp);
-		const int target = mouse_active_tag != 0 ? mouse_active_tag : hit_test(p_tree, p_registry, p_root_size, p_root_position);
+		append_mouse_hover(result, p_snapshot, hit, p_root_position, p_screen_position, motion.ptr(), p_generation, timestamp);
+		const int target = mouse_active_tag != 0 ? mouse_active_tag : hit.tag;
 		if (target != 0) {
-			PointerSample sample{ target, p_root_position, p_screen_position, target_origin(p_tree, target), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, motion.ptr(), timestamp };
+			const Point2 origin = target == hit.tag ? hit.root_origin : target_origin(p_snapshot, target);
+			PointerSample sample{ target, p_root_position, p_screen_position, origin, -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, motion.ptr(), timestamp };
 			const Dictionary payload = pointer_payload(sample);
 			result.events.push_back(event(target, "topPointerMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 			if (mouse_active_tag != 0) {
@@ -337,8 +283,7 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 			mouse_buttons &= ~mask;
 		}
 
-		const int hit = hit_test(p_tree, p_registry, p_root_size, p_root_position);
-		const int target = button == 0 && !button_event->is_pressed() && mouse_active_tag != 0 ? mouse_active_tag : hit;
+		const int target = button == 0 && !button_event->is_pressed() && mouse_active_tag != 0 ? mouse_active_tag : hit.tag;
 		if (target == 0) {
 			if (button == 0 && !button_event->is_pressed()) {
 				mouse_active_tag = 0;
@@ -346,7 +291,7 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 			return result;
 		}
 
-		const Point2 origin = target_origin(p_tree, target);
+		const Point2 origin = target == hit.tag ? hit.root_origin : target_origin(p_snapshot, target);
 		PointerSample sample{ target, p_root_position, p_screen_position, origin, button, mouse_buttons, "mouse", 1, button_event->is_pressed() ? 0.5f : 0.0f, 1.0f, 1.0f, true, button_event.ptr(), timestamp };
 		if (button_event->is_pressed()) {
 			const Dictionary payload = pointer_payload(sample);
@@ -376,7 +321,7 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 				sample.pointer_id = 1;
 				const Dictionary payload = pointer_payload(sample);
 				result.events.push_back(event(target, "topPointerUp", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, payload));
-				if (button == 0 && hit == mouse_active_tag) {
+				if (button == 0 && hit.tag == mouse_active_tag) {
 					Dictionary click = payload.duplicate(true);
 					click["isPrimary"] = false;
 					result.events.push_back(event(target, "topClick", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, click));
@@ -393,7 +338,7 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 	if (Ref<InputEventScreenTouch> screen_touch = p_event; screen_touch.is_valid()) {
 		const int index = screen_touch->get_index();
 		if (screen_touch->is_pressed()) {
-			const int target = hit_test(p_tree, p_registry, p_root_size, p_root_position);
+			const int target = hit.tag;
 			if (target == 0) {
 				return result;
 			}
@@ -406,11 +351,11 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 			if (is_first_contact) {
 				primary_touch_id = index;
 			}
-			PointerSample sample{ target, p_root_position, p_screen_position, target_origin(p_tree, target), 0, 1, "touch", index, 0.5f, 1.0f, 1.0f, index == primary_touch_id, nullptr, timestamp };
+			PointerSample sample{ target, p_root_position, p_screen_position, hit.root_origin, 0, 1, "touch", index, 0.5f, 1.0f, 1.0f, index == primary_touch_id, nullptr, timestamp };
 			const Dictionary pointer = pointer_payload(sample);
 			result.events.push_back(event(target, "topPointerDown", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer));
 			const Dictionary touch = touch_value(sample, p_root_tag);
-			result.events.push_back(event(target, "topTouchStart", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, current_touches(p_tree, p_root_tag, timestamp))));
+			result.events.push_back(event(target, "topTouchStart", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, current_touches(p_snapshot, p_root_tag, timestamp))));
 			result.focus_tag = target;
 			result.accepted = true;
 			return result;
@@ -430,9 +375,9 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 		if (was_primary) {
 			primary_touch_id = -1;
 		}
-		PointerSample sample{ ended.tag, p_root_position, p_screen_position, target_origin(p_tree, ended.tag), 0, 0, "touch", index, 0.0f, 1.0f, 1.0f, was_primary, nullptr, timestamp };
+		PointerSample sample{ ended.tag, p_root_position, p_screen_position, target_origin(p_snapshot, ended.tag), 0, 0, "touch", index, 0.0f, 1.0f, 1.0f, was_primary, nullptr, timestamp };
 		const Dictionary touch = touch_value(sample, p_root_tag);
-		const Dictionary payload = touch_payload(touch, current_touches(p_tree, p_root_tag, timestamp));
+		const Dictionary payload = touch_payload(touch, current_touches(p_snapshot, p_root_tag, timestamp));
 		const bool canceled = screen_touch->is_canceled();
 		result.events.push_back(event(ended.tag, canceled ? "topTouchCancel" : "topTouchEnd", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, payload));
 		result.events.push_back(event(ended.tag, canceled ? "topPointerCancel" : "topPointerUp", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(sample)));
@@ -449,10 +394,10 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 		contact->screen_position = p_screen_position;
 		contact->pressure = drag->get_pressure() > 0.0f ? drag->get_pressure() : 0.5f;
 		const int target = contact->tag;
-		PointerSample sample{ target, p_root_position, p_screen_position, target_origin(p_tree, target), -1, 1, "touch", drag->get_index(), contact->pressure, 1.0f, 1.0f, drag->get_index() == primary_touch_id, nullptr, timestamp };
+		PointerSample sample{ target, p_root_position, p_screen_position, target_origin(p_snapshot, target), -1, 1, "touch", drag->get_index(), contact->pressure, 1.0f, 1.0f, drag->get_index() == primary_touch_id, nullptr, timestamp };
 		result.events.push_back(event(target, "topPointerMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, pointer_payload(sample)));
 		const Dictionary touch = touch_value(sample, p_root_tag);
-		result.events.push_back(event(target, "topTouchMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, touch_payload(touch, current_touches(p_tree, p_root_tag, timestamp))));
+		result.events.push_back(event(target, "topTouchMove", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, touch_payload(touch, current_touches(p_snapshot, p_root_tag, timestamp))));
 		result.accepted = true;
 	}
 	return result;
@@ -512,16 +457,16 @@ RNInputRouter::RouteResult RNInputRouter::route_key(const Ref<InputEventKey> &p_
 	return result;
 }
 
-Vector<RNNativeEvent> RNInputRouter::cancel_all(const Ref<RNShadowNode> &p_tree, int p_root_tag, uint64_t p_generation) {
+Vector<RNNativeEvent> RNInputRouter::cancel_all(const RNSurfaceSnapshot *p_snapshot, int p_root_tag, uint64_t p_generation) {
 	Vector<RNNativeEvent> result;
 	const uint64_t timestamp = timestamp_now();
 	if (hover_tag != 0) {
-		const Dictionary payload = pointer_payload({ hover_tag, mouse_root_position, mouse_screen_position, target_origin(p_tree, hover_tag), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, nullptr, timestamp });
+		const Dictionary payload = pointer_payload({ hover_tag, mouse_root_position, mouse_screen_position, p_snapshot ? target_origin(*p_snapshot, hover_tag) : Point2(), -1, mouse_buttons, "mouse", 1, mouse_buttons ? 0.5f : 0.0f, 1.0f, 1.0f, true, nullptr, timestamp });
 		result.push_back(event(hover_tag, "topPointerOut", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 		result.push_back(event(hover_tag, "topPointerLeave", FabricUIManager::EVENT_PRIORITY_CONTINUOUS, p_generation, payload));
 	}
 	if (mouse_active_tag != 0) {
-		const Point2 origin = target_origin(p_tree, mouse_active_tag);
+		const Point2 origin = p_snapshot ? target_origin(*p_snapshot, mouse_active_tag) : Point2();
 		PointerSample sample{ mouse_active_tag, mouse_root_position, mouse_screen_position, origin, 0, 0, "mouse", 0, 0.0f, 1.0f, 1.0f, true, nullptr, timestamp };
 		const Dictionary touch = touch_value(sample, p_root_tag);
 		result.push_back(event(mouse_active_tag, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, Array())));
@@ -530,7 +475,7 @@ Vector<RNNativeEvent> RNInputRouter::cancel_all(const Ref<RNShadowNode> &p_tree,
 	}
 	for (const KeyValue<int, TouchContact> &entry : touch_contacts) {
 		const TouchContact &contact = entry.value;
-		PointerSample sample{ contact.tag, contact.root_position, contact.screen_position, target_origin(p_tree, contact.tag), 0, 0, "touch", entry.key, 0.0f, contact.size, contact.size, entry.key == primary_touch_id, nullptr, timestamp };
+		PointerSample sample{ contact.tag, contact.root_position, contact.screen_position, p_snapshot ? target_origin(*p_snapshot, contact.tag) : Point2(), 0, 0, "touch", entry.key, 0.0f, contact.size, contact.size, entry.key == primary_touch_id, nullptr, timestamp };
 		const Dictionary touch = touch_value(sample, p_root_tag);
 		result.push_back(event(contact.tag, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, Array())));
 		result.push_back(event(contact.tag, "topPointerCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(sample)));
@@ -539,15 +484,28 @@ Vector<RNNativeEvent> RNInputRouter::cancel_all(const Ref<RNShadowNode> &p_tree,
 	return result;
 }
 
-Vector<RNNativeEvent> RNInputRouter::reconcile_tree(const Ref<RNShadowNode> &p_tree, const RNRegistry &p_registry, int p_root_tag, uint64_t p_generation) {
-	bool missing = mouse_active_tag != 0 && !p_registry.has_tag(mouse_active_tag);
+Vector<RNNativeEvent> RNInputRouter::reconcile_snapshot(const RNSurfaceSnapshot *p_old_snapshot, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation) {
+	bool missing = hover_tag != 0 && !p_snapshot.nodes.has(hover_tag);
+	missing = missing || (mouse_active_tag != 0 && !p_snapshot.nodes.has(mouse_active_tag));
 	for (const KeyValue<int, TouchContact> &entry : touch_contacts) {
-		if (!p_registry.has_tag(entry.value.tag)) {
+		if (!p_snapshot.nodes.has(entry.value.tag)) {
 			missing = true;
 			break;
 		}
 	}
-	return missing ? cancel_all(p_tree, p_root_tag, p_generation) : Vector<RNNativeEvent>();
+	if (!missing) {
+		return Vector<RNNativeEvent>();
+	}
+	Vector<RNNativeEvent> events = cancel_all(p_old_snapshot, p_root_tag, p_generation);
+	if (p_old_snapshot) {
+		for (RNNativeEvent &event : events) {
+			const RNMountedNodeSnapshot *old_node = p_old_snapshot->nodes.getptr(event.tag);
+			if (old_node && old_node->shadow_node.is_valid()) {
+				event.retained_target = old_node->shadow_node->event_target;
+			}
+		}
+	}
+	return events;
 }
 
 void RNInputRouter::clear() {

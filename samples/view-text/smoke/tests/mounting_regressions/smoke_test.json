@@ -1,9 +1,9 @@
 {
-  "id": "pressable-interaction",
+  "id": "mounting-regressions",
   "project_dir": "samples/view-text",
-  "scene": "res://smoke/tests/pressable_interaction/SmokeMain.tscn",
+  "scene": "res://smoke/tests/mounting_regressions/MountingRegressions.tscn",
   "timeout_seconds": 60,
-  "allowlist": "documentation/expected-warnings.txt",
+  "allowlist": "documentation/expected-warnings-mounting-regressions.txt",
   "bundle": {
     "mode": "shared",
     "package_dir": "samples/view-text",
@@ -21,8 +21,9 @@
     "samples/view-text/babel.config.js",
     "samples/view-text/package.json",
     "samples/view-text/package-lock.json",
-    "documentation/expected-warnings.txt",
-    "samples/view-text/smoke/tests/pressable_interaction/SmokeMain.tscn",
-    "samples/view-text/smoke/tests/pressable_interaction/pressable_interaction.gd"
+    "documentation/expected-warnings-mounting-regressions.txt",
+    "samples/view-text/smoke/tests/mounting_regressions/MountingRegressions.tscn",
+    "samples/view-text/smoke/tests/mounting_regressions/mounting_regressions.gd",
+    "samples/view-text/smoke/tests/mounting_regressions/mounting_regressions.js"
   ]
 }

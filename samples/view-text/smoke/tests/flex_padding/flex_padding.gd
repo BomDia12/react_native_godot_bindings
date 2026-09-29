@@ -8,10 +8,13 @@ func smoke_id() -> String:
 	return "flex-padding"
 
 func validate_smoke() -> String:
-	if get_child_count() != 1 or not get_child(0) is Panel:
-		return "expected exactly one mounted root Panel"
+	if get_child_count() != 1 or not get_child(0) is Control or get_child(0).name != "ReactNativeMountContainer":
+		return "expected the internal mount container"
+	var container := get_child(0) as Control
+	if container.get_child_count() != 1 or not container.get_child(0) is Panel:
+		return "expected exactly one mounted root Panel in the internal container"
 
-	var mounted_root := get_child(0) as Panel
+	var mounted_root := container.get_child(0) as Panel
 	if mounted_root.position.distance_to(Vector2.ZERO) > TOLERANCE:
 		return "mounted root Panel is not at the root origin"
 	if mounted_root.size.distance_to(size) > TOLERANCE:

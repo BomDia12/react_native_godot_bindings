@@ -13,7 +13,7 @@ development-only compatibility getter throws when accessed.
 | API-ALERT | `Alert` | pending | No native service. | none | none |
 | API-ANIMATED | `Animated` | pending | Animation integration is not verified. | none | none |
 | API-APPEARANCE | `Appearance` | pending | A fixed preamble shim is not production support. | none | none |
-| API-APP-REGISTRY | `AppRegistry` | partially supported | Registers components and starts independent Fabric surfaces; Godot assigns process-wide root tags, isolates surface failures, and does not implement the full native lifecycle contract. | [bundle entry](../../samples/view-text/godot.entry.js), [applications](../../samples/view-text/multi_root.entry.js), [root view](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [MULTI-ROOT-SMOKE](test-coverage.md) |
+| API-APP-REGISTRY | `AppRegistry` | partially supported | Registers components and starts independent Fabric surfaces; Godot assigns process-wide root tags, gives each surface an operation queue with commit coalescing and imperative ordering, isolates surface failures, and does not implement the full native lifecycle contract. | [bundle entry](../../samples/view-text/godot.entry.js), [applications](../../samples/view-text/multi_root.entry.js), [runtime coordinator](../../modules/react_native_bindings/runtime/react_native_runtime_coordinator.cpp), [root view](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [MULTI-ROOT-SMOKE](test-coverage.md) |
 | API-APP-STATE | `AppState` | pending | No native service. | none | none |
 | API-ASSET-REGISTRY | `AssetRegistry` | pending | React Native asset registration and Godot resource loading are not integrated. | none | none |
 | API-CLIPBOARD | `Clipboard` | pending | No native service. | none | none |
@@ -37,7 +37,7 @@ development-only compatibility getter throws when accessed.
 | API-NATIVE-EVENT | `NativeEventEmitter` | pending | Native event bridge is absent. | none | none |
 | API-NATIVE-MODULES | `NativeModules` | pending | General native-module bridge is absent. | none | none |
 | API-NETWORKING | `Networking` | pending | Networking implementation is absent. | none | none |
-| API-PAN-RESPONDER | `PanResponder` | pending | Input and responder path are absent. | none | none |
+| API-PAN-RESPONDER | `PanResponder` | pending | PanResponder creation, responder negotiation, and gesture-state calculations are not verified; routed Godot input events do not establish the tagged PanResponder contract. | none | none |
 | API-PIXEL-RATIO | `PixelRatio` | pending | Fixed fixture scale is not native support. | none | none |
 | API-PLATFORM | `Platform` | pending | Supported bundle currently reports Android, not Godot. | none | none |
 | API-PLATFORM-COLOR | `PlatformColor` | pending | No Godot color contract is implemented. | none | none |
@@ -56,7 +56,7 @@ development-only compatibility getter throws when accessed.
 | API-ANIMATED-VALUE-XY | `useAnimatedValueXY` | pending | Animation integration is not verified. | none | none |
 | API-ANIMATED-COLOR | `useAnimatedColor` | pending | Animation integration is not verified. | none | none |
 | API-COLOR-SCHEME | `useColorScheme` | pending | Appearance service is absent. | none | none |
-| API-PRESSABILITY | `usePressability` | partially supported | Works through the routed mouse, touch, keyboard, focus, hover, and responder subset; durable native identity, complete measurement, pointer capture, long-press edge cases, production feature flags, and broader platform coverage are absent. | [input router](../../modules/react_native_bindings/input/rn_input_router.cpp), [event bridge](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp) | [PRESSABLE-SMOKE](test-coverage.md) |
+| API-PRESSABILITY | `usePressability` | partially supported | Returns handlers that work through routed mouse, touch, keyboard, focus, hover, and responder events on retained View hosts; long-press and press-retention edge cases, production feature flags, and broader platform coverage remain unverified. | [input router](../../modules/react_native_bindings/input/rn_input_router.cpp), [event bridge](../../modules/react_native_bindings/fabric/fabric_ui_manager.cpp), [mounting manager](../../modules/react_native_bindings/mounting/rn_mounting_manager.cpp) | [PRESSABLE-SMOKE](test-coverage.md) |
 | API-WINDOW-DIMENSIONS | `useWindowDimensions` | pending | Native dimensions service is absent. | none | none |
 | API-UTF-SEQUENCE | `UTFSequence` | pending | JS export is not verified. | none | none |
 | API-VIBRATION | `Vibration` | pending | No native service. | none | none |

@@ -158,7 +158,7 @@ YGAlign parse_align(const String &p_value, YGAlign p_default) {
 	return p_default;
 }
 
-void apply_style(YGNodeRef p_node, const Dictionary &p_style) {
+void apply_style_values(YGNodeRef p_node, const Dictionary &p_style) {
 	if (p_style.has("flexDirection")) {
 		YGNodeStyleSetFlexDirection(p_node, parse_flex_direction(p_style["flexDirection"]));
 	}
@@ -261,83 +261,45 @@ float font_size_of(const Dictionary &p_props) {
 	return ThemeDB::get_singleton()->get_fallback_font_size();
 }
 
-// Yoga needs a measure function because text has no Yoga children.
-YGSize measure_text(YGNodeConstRef p_node, float p_width, YGMeasureMode p_width_mode, float p_height, YGMeasureMode p_height_mode) {
-	(void)p_height;
-	(void)p_height_mode;
-
-	const RNShadowNode *shadow = static_cast<const RNShadowNode *>(YGNodeGetContext(p_node));
-	if (!shadow) {
-		return YGSize{ 0.0f, 0.0f };
-	}
-
-	const Ref<Font> font = ThemeDB::get_singleton()->get_fallback_font();
-	if (font.is_null()) {
-		return YGSize{ 0.0f, 0.0f };
-	}
-
-	const String text = shadow->collect_text();
-	const float font_size = font_size_of(shadow->props);
-
-	const float wrap_width = (p_width_mode == YGMeasureModeUndefined || !std::isfinite(p_width)) ? -1.0f : p_width;
-	const Size2 size = font->get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, wrap_width, font_size);
-
-	float width = float(size.width);
-	if (p_width_mode == YGMeasureModeExactly) {
-		width = p_width;
-	} else if (p_width_mode == YGMeasureModeAtMost) {
-		width = MIN(width, p_width);
-	}
-
-	return YGSize{ width, float(size.height) };
-}
-
-YGNodeRef build_yoga_tree(const Ref<RNShadowNode> &p_node) {
-	YGNodeRef yoga_node = YGNodeNew();
-	YGNodeSetContext(yoga_node, const_cast<RNShadowNode *>(p_node.ptr()));
-	apply_style(yoga_node, p_node->props);
-
-	if (p_node->view_name == "RCTText") {
-		YGNodeSetMeasureFunc(yoga_node, measure_text);
-		return yoga_node;
-	}
-
-	size_t index = 0;
-	for (const Ref<RNShadowNode> &child : p_node->children) {
-		if (child.is_null() || child->view_name == "RCTRawText") {
-			continue;
-		}
-		YGNodeInsertChild(yoga_node, build_yoga_tree(child), index++);
-	}
-
-	return yoga_node;
-}
-
-// Godot Control positions and these layout rectangles are parent-relative.
-void write_layout(YGNodeRef p_yoga_node) {
-	RNShadowNode *shadow = static_cast<RNShadowNode *>(YGNodeGetContext(p_yoga_node));
-
-	const Point2 origin(YGNodeLayoutGetLeft(p_yoga_node), YGNodeLayoutGetTop(p_yoga_node));
-	const Size2 size(YGNodeLayoutGetWidth(p_yoga_node), YGNodeLayoutGetHeight(p_yoga_node));
-
-	if (shadow) {
-		shadow->layout = Rect2(origin, size);
-	}
-
-	for (size_t i = 0; i < YGNodeGetChildCount(p_yoga_node); ++i) {
-		write_layout(YGNodeGetChild(p_yoga_node, i));
-	}
-}
-
 } //namespace
 
-void RNLayout::calculate(const Ref<RNShadowNode> &p_root, const Size2 &p_available) {
-	if (p_root.is_null()) {
-		return;
+void RNLayout::reset_style(YGNodeRef p_node) {
+	YGNodeStyleSetFlexDirection(p_node, YGFlexDirectionColumn);
+	YGNodeStyleSetJustifyContent(p_node, YGJustifyFlexStart);
+	YGNodeStyleSetAlignItems(p_node, YGAlignStretch);
+	YGNodeStyleSetAlignSelf(p_node, YGAlignAuto);
+	YGNodeStyleSetAlignContent(p_node, YGAlignFlexStart);
+	YGNodeStyleSetFlexWrap(p_node, YGWrapNoWrap);
+	YGNodeStyleSetFlex(p_node, YGUndefined);
+	YGNodeStyleSetFlexGrow(p_node, YGUndefined);
+	YGNodeStyleSetFlexShrink(p_node, YGUndefined);
+	YGNodeStyleSetFlexBasisAuto(p_node);
+	YGNodeStyleSetAspectRatio(p_node, YGUndefined);
+	YGNodeStyleSetWidthAuto(p_node);
+	YGNodeStyleSetHeightAuto(p_node);
+	YGNodeStyleSetMinWidth(p_node, YGUndefined);
+	YGNodeStyleSetMinHeight(p_node, YGUndefined);
+	YGNodeStyleSetMaxWidth(p_node, YGUndefined);
+	YGNodeStyleSetMaxHeight(p_node, YGUndefined);
+	for (YGEdge edge : { YGEdgeAll, YGEdgeTop, YGEdgeBottom, YGEdgeLeft, YGEdgeRight, YGEdgeHorizontal, YGEdgeVertical }) {
+		YGNodeStyleSetMargin(p_node, edge, YGUndefined);
+		YGNodeStyleSetPadding(p_node, edge, YGUndefined);
+		YGNodeStyleSetBorder(p_node, edge, YGUndefined);
 	}
+	YGNodeStyleSetGap(p_node, YGGutterAll, YGUndefined);
+	YGNodeStyleSetGap(p_node, YGGutterRow, YGUndefined);
+	YGNodeStyleSetGap(p_node, YGGutterColumn, YGUndefined);
+	YGNodeStyleSetDisplay(p_node, YGDisplayFlex);
+	YGNodeStyleSetPositionType(p_node, YGPositionTypeRelative);
+	for (YGEdge edge : { YGEdgeTop, YGEdgeBottom, YGEdgeLeft, YGEdgeRight }) {
+		YGNodeStyleSetPosition(p_node, edge, YGUndefined);
+	}
+}
 
-	YGNodeRef yoga_root = build_yoga_tree(p_root);
-	YGNodeCalculateLayout(yoga_root, float(p_available.width), float(p_available.height), YGDirectionLTR);
-	write_layout(yoga_root);
-	YGNodeFreeRecursive(yoga_root);
+void RNLayout::apply_style(YGNodeRef p_node, const Dictionary &p_style) {
+	apply_style_values(p_node, p_style);
+}
+
+float RNLayout::text_font_size(const Dictionary &p_props) {
+	return font_size_of(p_props);
 }

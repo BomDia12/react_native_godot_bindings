@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/math/rect2.h"
 #include "core/object/ref_counted.h"
 #include "core/string/ustring.h"
+#include "core/templates/hash_map.h"
 #include "core/templates/vector.h"
 #include "core/variant/dictionary.h"
 
@@ -24,22 +24,17 @@ public:
 	int root_tag = 0;
 	uint64_t runtime_generation = 0;
 	uint64_t surface_epoch = 0;
-	uint64_t revision = 0;
 	String view_name;
 	Dictionary props;
 	Vector<Ref<RNShadowNode>> children;
 	std::shared_ptr<RNEventTarget> event_target;
-	Vector<String> declarative_prop_keys;
+	HashMap<String, uint64_t> declarative_prop_revisions;
+	int validated_depth = 1;
+	bool children_replaced = false;
+	bool structurally_valid = true;
+	String structural_error;
 
-	// Layout relative to this node's Yoga parent, filled in by RNLayout::calculate().
-	// Matches what Control::set_position() expects from a Godot child. Not part of the
-	// JS contract.
-	Rect2 layout;
-
-	// Layout, mounting, hit testing and measurement all walk this tree recursively, and JS
-	// decides how deep it is. Trees are checked against this limit once on the way in, so
-	// those walks cannot be driven into a native stack overflow. Far deeper than any real
-	// React tree.
+	// Native tree walks use this bound to reject hostile input before recursion.
 	static constexpr int MAX_DEPTH = 1024;
 
 	Ref<RNShadowNode> clone(bool p_new_children, const Dictionary *p_new_props) const;

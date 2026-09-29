@@ -1,9 +1,9 @@
 {
-  "id": "pressable-interaction",
+  "id": "transaction-mounting",
   "project_dir": "samples/view-text",
-  "scene": "res://smoke/tests/pressable_interaction/SmokeMain.tscn",
+  "scene": "res://smoke/tests/transaction_mounting/TransactionMounting.tscn",
   "timeout_seconds": 60,
-  "allowlist": "documentation/expected-warnings.txt",
+  "allowlist": "documentation/expected-warnings-transaction.txt",
   "bundle": {
     "mode": "shared",
     "package_dir": "samples/view-text",
@@ -21,8 +21,8 @@
     "samples/view-text/babel.config.js",
     "samples/view-text/package.json",
     "samples/view-text/package-lock.json",
-    "documentation/expected-warnings.txt",
-    "samples/view-text/smoke/tests/pressable_interaction/SmokeMain.tscn",
-    "samples/view-text/smoke/tests/pressable_interaction/pressable_interaction.gd"
+    "documentation/expected-warnings-transaction.txt",
+    "samples/view-text/smoke/tests/transaction_mounting/TransactionMounting.tscn",
+    "samples/view-text/smoke/tests/transaction_mounting/transaction_mounting.gd"
   ]
 }

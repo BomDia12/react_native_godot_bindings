@@ -1,21 +1,21 @@
 #pragma once
 
-#include "../fabric/rn_registry.h"
-#include "../fabric/rn_shadow_node.h"
 #include "../input/rn_input_router.h"
 #include "../runtime/react_native_runtime_coordinator.h"
 
 #include "scene/gui/control.h"
 
+#include <memory>
+
+class RNMountingManager;
+
 class ReactNativeRootView : public Control {
 	GDCLASS(ReactNativeRootView, Control);
 
-	RNRegistry registry;
+	friend class RNMountingManager;
+
+	std::unique_ptr<RNMountingManager> mounting_manager;
 	RNInputRouter input_router;
-	Ref<RNShadowNode> declarative_tree;
-	Ref<RNShadowNode> committed_tree;
-	HashMap<int, Rect2> layout_cache;
-	HashMap<int, Dictionary> direct_prop_overrides;
 	String application_key = "GodotApp";
 	int root_tag = 0;
 	uint64_t runtime_generation = 0;
@@ -23,21 +23,15 @@ class ReactNativeRootView : public Control {
 	uint64_t mounted_revision = 0;
 	int focused_tag = 0;
 	bool registered = false;
-	bool replacing_tree = false;
+	bool transaction_in_flight = false;
 
-	void _clear_children();
-	void _clear_scene_state();
+	void _clear_scene_state(bool p_keep_container = false);
 	void _enqueue_events(Vector<RNNativeEvent> p_events);
 	void _stamp_events(Vector<RNNativeEvent> &r_events) const;
 	void _on_focus_entered(int p_tag, ObjectID p_control_id);
 	void _on_focus_exited(int p_tag, ObjectID p_control_id);
-	void _set_focused_tag(int p_tag);
-	Ref<RNShadowNode> _build_effective_tree(const Ref<RNShadowNode> &p_node) const;
-	bool _layout_and_mount(uint64_t p_revision);
-	Control *_build_node(const Ref<RNShadowNode> &p_node, Control *p_parent, RNRegistry &r_registry, bool p_branch_targetable = true);
-	void _queue_layout_events(const Ref<RNShadowNode> &p_node, HashMap<int, Rect2> &r_next_cache, Vector<RNNativeEvent> &r_events);
-	void _apply_declarative_overrides(const Ref<RNShadowNode> &p_node);
-	void _build_snapshot_node(const Ref<RNShadowNode> &p_node, int p_parent_tag, const Point2 &p_parent_position, const Transform2D &p_window_transform, const RNRegistry &p_registry, RNSurfaceSnapshot &r_snapshot);
+	void _set_focused_tag(int p_tag, const RNSurfaceSnapshot *p_old_snapshot = nullptr);
+	void _publish_mounted_result(Vector<RNNativeEvent> p_events, const std::shared_ptr<const RNSurfaceSnapshot> &p_old_snapshot = nullptr);
 	void _publish_transform_snapshot();
 	void _route_input(const Ref<InputEvent> &p_event);
 
@@ -54,6 +48,7 @@ public:
 	String get_application_key() const { return application_key; }
 	int get_root_tag() const { return root_tag; }
 	void reload();
+	void set_mount_failure_injection(int p_before_mutation, int p_after_mutation);
 
 	void mount(const Ref<RNShadowNode> &p_tree);
 	bool get_measurement(int p_tag, Rect2 &r_local_rect, Point2 &r_page_position) const;

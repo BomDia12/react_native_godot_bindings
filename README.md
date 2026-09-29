@@ -4,9 +4,15 @@ This repository builds the current React Native 0.87.1 `View`/`Text` baseline as
 external Godot module. Godot is cloned into the ignored `godot/` working directory; the
 tracked module remains under `modules/react_native_bindings/`.
 
+The tested Linux path includes `Pressable` interaction, independent React surfaces,
+public host refs, and retained transactional mounting that preserves View/Text host
+identity across rerenders. See the [compatibility matrices](documentation/compatibility/)
+and [test coverage](documentation/compatibility/test-coverage.md) for implemented subsets
+and remaining limitations.
+
 ## Build and test
 
-Install Git, Node.js 22.11 or newer, Python, SCons, CMake, Ninja, and a C++20 compiler,
+Install Git, Node.js 22.13.0 or newer, Python, SCons, CMake, Ninja, and a C++20 compiler,
 then run:
 
 ```sh

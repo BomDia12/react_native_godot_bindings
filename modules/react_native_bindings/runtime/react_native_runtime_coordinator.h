@@ -62,6 +62,7 @@ struct RNSurfaceRoute {
 	uint64_t surface_epoch = 0;
 	uint64_t desired_revision = 0;
 	uint64_t mounted_revision = 0;
+	uint64_t rejected_revision = 0;
 	RNSurfaceStatus status = RNSurfaceStatus::REGISTERED;
 	String error;
 };
@@ -70,6 +71,7 @@ struct RNMountedNodeSnapshot {
 	int tag = 0;
 	int parent_tag = 0;
 	Vector<int> child_tags;
+	Vector<int> native_child_tags;
 	String view_name;
 	String native_id;
 	String text_content;
@@ -82,6 +84,12 @@ struct RNMountedNodeSnapshot {
 	Point2 offset;
 	ObjectID object_id;
 	Ref<RNShadowNode> shadow_node;
+	String pointer_events = "auto";
+	Variant hit_slop;
+	bool branch_targetable = true;
+	bool self_targetable = false;
+	bool visible = true;
+	bool clips_contents = false;
 };
 
 struct RNSurfaceSnapshot {
@@ -121,6 +129,17 @@ struct RNPendingCommit {
 	uint64_t surface_epoch = 0;
 	uint64_t revision = 0;
 	Ref<RNShadowNode> tree;
+};
+
+enum class RNSurfaceOperationKind {
+	COMMIT,
+	IMPERATIVE,
+};
+
+struct RNSurfaceOperation {
+	RNSurfaceOperationKind kind = RNSurfaceOperationKind::COMMIT;
+	RNPendingCommit commit;
+	RNImperativeRequest imperative;
 };
 
 class RNPointerCaptureProcessor {
@@ -170,8 +189,7 @@ struct RNRuntimeCoordinatorState {
 	std::unordered_map<uint64_t, int> root_tags_by_object_id;
 	std::unordered_map<int, std::shared_ptr<const RNSurfaceSnapshot>> snapshots;
 	std::unordered_map<RNSurfaceTag, RNDesiredNode, RNSurfaceTagHash> desired_nodes;
-	std::deque<RNPendingCommit> commit_queue;
-	std::deque<RNImperativeRequest> imperative_queue;
+	std::unordered_map<int, std::deque<RNSurfaceOperation>> operation_queues;
 	std::deque<RNNativeEvent> event_queue;
 	std::weak_ptr<FabricUIManager> ui_manager;
 	RNPointerCaptureProcessor pointer_capture;
@@ -180,6 +198,7 @@ struct RNRuntimeCoordinatorState {
 	String bundle_error;
 	int64_t next_root_tag = 11;
 	uint64_t next_surface_epoch = 1;
+	uint64_t coalesced_commits = 0;
 	bool shutting_down = false;
 };
 
@@ -223,6 +242,7 @@ public:
 	void publish_snapshot(const std::shared_ptr<const RNSurfaceSnapshot> &p_snapshot);
 	std::shared_ptr<const RNSurfaceSnapshot> get_snapshot(int p_root_tag) const;
 	void fail_surface(int p_root_tag, uint64_t p_epoch, const String &p_error);
+	void reject_commit(int p_root_tag, uint64_t p_epoch, uint64_t p_revision, const String &p_error);
 	void mark_surface_mounted(int p_root_tag, uint64_t p_epoch, uint64_t p_revision);
 	void _process_frame();
 };
