@@ -1,7 +1,10 @@
 #include "react_native_runtime_coordinator.h"
 
+#include "../components/rn_host_descriptor_jsi.h"
+#include "../components/rn_host_descriptor_registry.h"
 #include "../fabric/fabric_ui_manager.h"
 #include "../fabric/native_dom.h"
+#include "../native_modules/rn_native_module_registry.h"
 #include "../root_view/react_native_root_view.h"
 #include "../singletons/hermes_runtime_singleton.h"
 #include "../singletons/react_native_file_singleton.h"
@@ -21,6 +24,8 @@ constexpr const char *RUN_APPLICATION_FUNCTION = "__godotRunApplication";
 constexpr const char *STOP_APPLICATION_FUNCTION = "__godotStopApplication";
 constexpr const char *FLUSH_TIMERS_FUNCTION = "__godotFlushTimers";
 constexpr const char *NATIVE_DOM_GLOBAL = "__godotNativeDOM";
+constexpr const char *HOST_DESCRIPTORS_GLOBAL = "__godotHostDescriptors";
+constexpr const char *NATIVE_MODULES_GLOBAL = "__godotNativeModules";
 
 bool is_pointer_event(const String &p_name) {
 	return p_name.begins_with("topPointer");
@@ -179,14 +184,19 @@ ReactNativeRuntimeCoordinator::ReactNativeRuntimeCoordinator() {
 	ERR_FAIL_COND_MSG(singleton != nullptr, "ReactNativeRuntimeCoordinator is a singleton.");
 	singleton = this;
 	state = std::make_shared<RNRuntimeCoordinatorState>();
+	state->descriptor_registry = std::make_shared<RNHostDescriptorRegistry>();
 	ui_manager = std::make_shared<FabricUIManager>(state);
 	state->ui_manager = ui_manager;
 	native_dom = std::make_shared<NativeDOM>(state);
+	descriptor_jsi_registry = std::make_shared<RNHostDescriptorJSIRegistry>(state->descriptor_registry);
+	native_module_registry = std::make_shared<RNNativeModuleRegistry>(state);
 
 	HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton();
 	ERR_FAIL_NULL(hermes);
 	hermes->install_host_object(FabricUIManager::GLOBAL_NAME, ui_manager);
 	hermes->install_host_object(NATIVE_DOM_GLOBAL, native_dom);
+	hermes->install_host_object(HOST_DESCRIPTORS_GLOBAL, descriptor_jsi_registry);
+	hermes->install_host_object(NATIVE_MODULES_GLOBAL, native_module_registry);
 
 	ReactNativeFileSingleton *files = ReactNativeFileSingleton::get_singleton();
 	if (files) {
@@ -202,10 +212,14 @@ ReactNativeRuntimeCoordinator::~ReactNativeRuntimeCoordinator() {
 		files->disconnect("react_native_file_changed", callable_mp(this, &ReactNativeRuntimeCoordinator::_on_react_native_file_changed));
 	}
 	if (HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton()) {
+		hermes->uninstall_host_object(NATIVE_MODULES_GLOBAL);
 		hermes->uninstall_host_object(NATIVE_DOM_GLOBAL);
+		hermes->uninstall_host_object(HOST_DESCRIPTORS_GLOBAL);
 		hermes->uninstall_host_object(FabricUIManager::GLOBAL_NAME);
 	}
 	native_dom.reset();
+	native_module_registry.reset();
+	descriptor_jsi_registry.reset();
 	ui_manager.reset();
 	state.reset();
 	if (singleton == this) {
@@ -276,6 +290,7 @@ bool ReactNativeRuntimeCoordinator::ensure_bundle() {
 		return false;
 	}
 	state->bundle_generation = generation;
+	native_module_registry->begin_generation(generation);
 	state->bundle_status = RNBundleStatus::EVALUATING;
 	state->bundle_error = String();
 	if (!files || !files->has_file() || files->get_file_content().is_empty()) {
@@ -339,6 +354,7 @@ void ReactNativeRuntimeCoordinator::register_root(ReactNativeRootView *p_root) {
 
 void ReactNativeRuntimeCoordinator::stop_route(RNSurfaceRoute &p_route, bool p_dispatch_cancellations) {
 	p_route.status = RNSurfaceStatus::STOPPING;
+	native_module_registry->close_surface(p_route.root_tag, p_route.surface_epoch);
 	state->operation_queues.erase(p_route.root_tag);
 	ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(p_route.root_view_id));
 	if (root && p_dispatch_cancellations) {
@@ -369,7 +385,7 @@ void ReactNativeRuntimeCoordinator::unregister_root(ReactNativeRootView *p_root)
 		state->routes.erase(tag);
 	}
 	state->registered_roots.erase(id);
-	if (state->registered_roots.empty()) {
+	if (state->registered_roots.empty() && !native_module_registry->has_pending_work()) {
 		disconnect_frame_signal();
 	}
 }
@@ -507,16 +523,21 @@ void ReactNativeRuntimeCoordinator::_on_react_native_file_changed(const String &
 }
 
 void ReactNativeRuntimeCoordinator::_process_frame() {
-	if (state->shutting_down || state->registered_roots.empty()) {
+	if (state->shutting_down || (state->registered_roots.empty() && !native_module_registry->has_pending_work())) {
+		if (state->registered_roots.empty()) {
+			disconnect_frame_signal();
+		}
 		return;
 	}
 	HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton();
 	if (!hermes) {
 		return;
 	}
-	if (state->bundle_status == RNBundleStatus::READY && hermes->get_global(FLUSH_TIMERS_FUNCTION).get_type() != Variant::NIL) {
+	if (state->bundle_status == RNBundleStatus::READY && hermes->has_global_function(FLUSH_TIMERS_FUNCTION)) {
 		hermes->call_function(FLUSH_TIMERS_FUNCTION);
 	}
+	native_module_registry->process_jobs();
+	hermes->dispatch_native_module_deliveries(native_module_registry);
 	hermes->dispatch_queued_events(ui_manager);
 
 	for (auto &queue_entry : state->operation_queues) {

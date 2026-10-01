@@ -1,6 +1,9 @@
 #include "hermes_runtime_singleton.h"
 
 #include "../fabric/fabric_ui_manager.h"
+#include "../interop/rn_resource_path.h"
+#include "../interop/rn_value_codec.h"
+#include "../native_modules/rn_native_module_registry.h"
 #include "hermes_runtime_lifecycle.h"
 
 #include "core/error/error_macros.h"
@@ -13,6 +16,7 @@
 #include <hermes/hermes.h>
 #include <jsi/jsi.h>
 
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -48,9 +52,10 @@ HermesRuntimeSingleton::HermesRuntimeSingleton() {
 	singleton = this;
 
 	std::lock_guard<std::mutex> lock(runtime_mutex);
-	runtime = makeHermesRuntime();
+	runtime = makeHermesRuntime(::hermes::vm::RuntimeConfig::Builder().withMicrotaskQueue(true).build());
 	import_resolver = callable_mp(this, &HermesRuntimeSingleton::filesystem_import_resolver);
 	install_import_function_locked();
+	install_runtime_functions_locked();
 }
 
 HermesRuntimeSingleton::~HermesRuntimeSingleton() {
@@ -71,6 +76,7 @@ void HermesRuntimeSingleton::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("call_function", "function_name", "args"), &HermesRuntimeSingleton::call_function, DEFVAL(Array()));
 	ClassDB::bind_method(D_METHOD("set_global", "name", "value"), &HermesRuntimeSingleton::set_global);
 	ClassDB::bind_method(D_METHOD("get_global", "name"), &HermesRuntimeSingleton::get_global);
+	ClassDB::bind_method(D_METHOD("has_global_function", "name"), &HermesRuntimeSingleton::has_global_function);
 	ClassDB::bind_method(D_METHOD("reset"), &HermesRuntimeSingleton::reset);
 	ClassDB::bind_method(D_METHOD("get_runtime_generation"), &HermesRuntimeSingleton::get_runtime_generation);
 	ClassDB::bind_method(D_METHOD("is_ready"), &HermesRuntimeSingleton::is_ready);
@@ -104,6 +110,25 @@ Variant HermesRuntimeSingleton::get_global(const String &p_name) {
 	return get_global_locked(p_name);
 }
 
+bool HermesRuntimeSingleton::has_global_function(const String &p_name) {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("has_global_function"), false, "HermesRuntime.has_global_function() must run on Godot's main thread.");
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	ensure_runtime_locked();
+	last_error = String();
+	try {
+		const std::string name = _to_utf8(p_name);
+		facebook::jsi::Object global = runtime->global();
+		if (!global.hasProperty(*runtime, name.c_str())) {
+			return false;
+		}
+		facebook::jsi::Value value = global.getProperty(*runtime, name.c_str());
+		return value.isObject() && value.getObject(*runtime).isFunction(*runtime);
+	} catch (const facebook::jsi::JSIException &p_error) {
+		last_error = _string_from_utf8(std::string(p_error.what()));
+		return false;
+	}
+}
+
 void HermesRuntimeSingleton::reset() {
 	ERR_FAIL_COND_MSG(!require_main_thread("reset"), "HermesRuntime.reset() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
@@ -131,6 +156,20 @@ void HermesRuntimeSingleton::dispatch_queued_events(const std::shared_ptr<Fabric
 		return;
 	}
 	p_ui_manager->dispatch_queued_events_locked(*runtime, runtime_generation);
+	run_microtask_checkpoint_locked();
+}
+
+void HermesRuntimeSingleton::dispatch_native_module_deliveries(const std::shared_ptr<RNNativeModuleRegistry> &p_registry) {
+	ERR_FAIL_COND_MSG(!require_main_thread("dispatch_native_module_deliveries"), "HermesRuntime.dispatch_native_module_deliveries() must run on Godot's main thread.");
+	if (!p_registry) {
+		return;
+	}
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	if (!runtime) {
+		return;
+	}
+	p_registry->deliver_locked(*runtime, runtime_generation);
+	run_microtask_checkpoint_locked();
 }
 
 bool HermesRuntimeSingleton::is_ready() const {
@@ -147,11 +186,12 @@ String HermesRuntimeSingleton::get_last_error() const {
 
 void HermesRuntimeSingleton::ensure_runtime_locked() {
 	if (!runtime) {
-		runtime = makeHermesRuntime();
+		runtime = makeHermesRuntime(::hermes::vm::RuntimeConfig::Builder().withMicrotaskQueue(true).build());
 		if (import_resolver.is_null()) {
 			import_resolver = callable_mp(this, &HermesRuntimeSingleton::filesystem_import_resolver);
 		}
 		install_import_function_locked();
+		install_runtime_functions_locked();
 		install_host_objects_locked();
 	}
 }
@@ -263,7 +303,9 @@ Variant HermesRuntimeSingleton::evaluate_locked(const String &p_code, const Stri
 
 	try {
 		facebook::jsi::Value result = runtime->evaluateJavaScript(buffer, source_utf8);
-		return jsi_value_to_variant(rt, result, 0);
+		Variant converted = jsi_value_to_variant(rt, result);
+		run_microtask_checkpoint_locked();
+		return converted;
 	} catch (const facebook::jsi::JSIException &p_error) {
 		last_error = _string_from_utf8(std::string(p_error.what()));
 		WARN_PRINT(last_error);
@@ -301,13 +343,15 @@ Variant HermesRuntimeSingleton::call_function_locked(const String &p_function_na
 		std::vector<facebook::jsi::Value> js_args;
 		js_args.reserve(p_args.size());
 		for (int i = 0; i < p_args.size(); ++i) {
-			js_args.push_back(variant_to_jsi(rt, p_args[i], 0));
+			js_args.push_back(variant_to_jsi(rt, p_args[i]));
 		}
 
 		const facebook::jsi::Value *args_ptr = js_args.empty() ? nullptr : js_args.data();
 		const size_t arg_count = static_cast<size_t>(js_args.size());
 		facebook::jsi::Value result = fn.call(rt, args_ptr, arg_count);
-		return jsi_value_to_variant(rt, result, 0);
+		Variant converted = jsi_value_to_variant(rt, result);
+		run_microtask_checkpoint_locked();
+		return converted;
 	} catch (const facebook::jsi::JSIException &p_error) {
 		last_error = _string_from_utf8(std::string(p_error.what()));
 		WARN_PRINT(last_error);
@@ -324,7 +368,7 @@ void HermesRuntimeSingleton::set_global_locked(const String &p_name, const Varia
 	std::string name_utf8 = _to_utf8(p_name);
 
 	try {
-		facebook::jsi::Value js_value = variant_to_jsi(rt, p_value, 0);
+		facebook::jsi::Value js_value = variant_to_jsi(rt, p_value);
 		global.setProperty(rt, name_utf8.c_str(), js_value);
 	} catch (const facebook::jsi::JSIException &p_error) {
 		last_error = _string_from_utf8(std::string(p_error.what()));
@@ -346,7 +390,7 @@ Variant HermesRuntimeSingleton::get_global_locked(const String &p_name) {
 		}
 
 		facebook::jsi::Value value = global.getProperty(rt, name_utf8.c_str());
-		return jsi_value_to_variant(rt, value, 0);
+		return jsi_value_to_variant(rt, value);
 	} catch (const facebook::jsi::JSIException &p_error) {
 		last_error = _string_from_utf8(std::string(p_error.what()));
 		WARN_PRINT(last_error);
@@ -354,144 +398,90 @@ Variant HermesRuntimeSingleton::get_global_locked(const String &p_name) {
 	}
 }
 
-Variant HermesRuntimeSingleton::jsi_value_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value, int p_depth) {
-	if (p_depth > MAX_CONVERSION_DEPTH) {
-		WARN_PRINT_ONCE(vformat("HermesRuntime: JS value nested deeper than %d; the rest is converted as null.", MAX_CONVERSION_DEPTH));
+Variant HermesRuntimeSingleton::jsi_value_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value) {
+	if (p_value.isUndefined()) {
 		return Variant();
 	}
-
-	if (p_value.isUndefined() || p_value.isNull()) {
-		return Variant();
+	RNDecodedValue converted = RNValueCodec::from_js(rt, p_value, RNValueSchema::value(RNValueType::DYNAMIC), "HermesRuntime.result");
+	if (!converted.ok()) {
+		last_error = converted.error.describe();
+		throw facebook::jsi::JSError(rt, _to_utf8(last_error));
 	}
-
-	if (p_value.isBool()) {
-		return p_value.getBool();
-	}
-
-	if (p_value.isNumber()) {
-		return p_value.getNumber();
-	}
-
-	if (p_value.isString()) {
-		return _string_from_utf8(p_value.getString(rt).utf8(rt));
-	}
-
-	if (p_value.isSymbol()) {
-		return _string_from_utf8(p_value.getSymbol(rt).toString(rt));
-	}
-
-	if (p_value.isBigInt()) {
-		facebook::jsi::String big_str = p_value.getBigInt(rt).toString(rt);
-		return _string_from_utf8(big_str.utf8(rt));
-	}
-
-	if (p_value.isObject()) {
-		facebook::jsi::Object obj = p_value.getObject(rt);
-		return object_to_variant(rt, obj, p_depth + 1);
-	}
-
-	return Variant();
+	return converted.value;
 }
 
-Variant HermesRuntimeSingleton::object_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Object &p_object, int p_depth) {
-	if (p_depth > MAX_CONVERSION_DEPTH) {
-		WARN_PRINT_ONCE(vformat("HermesRuntime: JS value nested deeper than %d; the rest is converted as null.", MAX_CONVERSION_DEPTH));
-		return Variant();
+facebook::jsi::Value HermesRuntimeSingleton::variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &p_value) {
+	facebook::jsi::Value converted;
+	RNError error;
+	if (!RNValueCodec::to_js(rt, p_value, RNValueSchema::value(RNValueType::DYNAMIC), converted, error, nullptr, "HermesRuntime.argument")) {
+		last_error = error.describe();
+		throw facebook::jsi::JSError(rt, _to_utf8(last_error));
 	}
-
-	if (p_object.isArray(rt)) {
-		facebook::jsi::Array js_array = p_object.asArray(rt);
-		const size_t length = js_array.size(rt);
-		Array result;
-		result.resize(static_cast<int>(length));
-		for (size_t i = 0; i < length; ++i) {
-			result[static_cast<int>(i)] = jsi_value_to_variant(rt, js_array.getValueAtIndex(rt, i), p_depth + 1);
-		}
-		return result;
-	}
-
-	if (p_object.isFunction(rt)) {
-		return String("[Function]");
-	}
-
-	if (p_object.isHostObject(rt)) {
-		return String("[HostObject]");
-	}
-
-	Dictionary dict;
-	facebook::jsi::Array names = p_object.getPropertyNames(rt);
-	size_t count = names.size(rt);
-	if (count > static_cast<size_t>(MAX_OBJECT_PROPERTIES)) {
-		count = static_cast<size_t>(MAX_OBJECT_PROPERTIES);
-		WARN_PRINT_ONCE(vformat("HermesRuntime: JS object has more than %d properties; the rest are dropped.", MAX_OBJECT_PROPERTIES));
-	}
-
-	for (size_t i = 0; i < count; ++i) {
-		facebook::jsi::Value key_value = names.getValueAtIndex(rt, i);
-		String key_string;
-		if (key_value.isString()) {
-			key_string = _string_from_utf8(key_value.getString(rt).utf8(rt));
-		} else if (key_value.isNumber()) {
-			key_string = String::num_real(key_value.getNumber());
-		} else {
-			continue;
-		}
-
-		Variant value = jsi_value_to_variant(rt, p_object.getProperty(rt, key_value), p_depth + 1);
-		dict[key_string] = value;
-	}
-
-	return dict;
+	return converted;
 }
 
-facebook::jsi::Value HermesRuntimeSingleton::variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &p_value, int p_depth) {
-	if (p_depth > MAX_CONVERSION_DEPTH) {
-		return facebook::jsi::Value::undefined();
+void HermesRuntimeSingleton::run_microtask_checkpoint_locked() {
+	if (!runtime || microtask_checkpoint_active) {
+		return;
 	}
+	microtask_checkpoint_active = true;
+	try {
+		runtime->drainMicrotasks();
+	} catch (...) {
+		microtask_checkpoint_active = false;
+		throw;
+	}
+	microtask_checkpoint_active = false;
+}
 
-	switch (p_value.get_type()) {
-		case Variant::NIL:
-			return facebook::jsi::Value::null();
-		case Variant::BOOL:
-			return facebook::jsi::Value(bool(p_value));
-		case Variant::INT:
-			return facebook::jsi::Value(static_cast<double>(int64_t(p_value)));
-		case Variant::FLOAT:
-			return facebook::jsi::Value(double(p_value));
-		case Variant::STRING: {
-			String str = p_value;
-			std::string utf8 = _to_utf8(str);
-			facebook::jsi::String js_str = facebook::jsi::String::createFromUtf8(rt, utf8);
-			return facebook::jsi::Value(rt, js_str);
-		}
-		case Variant::ARRAY: {
-			Array array = p_value;
-			facebook::jsi::Array js_array(rt, array.size());
-			for (int i = 0; i < array.size(); ++i) {
-				js_array.setValueAtIndex(rt, i, variant_to_jsi(rt, array[i], p_depth + 1));
-			}
-			return facebook::jsi::Value(rt, js_array);
-		}
-		case Variant::DICTIONARY: {
-			Dictionary dict = p_value;
-			facebook::jsi::Object js_object(rt);
-			Array keys = dict.keys();
-			for (int i = 0; i < keys.size(); ++i) {
-				Variant key_variant = keys[i];
-				String key_string = key_variant;
-				std::string utf8 = _to_utf8(key_string);
-				facebook::jsi::Value js_value = variant_to_jsi(rt, dict[key_variant], p_depth + 1);
-				js_object.setProperty(rt, utf8.c_str(), js_value);
-			}
-			return facebook::jsi::Value(rt, js_object);
-		}
-		default: {
-			String str = p_value;
-			std::string utf8 = _to_utf8(str);
-			facebook::jsi::String js_str = facebook::jsi::String::createFromUtf8(rt, utf8);
-			return facebook::jsi::Value(rt, js_str);
-		}
+void HermesRuntimeSingleton::install_runtime_functions_locked() {
+	if (!runtime) {
+		return;
 	}
+	facebook::jsi::Runtime &rt = *runtime;
+	facebook::jsi::Function queue_microtask = facebook::jsi::Function::createFromHostFunction(
+			rt, facebook::jsi::PropNameID::forAscii(rt, "__godotQueueMicrotask"), 1,
+			[](facebook::jsi::Runtime &p_runtime, const facebook::jsi::Value &, const facebook::jsi::Value *p_args, size_t p_count) {
+				if (p_count != 1 || !p_args[0].isObject() || !p_args[0].getObject(p_runtime).isFunction(p_runtime)) {
+					throw facebook::jsi::JSError(p_runtime, "__godotQueueMicrotask expects one function.");
+				}
+				p_runtime.queueMicrotask(p_args[0].getObject(p_runtime).getFunction(p_runtime));
+				return facebook::jsi::Value::undefined();
+			});
+	rt.global().setProperty(rt, "__godotQueueMicrotask", std::move(queue_microtask));
+	facebook::jsi::Function report_runtime_error = facebook::jsi::Function::createFromHostFunction(
+			rt, facebook::jsi::PropNameID::forAscii(rt, "__godotReportRuntimeError"), 1,
+			[](facebook::jsi::Runtime &p_runtime, const facebook::jsi::Value &, const facebook::jsi::Value *p_args, size_t p_count) {
+				if (p_count != 1 || !p_args[0].isObject()) {
+					throw facebook::jsi::JSError(p_runtime, "__godotReportRuntimeError expects one structured error object.");
+				}
+				facebook::jsi::Object error = p_args[0].getObject(p_runtime);
+				auto read_string = [&](const char *p_name, bool p_required) {
+					facebook::jsi::Value value = error.getProperty(p_runtime, p_name);
+					if (!value.isString()) {
+						if (p_required) {
+							throw facebook::jsi::JSError(p_runtime, std::string("runtime error field '") + p_name + "' must be a string.");
+						}
+						return String();
+					}
+					const std::string text = value.getString(p_runtime).utf8(p_runtime);
+					if (text.find('\0') != std::string::npos) {
+						throw facebook::jsi::JSError(p_runtime, "runtime error fields cannot contain NUL.");
+					}
+					return _string_from_utf8(text);
+				};
+				const String code = read_string("code", true);
+				const String message = read_string("message", true);
+				const String operation = read_string("operation", true);
+				facebook::jsi::Value rejection = error.getProperty(p_runtime, "rejectionId");
+				String suffix;
+				if (rejection.isNumber() && std::isfinite(rejection.getNumber()) && std::trunc(rejection.getNumber()) == rejection.getNumber()) {
+					suffix = vformat(" rejection=%d", int64_t(rejection.getNumber()));
+				}
+				print_line(vformat("RN_GODOT_COMPAT: %s [%s] %s%s", code, operation, message, suffix));
+				return facebook::jsi::Value::undefined();
+			});
+	rt.global().setProperty(rt, "__godotReportRuntimeError", std::move(report_runtime_error));
 }
 
 void HermesRuntimeSingleton::install_import_function_locked() {
@@ -605,26 +595,23 @@ void HermesRuntimeSingleton::use_filesystem_import_resolver() {
 // confined to the project and user data directories. Without the prefix check,
 // importModule("/etc/passwd") would hand the file back to JavaScript.
 Variant HermesRuntimeSingleton::filesystem_import_resolver(const String &p_path) {
-	if (!p_path.begins_with("res://") && !p_path.begins_with("user://")) {
-		last_error = vformat("HermesRuntime: import path must start with res:// or user://, got '%s'.", p_path);
-		return _import_failure(last_error, p_path);
-	}
-
-	if (p_path.contains("..")) {
-		last_error = vformat("HermesRuntime: import path must not contain '..', got '%s'.", p_path);
+	String normalized;
+	RNError path_error;
+	if (!rn_normalize_local_resource_path(p_path, normalized, path_error, "HermesRuntime.importModule")) {
+		last_error = path_error.describe();
 		return _import_failure(last_error, p_path);
 	}
 
 	Error err = OK;
-	String code = FileAccess::get_file_as_string(p_path, &err);
+	String code = FileAccess::get_file_as_string(normalized, &err);
 	if (err != OK) {
-		last_error = vformat("HermesRuntime: failed to read module '%s': %s", p_path, err);
-		return _import_failure(last_error, p_path);
+		last_error = vformat("HermesRuntime: failed to read module '%s': %s", normalized, err);
+		return _import_failure(last_error, normalized);
 	}
 
 	last_error = String();
 	Dictionary result;
 	result[SNAME("code")] = code;
-	result[SNAME("path")] = p_path;
+	result[SNAME("path")] = normalized;
 	return result;
 }

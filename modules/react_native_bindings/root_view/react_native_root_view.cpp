@@ -184,11 +184,16 @@ void ReactNativeRootView::_accept_commit(const RNPendingCommit &p_commit) {
 	const bool applied = mounting_manager->commit(p_commit, get_size(), get_global_transform_with_canvas(), events, error);
 	transaction_in_flight = false;
 	if (!applied) {
+		descriptor_events.clear();
 		if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
 			coordinator->reject_commit(root_tag, surface_epoch, p_commit.revision, error);
 		}
 		return;
 	}
+	for (const RNNativeEvent &event : descriptor_events) {
+		events.push_back(event);
+	}
+	descriptor_events.clear();
 	mounted_revision = p_commit.revision;
 	_publish_mounted_result(events, old_snapshot);
 	if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
@@ -247,20 +252,16 @@ bool ReactNativeRootView::_apply_imperative(const RNImperativeRequest &p_request
 		return false;
 	}
 	if (p_request.kind == RNImperativeRequestKind::COMMAND) {
-		Control *control = Object::cast_to<Control>(mounting_manager->get_registry().get_node(p_request.tag));
-		if (!control) {
+		if (p_request.command_name == "hotspotUpdate" || p_request.command_name == "setPressed") {
+			WARN_PRINT_ONCE(vformat("View command %s is not supported by the Godot host.", p_request.command_name));
 			return false;
 		}
-		if (p_request.component_name == "RCTView" && p_request.command_name == "focus") {
-			control->grab_focus();
-		} else if (p_request.component_name == "RCTView" && p_request.command_name == "blur") {
-			control->release_focus();
-		} else if (p_request.command_name == "hotspotUpdate" || p_request.command_name == "setPressed") {
-			WARN_PRINT_ONCE(vformat("View command %s is not supported by the Godot host.", p_request.command_name));
-		} else {
-			WARN_PRINT(vformat("%s command %s is not supported by the Godot host.", p_request.component_name, p_request.command_name));
+		String command_error;
+		if (!mounting_manager->dispatch_command(p_request.tag, p_request.command_name, p_request.payload, command_error)) {
+			WARN_PRINT(command_error);
+			return false;
 		}
-		return false;
+		return true;
 	}
 	if (p_request.payload.get_type() != Variant::DICTIONARY) {
 		return false;
@@ -272,11 +273,34 @@ bool ReactNativeRootView::_apply_imperative(const RNImperativeRequest &p_request
 	const bool applied = mounting_manager->apply_direct_props(p_request.tag, Dictionary(p_request.payload), get_size(), get_global_transform_with_canvas(), events, error);
 	transaction_in_flight = false;
 	if (!applied) {
+		descriptor_events.clear();
 		ERR_PRINT(vformat("React Native direct props failed for surface %d tag %d: %s", root_tag, p_request.tag, error));
 		return false;
 	}
+	for (const RNNativeEvent &event : descriptor_events) {
+		events.push_back(event);
+	}
+	descriptor_events.clear();
 	_publish_mounted_result(events, old_snapshot);
 	return false;
+}
+
+void ReactNativeRootView::_on_descriptor_value_changed(double p_value, int p_tag, ObjectID p_control_id) {
+	if (mounting_manager->get_registry().get_tag(p_control_id) != p_tag) {
+		return;
+	}
+	RNNativeEvent event;
+	event.tag = p_tag;
+	event.name = "topValueChanged";
+	event.priority = FabricUIManager::EVENT_PRIORITY_DEFAULT;
+	event.payload["value"] = p_value;
+	if (transaction_in_flight) {
+		descriptor_events.push_back(event);
+	} else {
+		Vector<RNNativeEvent> events;
+		events.push_back(event);
+		_enqueue_events(events);
+	}
 }
 
 void ReactNativeRootView::_flush_imperative_updates() {

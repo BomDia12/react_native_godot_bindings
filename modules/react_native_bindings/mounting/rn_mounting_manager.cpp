@@ -1,12 +1,11 @@
 #include "rn_mounting_manager.h"
 
+#include "../components/rn_host_descriptor_registry.h"
 #include "../fabric/fabric_ui_manager.h"
 #include "../fabric/rn_view_style.h"
 #include "../root_view/react_native_root_view.h"
 
 #include "core/object/callable_mp.h"
-#include "scene/gui/label.h"
-#include "scene/gui/panel.h"
 
 namespace {
 
@@ -21,7 +20,7 @@ Vector4 border_widths(const Dictionary &p_props) {
 }
 
 bool is_host(const Ref<RNShadowNode> &p_node) {
-	return p_node.is_valid() && p_node->view_name != "RCTRootView" && p_node->view_name != "RCTRawText";
+	return p_node.is_valid() && p_node->descriptor && p_node->descriptor->get_traits().creates_host;
 }
 
 int mutation_stat_index(RNMutationType p_type) {
@@ -106,6 +105,10 @@ void RNMountingManager::clear(bool p_keep_container) {
 		}
 		Control *host = Object::cast_to<Control>(ObjectDB::get_instance(entry.value.object_id));
 		if (host) {
+			if (entry.value.descriptor) {
+				entry.value.descriptor->detach_signals(host, host_context(entry.key, published_revision));
+				entry.value.descriptor->dispose_state(host, host_context(entry.key, published_revision));
+			}
 			host->queue_free();
 			stats.hosts_freed++;
 		}
@@ -181,49 +184,32 @@ void RNMountingManager::reconcile_overrides(const Ref<RNShadowNode> &p_node, Has
 	}
 }
 
-Control *RNMountingManager::create_host(const Ref<RNShadowNode> &p_node) {
-	if (p_node->view_name == "RCTText") {
-		return memnew(Label);
-	}
-	if (p_node->view_name != "RCTView") {
-		WARN_PRINT(vformat("Mounting unrecognized view \"%s\" as a plain View.", p_node->view_name));
-	}
-	return memnew(Panel);
+RNHostContext RNMountingManager::host_context(int p_tag, uint64_t p_revision) const {
+	RNHostContext context;
+	context.owner = owner;
+	context.generation = runtime_generation;
+	context.root_tag = root_tag;
+	context.surface_epoch = surface_epoch;
+	context.revision = p_revision;
+	context.tag = p_tag;
+	return context;
 }
 
-void RNMountingManager::apply_host_props(Control *p_host, const Ref<RNShadowNode> &p_node, bool p_branch_targetable) {
-	if (!p_host || p_node.is_null()) {
-		return;
+Control *RNMountingManager::create_host(const Ref<RNShadowNode> &p_node, const RNHostContext &p_context) {
+	return p_node.is_valid() && p_node->descriptor ? p_node->descriptor->create_host(p_context) : nullptr;
+}
+
+bool RNMountingManager::apply_host_props(Control *p_host, const std::shared_ptr<const RNHostDescriptor> &p_descriptor, const RNPreparedHostState &p_state, const RNHostContext &p_context, String &r_error) {
+	if (!p_host || !p_descriptor) {
+		r_error = "host or descriptor is missing";
+		return false;
 	}
-	p_host->set_visible(String(p_node->props.get("display", "flex")) != "none");
-	p_host->set_modulate(Color(1, 1, 1, RNViewStyle::opacity_of(p_node->props)));
-	if (Label *label = Object::cast_to<Label>(p_host)) {
-		label->set_text(p_node->collect_text());
-		float font_size = 0.0f;
-		if (RNViewStyle::font_size_of(p_node->props, font_size)) {
-			label->add_theme_font_size_override("font_size", int(font_size));
-		} else {
-			label->remove_theme_font_size_override("font_size");
-		}
-		Color color;
-		if (RNViewStyle::color_of(p_node->props, "color", color)) {
-			label->add_theme_color_override("font_color", color);
-		} else {
-			label->remove_theme_color_override("font_color");
-		}
-		return;
+	RNError error;
+	if (!p_descriptor->apply(p_host, p_state, p_context, error)) {
+		r_error = error.describe();
+		return false;
 	}
-	Panel *panel = Object::cast_to<Panel>(p_host);
-	if (!panel) {
-		return;
-	}
-	panel->add_theme_style_override("panel", RNViewStyle::build_stylebox(p_node->props));
-	panel->set_clip_contents(RNViewStyle::clips_contents(p_node->props));
-	const String pointer_events = String(p_node->props.get("pointerEvents", "auto")).to_lower();
-	const bool branch_enabled = p_branch_targetable && pointer_events != "none";
-	const bool self_targetable = branch_enabled && pointer_events != "box-none";
-	panel->set_mouse_filter(branch_enabled ? Control::MOUSE_FILTER_PASS : Control::MOUSE_FILTER_IGNORE);
-	panel->set_focus_mode(self_targetable && bool(p_node->props.get("focusable", false)) ? Control::FOCUS_ALL : Control::FOCUS_NONE);
+	return true;
 }
 
 void RNMountingManager::apply_layout(Control *p_host, const Rect2 &p_layout) {
@@ -248,6 +234,40 @@ bool RNMountingManager::prepare_transaction(RNMountingTransaction &r_transaction
 		r_error = vformat("surface %d has an expired host or invalid native index", root_tag);
 		return false;
 	}
+	std::shared_ptr<RNHostDescriptorRegistry> descriptors;
+	if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+		descriptors = coordinator->get_descriptor_registry();
+	}
+	if (!descriptors) {
+		r_error = "host descriptor registry is unavailable";
+		return false;
+	}
+	Vector<Ref<RNShadowNode>> pending;
+	pending.push_back(p_next_root);
+	while (!pending.is_empty()) {
+		Ref<RNShadowNode> node = pending[pending.size() - 1];
+		pending.remove_at(pending.size() - 1);
+		if (node.is_null()) {
+			continue;
+		}
+		if (!node->descriptor || node->descriptor->get_name() != StringName(node->view_name)) {
+			node->descriptor = descriptors->find(node->view_name);
+		}
+		if (!node->descriptor) {
+			r_error = vformat("E_UNKNOWN_COMPONENT: no host descriptor is registered for '%s' (tag %d)", node->view_name, node->tag);
+			return false;
+		}
+		RNPreparedHostState prepared;
+		RNError prepare_error;
+		if (!node->descriptor->prepare(*node.ptr(), prepared, prepare_error)) {
+			r_error = prepare_error.describe();
+			return false;
+		}
+		r_transaction.prepared_states[node->tag] = prepared;
+		for (const Ref<RNShadowNode> &child : node->children) {
+			pending.push_back(child);
+		}
+	}
 	r_transaction.old_root = committed_root;
 	r_transaction.new_root = p_next_root;
 	stats.differ = RNTreeDifferStats();
@@ -263,7 +283,7 @@ bool RNMountingManager::prepare_transaction(RNMountingTransaction &r_transaction
 		if (mutation.type != RNMutationType::CREATE) {
 			continue;
 		}
-		Control *host = create_host(mutation.new_node);
+		Control *host = create_host(mutation.new_node, host_context(mutation.new_node->tag, r_transaction.revision));
 		if (!host) {
 			r_error = vformat("failed to create host for tag %d", mutation.new_node->tag);
 			destroy_detached_hosts(r_transaction);
@@ -299,7 +319,7 @@ void RNMountingManager::build_snapshot_node(const Ref<RNShadowNode> &p_node, int
 	const Rect2 layout = prepared_layout ? *prepared_layout : Rect2();
 	const String pointer_events = String(p_node->props.get("pointerEvents", "auto")).to_lower();
 	const bool branch_enabled = p_branch_targetable && pointer_events != "none";
-	const bool self_targetable = host && p_node->view_name == "RCTView" && branch_enabled && pointer_events != "box-none";
+	const bool self_targetable = host && p_node->descriptor->get_traits().input_target && branch_enabled && pointer_events != "box-none";
 	const bool descendants_targetable = branch_enabled && pointer_events != "box-only";
 	RNMountedNode mounted;
 	mounted.logical_parent_tag = p_logical_parent;
@@ -309,7 +329,11 @@ void RNMountingManager::build_snapshot_node(const Ref<RNShadowNode> &p_node, int
 																																	   : ObjectID())
 							 : ObjectID();
 	mounted.view_name = p_node->view_name;
+	mounted.descriptor = p_node->descriptor;
 	mounted.shadow_node = p_node;
+	RNError ignored_prepare_error;
+	p_node->descriptor->prepare(*p_node.ptr(), mounted.prepared_state, ignored_prepare_error);
+	mounted.prepared_state.branch_targetable = p_branch_targetable;
 	mounted.declarative_props = p_node->props.duplicate(true);
 	if (const Dictionary *overrides = p_overrides.getptr(p_node->tag)) {
 		mounted.direct_prop_overrides = overrides->duplicate(true);
@@ -354,9 +378,10 @@ void RNMountingManager::build_snapshot_node(const Ref<RNShadowNode> &p_node, int
 		r_snapshot.native_id_index[snapshot.native_id].push_back(snapshot.tag);
 	}
 	r_records[p_node->tag] = mounted;
-	const int child_native_parent = p_node->view_name == "RCTRootView" ? p_node->tag : host ? p_node->tag
-																							: p_native_parent;
-	const Point2 child_origin = p_node->view_name == "RCTRawText" ? p_parent_origin : snapshot.root_rect.position;
+	const bool transparent_container = !host && p_node->descriptor->get_traits().has_native_children;
+	const int child_native_parent = transparent_container ? p_node->tag : host ? p_node->tag
+																			   : p_native_parent;
+	const Point2 child_origin = p_node->descriptor->get_traits().contributes_text ? p_parent_origin : snapshot.root_rect.position;
 	for (const Ref<RNShadowNode> &child : p_node->children) {
 		build_snapshot_node(child, p_node->tag, child_native_parent, child_origin, descendants_targetable, p_overrides, p_layouts, p_window_transform, p_revision, r_snapshot, r_records, r_native_indices);
 	}
@@ -406,7 +431,7 @@ bool RNMountingManager::hierarchy_matches(const HashMap<int, RNMountedNode> &p_r
 void RNMountingManager::queue_layout_events(const std::shared_ptr<const RNSurfaceSnapshot> &p_old_snapshot, const RNSurfaceSnapshot &p_new_snapshot, Vector<RNNativeEvent> &r_events) const {
 	for (const KeyValue<int, RNMountedNodeSnapshot> &entry : p_new_snapshot.nodes) {
 		const RNMountedNodeSnapshot &node = entry.value;
-		if (node.view_name != "RCTView" && node.view_name != "RCTText") {
+		if (!node.shadow_node->descriptor || !node.shadow_node->descriptor->get_traits().emits_layout) {
 			continue;
 		}
 		const RNMountedNodeSnapshot *old = p_old_snapshot ? p_old_snapshot->nodes.getptr(entry.key) : nullptr;
@@ -484,8 +509,8 @@ void RNMountingManager::restore_scene(const HashMap<int, RNMountedNode> &p_recor
 		}
 		if (host && parent) {
 			parent->move_child(host, MIN(mounted->native_index, parent->get_child_count() - 1));
-			const RNMountedNode *logical_parent = p_records.getptr(mounted->logical_parent_tag);
-			apply_host_props(host, mounted->shadow_node, logical_parent ? logical_parent->snapshot.branch_targetable : true);
+			String ignored_apply_error;
+			apply_host_props(host, mounted->descriptor, mounted->prepared_state, host_context(mounted->snapshot.tag, mounted->last_changed_revision), ignored_apply_error);
 			apply_layout(host, mounted->snapshot.local_rect);
 			registry.register_node(mounted->snapshot.tag, host, mounted->shadow_node);
 		}
@@ -526,6 +551,13 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 		const int mutation_index = failed_mutation >= 0 ? failed_mutation : applied_mutations;
 		r_error = vformat("surface %d revision %d failed at mutation %d (%s)", root_tag, p_transaction.revision, mutation_index, rn_mutation_type_name(p_mutation.type));
 		restore_scene(old_records, old_root, p_constraint);
+		for (const KeyValue<int, Variant> &entry : p_transaction.captured_native_states) {
+			const RNMountedNode *mounted = old_records.getptr(entry.key);
+			Control *host = mounted ? Object::cast_to<Control>(ObjectDB::get_instance(mounted->object_id)) : nullptr;
+			if (host && mounted->descriptor) {
+				mounted->descriptor->restore_state(host, entry.value);
+			}
+		}
 		stats.rollbacks++;
 		transaction_in_flight = false;
 		return false;
@@ -574,10 +606,7 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 			return fail(mutation);
 		}
 		registry.register_node(mutation.new_node->tag, host, mutation.new_node);
-		if (Panel *panel = Object::cast_to<Panel>(host)) {
-			panel->connect("focus_entered", callable_mp(owner, &ReactNativeRootView::_on_focus_entered).bind(mutation.new_node->tag, host->get_instance_id()));
-			panel->connect("focus_exited", callable_mp(owner, &ReactNativeRootView::_on_focus_exited).bind(mutation.new_node->tag, host->get_instance_id()));
-		}
+		mutation.new_node->descriptor->attach_signals(host, host_context(mutation.new_node->tag, p_transaction.revision));
 		stats.hosts_created++;
 		stats.mutations[mutation_stat_index(mutation.type)]++;
 		if (finish_mutation()) {
@@ -631,8 +660,16 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 		Control *host = Object::cast_to<Control>(ObjectDB::get_instance(entry.value.object_id));
 		const RNMountedNode *old = old_records.getptr(entry.key);
 		if (changed_tags.has(entry.key)) {
-			const RNMountedNodeSnapshot *parent = next_snapshot->nodes.getptr(entry.value.logical_parent_tag);
-			apply_host_props(host, entry.value.shadow_node, parent ? parent->branch_targetable : true);
+			if (old && old->descriptor && !p_transaction.captured_native_states.has(entry.key)) {
+				p_transaction.captured_native_states[entry.key] = old->descriptor->capture_state(host);
+			}
+			String apply_error;
+			if (!apply_host_props(host, entry.value.descriptor, entry.value.prepared_state, host_context(entry.key, p_transaction.revision), apply_error)) {
+				r_error = apply_error;
+				RNMountingMutation failed;
+				failed.type = RNMutationType::UPDATE;
+				return fail(failed);
+			}
 		}
 		if (!old || !old->snapshot.local_rect.is_equal_approx(entry.value.snapshot.local_rect)) {
 			apply_layout(host, entry.value.snapshot.local_rect);
@@ -663,6 +700,10 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 		Control *host = Object::cast_to<Control>(ObjectDB::get_instance(old->object_id));
 		registry.unregister_node(mutation.old_node->tag);
 		if (host) {
+			if (old->descriptor) {
+				old->descriptor->detach_signals(host, host_context(mutation.old_node->tag, p_transaction.revision));
+				old->descriptor->dispose_state(host, host_context(mutation.old_node->tag, p_transaction.revision));
+			}
 			if (host->get_parent()) {
 				host->get_parent()->remove_child(host);
 			}
@@ -765,6 +806,21 @@ bool RNMountingManager::apply_direct_props(int p_tag, const Dictionary &p_patch,
 		return false;
 	}
 	return apply_transaction(transaction, declarative_root, next_overrides, p_constraint, p_window_transform, r_events, r_error);
+}
+
+bool RNMountingManager::dispatch_command(int p_tag, const StringName &p_command, const Variant &p_arguments, String &r_error) {
+	RNMountedNode *mounted = mounted_nodes.getptr(p_tag);
+	Control *host = mounted ? Object::cast_to<Control>(ObjectDB::get_instance(mounted->object_id)) : nullptr;
+	if (!mounted || !host || !mounted->descriptor) {
+		r_error = vformat("cannot dispatch command to unmounted tag %d", p_tag);
+		return false;
+	}
+	RNError error;
+	if (!mounted->descriptor->dispatch_command(host, p_command, p_arguments, host_context(p_tag, published_revision), error)) {
+		r_error = error.describe();
+		return false;
+	}
+	return true;
 }
 
 void RNMountingManager::publish_transform(const Transform2D &p_window_transform) {

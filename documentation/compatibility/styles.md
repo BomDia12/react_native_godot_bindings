@@ -3,10 +3,13 @@
 This matrix covers cross-platform style keys from React Native 0.87.1 and distinguishes
 implemented subsets from behavior covered by automated tests. Partially supported rows may
 rely on source evidence when test evidence is `none`. Style keys that React Native scopes
-to a single platform are out of scope and are not listed: `borderCurve`,
-`elevation`, `fontVariant`, `includeFontPadding`, `shadowColor`, `shadowOffset`,
-`shadowOpacity`, `shadowRadius`, `textAlignVertical`, `verticalAlign`, and
-`writingDirection`.
+to a single platform are out of scope and are not listed: `borderCurve` and `elevation`
+(`@platform ios`/`@platform android` in tagged `StyleSheetTypes`), `fontVariant`,
+`includeFontPadding`, `textAlignVertical`, `verticalAlign`, and `writingDirection`
+(`TextStyleIOS`/`TextStyleAndroid` in tagged `StyleSheetTypes.d.ts`), and
+`shadowColor`, `shadowOffset`, `shadowOpacity`, and `shadowRadius` (`ShadowStyleIOS` in
+that file). `ViewStyle` and `TextStyle` retain cross-platform keys declared by their
+cross-platform parent interfaces.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
@@ -42,9 +45,9 @@ to a single platform are out of scope and are not listed: `borderCurve`,
 | STYLE-OFFSETS | `top/right/bottom/left` | partially supported | Numeric physical offsets reach Godot's Yoga layout; percent and logical edges are absent and automated coverage is absent. | [layout](../../modules/react_native_bindings/fabric/rn_layout.cpp) | none |
 | STYLE-INSET | `inset*` | pending | Public inset keys have no Godot behavior or automated coverage. | none | none |
 | STYLE-BORDER-WIDTH | `borderWidth/border*Width` | partially supported | Numeric physical widths affect Godot Yoga layout and Panel painting; logical edges and automated coverage are absent. | [layout](../../modules/react_native_bindings/fabric/rn_layout.cpp), [view style](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | none |
-| STYLE-BACKGROUND | `backgroundColor` | partially supported | Android processed numeric colors paint a panel; dynamic and platform colors are absent. | [view style](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | [STYLE-UNIT](test-coverage.md), [BASELINE-SMOKE](test-coverage.md) |
+| STYLE-BACKGROUND | `backgroundColor` | partially supported | Validated Godot RGBA colors paint a panel; dynamic and platform colors are absent. | [Godot color adapter](../../js/godot/color.cjs), [view style](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | [STYLE-UNIT](test-coverage.md), [BASELINE-SMOKE](test-coverage.md) |
 | STYLE-BACKGROUND-IMAGE | `backgroundImage` | pending | Public background images have no Godot behavior or automated coverage. | none | none |
-| STYLE-BORDER-COLOR | `borderColor` | partially supported | One uniform numeric ARGB color reaches Godot Panel painting; per-edge colors and automated coverage are absent. | [view style](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | none |
+| STYLE-BORDER-COLOR | `borderColor` | partially supported | One uniform validated RGBA color reaches Godot Panel painting; per-edge colors remain absent. | [Godot color adapter](../../js/godot/color.cjs), [view style](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | [STYLE-UNIT](test-coverage.md), [BASELINE-SMOKE](test-coverage.md) |
 | STYLE-BORDER-COLOR-EDGES | `borderTop/Bottom/Left/Right/Start/End/Block*Color` | pending | Public per-edge and logical border colors have no Godot behavior or automated coverage. | none | none |
 | STYLE-BORDER-RADIUS | `borderRadius/border*Radius` | partially supported | Uniform and physical numeric corner radii reach Godot Panel painting; logical and string forms and automated coverage are absent. | [view style](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | none |
 | STYLE-OPACITY | `opacity` | partially supported | Numeric opacity modulates the mounted subtree; animation is absent. | [view style](../../modules/react_native_bindings/fabric/rn_view_style.cpp) | [STYLE-UNIT](test-coverage.md), [BASELINE-SMOKE](test-coverage.md) |
@@ -59,7 +62,7 @@ to a single platform are out of scope and are not listed: `borderCurve`,
 | STYLE-EXPERIMENTAL-BACKGROUND | `experimental_background*` | pending | Public experimental background keys have no Godot behavior or automated coverage. | none | none |
 | STYLE-ISOLATION | `isolation` | pending | Public isolation key has no Godot behavior or automated coverage. | none | none |
 | STYLE-FONT-SIZE | `fontSize` | partially supported | Numeric size overrides the fallback font; broader typography is absent. | [mounting manager](../../modules/react_native_bindings/mounting/rn_mounting_manager.cpp) | [BASELINE-SMOKE](test-coverage.md) |
-| STYLE-COLOR | `color` | partially supported | Android processed numeric text color is supported; dynamic colors are absent. | [mounting manager](../../modules/react_native_bindings/mounting/rn_mounting_manager.cpp) | [BASELINE-SMOKE](test-coverage.md) |
+| STYLE-COLOR | `color` | partially supported | Validated RGBA text colors are applied to Godot Labels; dynamic colors are absent. | [Godot color adapter](../../js/godot/color.cjs), [mounting manager](../../modules/react_native_bindings/mounting/rn_mounting_manager.cpp) | [STYLE-UNIT](test-coverage.md), [BASELINE-SMOKE](test-coverage.md) |
 | STYLE-Z-INDEX | `zIndex` | pending | Public stacking key has no Godot behavior or automated coverage. | none | none |
 | STYLE-TRANSFORM | `transform/transformOrigin` | pending | Public transforms and transform origins have no Godot behavior or automated coverage. | none | none |
 | STYLE-DEPRECATED-TRANSFORMS | `transformMatrix/rotation/scaleX/scaleY/translateX/translateY` | pending | Deprecated public transform keys have no Godot behavior or automated coverage. | none | none |

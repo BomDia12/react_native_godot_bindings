@@ -6,9 +6,15 @@
 
 namespace TestRNViewStyle {
 
-TEST_CASE("[ReactNativeBindings][RNViewStyle] decodes processed signed ARGB") {
+TEST_CASE("[ReactNativeBindings][RNViewStyle] reads explicit RGBA channels") {
 	Dictionary props;
-	props["backgroundColor"] = -13408513.0;
+	Dictionary rgba;
+	rgba["$godot"] = "Color";
+	rgba["r"] = 0.2;
+	rgba["g"] = 0.4;
+	rgba["b"] = 1.0;
+	rgba["a"] = 1.0;
+	props["backgroundColor"] = rgba;
 	Color color;
 
 	CHECK(RNViewStyle::color_of(props, "backgroundColor", color));
@@ -35,9 +41,7 @@ TEST_CASE("[ReactNativeBindings][RNViewStyle] rejects unsupported color values")
 	CHECK_FALSE(found);
 }
 
-// A number outside the 32-bit range has no defined conversion to the packed ARGB integer,
-// so it must be refused rather than reinterpreted.
-TEST_CASE("[ReactNativeBindings][RNViewStyle] rejects color numbers outside the 32-bit range") {
+TEST_CASE("[ReactNativeBindings][RNViewStyle] rejects packed and malformed colors") {
 	Color color;
 
 	for (const double value : { 1e30, -1e30, double(NAN), double(INFINITY) }) {
@@ -50,10 +54,17 @@ TEST_CASE("[ReactNativeBindings][RNViewStyle] rejects color numbers outside the 
 		CHECK_FALSE(found);
 	}
 
-	Dictionary unsigned_props;
-	unsigned_props["backgroundColor"] = 4294967295.0;
-	CHECK(RNViewStyle::color_of(unsigned_props, "backgroundColor", color));
-	CHECK(color.is_equal_approx(Color(1.0, 1.0, 1.0, 1.0)));
+	Dictionary malformed;
+	malformed["$godot"] = "Color";
+	malformed["r"] = 2.0;
+	malformed["g"] = 0.0;
+	malformed["b"] = 0.0;
+	malformed["a"] = 1.0;
+	Dictionary props;
+	props["backgroundColor"] = malformed;
+	ERR_PRINT_OFF;
+	CHECK_FALSE(RNViewStyle::color_of(props, "backgroundColor", color));
+	ERR_PRINT_ON;
 }
 
 } //namespace TestRNViewStyle

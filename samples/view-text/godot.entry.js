@@ -1,12 +1,13 @@
-// Metro config schedules this import before InitializeCore.
-import './godot.preamble';
-
 import React from 'react';
 import {AppRegistry, StyleSheet, Text, View} from 'react-native';
+import '../../js/godot/bootstrap-finalize';
 
 import './interaction.entry';
 import './multi_root.entry';
 import './transaction.entry';
+import './platform.entry';
+import './descriptor.entry';
+import './native_module.entry';
 
 const styles = StyleSheet.create({
   container: {
@@ -58,7 +59,7 @@ AppRegistry.setWrapperComponentProvider(parameters => props => (
 global.__godotRunApplication = (applicationKey, rootTag) =>
   AppRegistry.runApplication(applicationKey, {
     rootTag,
-    initialProps: {},
+    initialProps: {rootTag},
     fabric: true,
   });
 

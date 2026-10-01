@@ -24,12 +24,11 @@ class ReactNativeRootView : public Control {
 	int focused_tag = 0;
 	bool registered = false;
 	bool transaction_in_flight = false;
+	Vector<RNNativeEvent> descriptor_events;
 
 	void _clear_scene_state(bool p_keep_container = false);
 	void _enqueue_events(Vector<RNNativeEvent> p_events);
 	void _stamp_events(Vector<RNNativeEvent> &r_events) const;
-	void _on_focus_entered(int p_tag, ObjectID p_control_id);
-	void _on_focus_exited(int p_tag, ObjectID p_control_id);
 	void _set_focused_tag(int p_tag, const RNSurfaceSnapshot *p_old_snapshot = nullptr);
 	void _publish_mounted_result(Vector<RNNativeEvent> p_events, const std::shared_ptr<const RNSurfaceSnapshot> &p_old_snapshot = nullptr);
 	void _publish_transform_snapshot();
@@ -59,4 +58,7 @@ public:
 	void _accept_commit(const RNPendingCommit &p_commit);
 	bool _apply_imperative(const RNImperativeRequest &p_request);
 	void _flush_imperative_updates();
+	void _on_focus_entered(int p_tag, ObjectID p_control_id);
+	void _on_focus_exited(int p_tag, ObjectID p_control_id);
+	void _on_descriptor_value_changed(double p_value, int p_tag, ObjectID p_control_id);
 };

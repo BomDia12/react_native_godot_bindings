@@ -84,7 +84,7 @@ jobs:
           path: |
             .scons-cache
             .ccache
-          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
+          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/examples/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/runtime/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
           restore-keys: |
             compiler-${{ runner.os }}-gcc13-
 
@@ -118,6 +118,11 @@ jobs:
           scripts/verify_provenance.py
           scripts/check_format.sh
           python3 -m unittest discover -s scripts/tests
+
+      - name: Test Godot JavaScript platform
+        run: |
+          npm --prefix samples/view-text ci
+          npm --prefix samples/view-text run test:godot
 
       - name: Build Hermes
         if: steps.hermes-libraries.outputs.available != 'true'

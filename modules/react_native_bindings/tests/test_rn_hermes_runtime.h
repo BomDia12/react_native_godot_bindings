@@ -89,34 +89,63 @@ TEST_CASE("[ReactNativeBindings][HermesRuntime] import does not publish a global
 	CHECK(evaluate_string(runtime, "typeof importModule") == "function");
 }
 
-// Pins a known platform limit rather than a target behaviour. Godot's
-// String::append_utf8() stops at the first zero byte regardless of the length it is
-// given, so a JS string containing a NUL cannot round-trip through Variant. Anything
-// depending on binary-safe strings has to carry them as a PackedByteArray instead.
-TEST_CASE("[ReactNativeBindings][HermesRuntime] an embedded NUL truncates the converted string") {
+TEST_CASE("[ReactNativeBindings][HermesRuntime] an embedded NUL rejects the entire conversion") {
 	HermesRuntimeSingleton *runtime = fresh_runtime();
 	REQUIRE(runtime != nullptr);
 
 	CHECK(double(runtime->evaluate("'a\\u0000b'.length")) == 3.0);
-	CHECK(evaluate_string(runtime, "'a\\u0000b'").length() == 1);
+	ERR_PRINT_OFF;
+	CHECK(runtime->evaluate("'a\\u0000b'").get_type() == Variant::NIL);
+	ERR_PRINT_ON;
+	CHECK(runtime->get_last_error().contains("E_VALIDATION"));
+	CHECK(runtime->get_last_error().contains("embedded NUL"));
 	CHECK(evaluate_string(runtime, "'plain'") == "plain");
 	// String::utf8 on both sides: Godot's char * constructor decodes as Latin-1, which
 	// would corrupt the source before Hermes ever sees it.
 	CHECK(evaluate_string(runtime, String::utf8("'ação ✓'")) == String::utf8("ação ✓"));
 }
 
-TEST_CASE("[ReactNativeBindings][HermesRuntime] oversized values are truncated loudly") {
+TEST_CASE("[ReactNativeBindings][HermesRuntime] oversized values reject without truncation") {
 	HermesRuntimeSingleton *runtime = fresh_runtime();
 	REQUIRE(runtime != nullptr);
 
-	// Beyond MAX_OBJECT_PROPERTIES, so conversion drops the tail rather than silently
-	// returning a short object.
-	ERR_PRINT_OFF;
 	const Variant wide = runtime->evaluate(
 			"(() => { const o = {}; for (let i = 0; i < 400; ++i) { o['k' + i] = i; } return o; })()");
-	ERR_PRINT_ON;
 	REQUIRE(wide.get_type() == Variant::DICTIONARY);
-	CHECK(Dictionary(wide).size() == 128);
+	CHECK(Dictionary(wide).size() == 400);
+
+	ERR_PRINT_OFF;
+	CHECK(runtime->evaluate(
+						 "(() => { const o = {}; for (let i = 0; i < 4097; ++i) { o['k' + i] = i; } return o; })()")
+					.get_type() == Variant::NIL);
+	ERR_PRINT_ON;
+	CHECK(runtime->get_last_error().contains("E_LIMIT"));
+}
+
+TEST_CASE("[ReactNativeBindings][HermesRuntime] callable probing never converts functions") {
+	HermesRuntimeSingleton *runtime = fresh_runtime();
+	REQUIRE(runtime != nullptr);
+	CHECK_FALSE(runtime->has_global_function("missing"));
+	runtime->evaluate("globalThis.probe = 1");
+	CHECK_FALSE(runtime->has_global_function("probe"));
+	runtime->evaluate("globalThis.probe = () => 42; undefined;");
+	CHECK(runtime->has_global_function("probe"));
+	CHECK(double(runtime->call_function("probe")) == 42.0);
+}
+
+TEST_CASE("[ReactNativeBindings][HermesRuntime] Uint8Array slices copy independently") {
+	HermesRuntimeSingleton *runtime = fresh_runtime();
+	REQUIRE(runtime != nullptr);
+	const Variant value = runtime->evaluate(
+			"(() => { const bytes = new Uint8Array([1, 2, 3, 4]); const slice = bytes.subarray(1, 3); "
+			"globalThis.mutateBytes = () => { bytes[1] = 9; }; return slice; })()");
+	REQUIRE(value.get_type() == Variant::PACKED_BYTE_ARRAY);
+	const PackedByteArray bytes = value;
+	REQUIRE(bytes.size() == 2);
+	CHECK(bytes[0] == 2);
+	CHECK(bytes[1] == 3);
+	runtime->call_function("mutateBytes");
+	CHECK(bytes[0] == 2);
 }
 
 } // namespace TestRNHermesRuntime

@@ -8,4 +8,6 @@ __pycache__/
 /samples/view-text/node_modules/
 /samples/view-text/dist/
 /samples/view-text/.godot/
+/samples/view-text/smoke/**/*.uid
+*.import
 *.log

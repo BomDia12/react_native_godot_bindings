@@ -20,6 +20,8 @@ struct RNMountedNode {
 	int native_index = -1;
 	ObjectID object_id;
 	String view_name;
+	std::shared_ptr<const RNHostDescriptor> descriptor;
+	RNPreparedHostState prepared_state;
 	Ref<RNShadowNode> shadow_node;
 	Dictionary declarative_props;
 	Dictionary direct_prop_overrides;
@@ -63,8 +65,9 @@ class RNMountingManager {
 	void ensure_mount_container();
 	Ref<RNShadowNode> build_effective_tree(const Ref<RNShadowNode> &p_node, const HashMap<int, Dictionary> &p_overrides) const;
 	void reconcile_overrides(const Ref<RNShadowNode> &p_node, HashMap<int, Dictionary> &r_overrides, HashSet<int> &r_live_tags) const;
-	Control *create_host(const Ref<RNShadowNode> &p_node);
-	void apply_host_props(Control *p_host, const Ref<RNShadowNode> &p_node, bool p_branch_targetable);
+	RNHostContext host_context(int p_tag, uint64_t p_revision) const;
+	Control *create_host(const Ref<RNShadowNode> &p_node, const RNHostContext &p_context);
+	bool apply_host_props(Control *p_host, const std::shared_ptr<const RNHostDescriptor> &p_descriptor, const RNPreparedHostState &p_state, const RNHostContext &p_context, String &r_error);
 	void apply_layout(Control *p_host, const Rect2 &p_layout);
 	bool prepare_transaction(RNMountingTransaction &r_transaction, const Ref<RNShadowNode> &p_next_root, const Size2 &p_constraint, String &r_error);
 	bool apply_transaction(RNMountingTransaction &p_transaction, const Ref<RNShadowNode> &p_declarative_root, const HashMap<int, Dictionary> &p_next_overrides, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
@@ -85,6 +88,7 @@ public:
 	bool resize(const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
 	bool apply_direct_props(int p_tag, const Dictionary &p_patch, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
 	void publish_transform(const Transform2D &p_window_transform);
+	bool dispatch_command(int p_tag, const StringName &p_command, const Variant &p_arguments, String &r_error);
 
 	const Ref<RNShadowNode> &get_committed_root() const { return committed_root; }
 	const RNRegistry &get_registry() const { return registry; }

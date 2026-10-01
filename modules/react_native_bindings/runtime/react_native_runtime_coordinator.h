@@ -20,6 +20,8 @@
 class FabricUIManager;
 class NativeDOM;
 class ReactNativeRootView;
+class RNHostDescriptorRegistry;
+class RNNativeModuleRegistry;
 
 enum class RNSurfaceStatus {
 	REGISTERED,
@@ -184,6 +186,7 @@ public:
 };
 
 struct RNRuntimeCoordinatorState {
+	std::shared_ptr<RNHostDescriptorRegistry> descriptor_registry;
 	std::unordered_map<int, RNSurfaceRoute> routes;
 	std::unordered_map<uint64_t, String> registered_roots;
 	std::unordered_map<uint64_t, int> root_tags_by_object_id;
@@ -210,6 +213,8 @@ class ReactNativeRuntimeCoordinator : public Object {
 	std::shared_ptr<RNRuntimeCoordinatorState> state;
 	std::shared_ptr<FabricUIManager> ui_manager;
 	std::shared_ptr<NativeDOM> native_dom;
+	std::shared_ptr<class RNHostDescriptorJSIRegistry> descriptor_jsi_registry;
+	std::shared_ptr<RNNativeModuleRegistry> native_module_registry;
 	ObjectID connected_tree_id;
 	bool frame_connected = false;
 
@@ -233,6 +238,8 @@ public:
 	static ReactNativeRuntimeCoordinator *get_singleton();
 	std::shared_ptr<RNRuntimeCoordinatorState> get_state() const { return state; }
 	std::shared_ptr<FabricUIManager> get_ui_manager() const { return ui_manager; }
+	std::shared_ptr<RNHostDescriptorRegistry> get_descriptor_registry() const { return state->descriptor_registry; }
+	std::shared_ptr<RNNativeModuleRegistry> get_native_module_registry() const { return native_module_registry; }
 
 	void register_root(ReactNativeRootView *p_root);
 	void unregister_root(ReactNativeRootView *p_root);

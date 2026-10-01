@@ -51,10 +51,14 @@ module_objects = []
 env_rn.add_source_files(module_objects, "*.cpp")
 
 module_source_dirs = [
+	"components",
 	"editor",
+	"examples",
 	"fabric",
 	"input",
+	"interop",
 	"mounting",
+	"native_modules",
 	"root_view",
 	"runtime",
 	"singletons",

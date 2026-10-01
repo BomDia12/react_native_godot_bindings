@@ -3,8 +3,12 @@
 Public cross-platform component exports from React Native 0.87.1 are classified below.
 `RCTRawText` is an internal host primitive folded into `Text`, not a public component
 export. Components that React Native scopes to a single platform are out of scope and are
-not listed: `DrawerLayoutAndroid`, `InputAccessoryView`, `ProgressBarAndroid`,
-`SafeAreaView`, and `TouchableNativeFeedback`. `Touchable` remains a runtime compatibility
+not listed: `DrawerLayoutAndroid` (Android implementation), `InputAccessoryView` (iOS
+implementation and non-iOS warning/null fallback), `ProgressBarAndroid` (Android
+implementation and non-Android `UnimplementedView` fallback), `SafeAreaView` (iOS
+implementation and default `View` fallback), and `TouchableNativeFeedback` (Android-only
+component). These scopes are documented by the tagged component modules' `@platform`
+annotations or `Platform.OS` branches. `Touchable` remains a runtime compatibility
 re-export but is absent from the tagged public types.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
@@ -12,7 +16,7 @@ re-export but is absent from the tagged public types.
 | COMP-ACTIVITY-INDICATOR | `ActivityIndicator` | pending | No native primitive. | none | none |
 | COMP-BUTTON | `Button` | pending | The public component is not verified against the routed interaction path. | none | none |
 | COMP-FLAT-LIST | `FlatList` | pending | Native scrolling is absent; public list virtualization and measurement behavior are not verified. | none | none |
-| COMP-IMAGE | `Image` | pending | No native image primitive. | none | none |
+| COMP-IMAGE | `Image` | pending | Asset resolution is adapted, but Image rendering and the complete native image prop/method contract remain pending. | [Godot Image adapter](../../js/godot/adapters/Image.godot.js) | none |
 | COMP-IMAGE-BACKGROUND | `ImageBackground` | pending | Depends on `Image`. | none | none |
 | COMP-KEYBOARD-AVOIDING | `KeyboardAvoidingView` | pending | Keyboard and layout integration are absent. | none | none |
 | COMP-LAYOUT-CONFORMANCE | `experimental_LayoutConformance` | pending | Experimental export is not verified. | none | none |

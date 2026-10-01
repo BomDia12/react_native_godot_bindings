@@ -4,11 +4,14 @@ This repository builds the current React Native 0.87.1 `View`/`Text` baseline as
 external Godot module. Godot is cloned into the ignored `godot/` working directory; the
 tracked module remains under `modules/react_native_bindings/`.
 
-The tested Linux path includes `Pressable` interaction, independent React surfaces,
-public host refs, and retained transactional mounting that preserves View/Text host
-identity across rerenders. See the [compatibility matrices](documentation/compatibility/)
-and [test coverage](documentation/compatibility/test-coverage.md) for implemented subsets
-and remaining limitations.
+The tested Linux path includes the Godot Metro platform, explicit RGBA colors, staged
+local assets, C++ host descriptors and native modules, `Pressable` interaction,
+independent React surfaces, public host refs, and retained transactional mounting. See
+the [Godot platform](documentation/godot-platform.md),
+[extension](documentation/extensions.md), [interop](documentation/interop.md),
+[compatibility matrices](documentation/compatibility/), and
+[test coverage](documentation/compatibility/test-coverage.md) for the implemented
+boundary and remaining limitations.
 
 ## Build and test
 
@@ -21,6 +24,8 @@ cd react_native_godot_bindings
 scripts/bootstrap.sh
 scripts/build_hermes.sh
 scripts/build_godot.sh
+npm --prefix samples/view-text ci
+npm --prefix samples/view-text run test:godot
 scripts/run_baseline.sh
 ```
 
@@ -31,6 +36,11 @@ Godot's `custom_modules` option. `run_baseline.sh` discovers the restricted mani
 declared headless smoke test. Shared manifests with the same package, npm script, and
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the
 default concurrency of two Godot processes.
+
+The sample's `build:godot` script uses the repository-owned Metro config and stages its
+bundle, source map, dependency evidence, and local asset variants under
+`samples/view-text/dist/`. Application resolution prefers `.godot.*`, then `.native.*`,
+then generic files; the supported graph does not select Android/iOS platform files.
 
 Use `GODOT_SOURCE_DIR=/path/to/godot` to build against another checkout of the pinned
 commit. Extra arguments passed to `build_godot.sh` are forwarded to SCons, for example:

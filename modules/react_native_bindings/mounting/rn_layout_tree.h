@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../components/rn_host_descriptor.h"
 #include "../fabric/rn_shadow_node.h"
 
 #include "core/math/rect2.h"
@@ -26,6 +27,8 @@ struct RNLayoutMeasureContext {
 	int tag = 0;
 	String text;
 	Dictionary props;
+	RNPreparedHostState prepared_state;
+	std::shared_ptr<const RNHostDescriptor> descriptor;
 	bool measure_initialized = false;
 };
 

@@ -1,6 +1,10 @@
 #include "register_types.h"
 
+#include "components/rn_builtin_descriptors.h"
+#include "examples/rn_example_meter.h"
+#include "examples/rn_example_scene_module.h"
 #include "fabric/rn_shadow_node.h"
+#include "native_modules/rn_builtin_native_modules.h"
 #include "root_view/react_native_root_view.h"
 #include "runtime/react_native_runtime_coordinator.h"
 #include "singletons/hermes_runtime_singleton.h"
@@ -37,7 +41,15 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		RNError registration_error;
+		std::shared_ptr<RNHostDescriptorRegistry> descriptors = react_native_runtime_coordinator->get_descriptor_registry();
+		ERR_FAIL_COND_MSG(!descriptors || !rn_register_builtin_descriptors(*descriptors, registration_error) || !rn_register_example_meter(*descriptors, registration_error), registration_error.describe());
+		descriptors->freeze();
+		std::shared_ptr<RNNativeModuleRegistry> modules = react_native_runtime_coordinator->get_native_module_registry();
+		ERR_FAIL_COND_MSG(!modules || !rn_register_builtin_native_modules(*modules, registration_error) || !rn_register_example_scene_module(*modules, registration_error), registration_error.describe());
+		modules->freeze_definitions();
 		ClassDB::register_class<ReactNativeRootView>();
+		ClassDB::register_class<RNExampleCounter>();
 
 		// Not meant to be instantiated from script: registered so a Ref<RNShadowNode>
 		// survives the Variant round-trip that call_deferred("mount", ...) does.

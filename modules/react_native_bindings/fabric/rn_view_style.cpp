@@ -14,38 +14,32 @@ bool is_number(const Variant &p_value) {
 	return p_value.get_type() == Variant::INT || p_value.get_type() == Variant::FLOAT;
 }
 
-// A double outside the 32-bit range, or a NaN, has an undefined conversion to int64_t, so
-// the bit pattern below is only meaningful for values processColor could have produced.
-bool is_packed_argb(double p_value) {
-	return std::isfinite(p_value) && p_value >= -2147483648.0 && p_value <= 4294967295.0;
-}
-
-// processColor (JS-side, --platform android) hands us a *signed* 32-bit int in ARGB byte
-// order (alpha in the high byte), carried as a JS number -> Variant::FLOAT. The int64_t
-// intermediate preserves the sign-extended bit pattern before we reinterpret it unsigned.
-Color color_from_packed_argb(double p_value) {
-	const uint32_t bits = uint32_t(int64_t(p_value));
-	const float a = ((bits >> 24) & 0xFF) / 255.0f;
-	const float r = ((bits >> 16) & 0xFF) / 255.0f;
-	const float g = ((bits >> 8) & 0xFF) / 255.0f;
-	const float b = (bits & 0xFF) / 255.0f;
-	return Color(r, g, b, a);
-}
-
-// A color key that isn't numeric (e.g. a PlatformColor, which jsi_to_variant turns into a
-// Dictionary) is not a crash case: warn once and treat as absent, so the day a non-Android
-// bundle or a dynamic color appears it is a loud, localized signal rather than a silent
-// garbage box.
 bool read_color(const Dictionary &p_style, const String &p_key, Color &r_color) {
 	if (!p_style.has(p_key)) {
 		return false;
 	}
 	const Variant value = p_style[p_key];
-	if (is_number(value) && is_packed_argb(double(value))) {
-		r_color = color_from_packed_argb(double(value));
-		return true;
+	if (value.get_type() == Variant::COLOR) {
+		const Color color = value;
+		if (color.r >= 0 && color.r <= 1 && color.g >= 0 && color.g <= 1 && color.b >= 0 && color.b <= 1 && color.a >= 0 && color.a <= 1) {
+			r_color = color;
+			return true;
+		}
 	}
-	WARN_PRINT_ONCE(vformat("RNViewStyle: non-numeric color for '%s' ignored (expected a processed ARGB int).", p_key).utf8().get_data());
+	if (value.get_type() == Variant::DICTIONARY) {
+		const Dictionary wrapper = value;
+		if (String(wrapper.get("$godot", String())) == "Color") {
+			const Variant r = wrapper.get("r", Variant());
+			const Variant g = wrapper.get("g", Variant());
+			const Variant b = wrapper.get("b", Variant());
+			const Variant a = wrapper.get("a", Variant());
+			if (is_number(r) && is_number(g) && is_number(b) && is_number(a) && std::isfinite(double(r)) && std::isfinite(double(g)) && std::isfinite(double(b)) && std::isfinite(double(a)) && double(r) >= 0 && double(r) <= 1 && double(g) >= 0 && double(g) <= 1 && double(b) >= 0 && double(b) <= 1 && double(a) >= 0 && double(a) <= 1) {
+				r_color = Color(float(r), float(g), float(b), float(a));
+				return true;
+			}
+		}
+	}
+	WARN_PRINT_ONCE(vformat("RNViewStyle: invalid Godot RGBA color for '%s' ignored.", p_key).utf8().get_data());
 	return false;
 }
 

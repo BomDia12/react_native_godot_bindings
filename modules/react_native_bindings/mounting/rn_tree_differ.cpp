@@ -1,5 +1,7 @@
 #include "rn_tree_differ.h"
 
+#include "../components/rn_host_descriptor.h"
+
 #include "core/templates/hash_map.h"
 #include "core/templates/hash_set.h"
 
@@ -21,7 +23,7 @@ struct MutationBuckets {
 };
 
 bool is_host(const Ref<RNShadowNode> &p_node) {
-	return p_node.is_valid() && p_node->view_name != "RCTRootView" && p_node->view_name != "RCTRawText";
+	return p_node.is_valid() && p_node->descriptor && p_node->descriptor->get_traits().creates_host;
 }
 
 bool props_equal(const Dictionary &p_left, const Dictionary &p_right) {
@@ -40,15 +42,15 @@ bool props_equal(const Dictionary &p_left, const Dictionary &p_right) {
 
 RNMountContext child_context(const Ref<RNShadowNode> &p_node, const RNMountContext &p_context) {
 	RNMountContext result = p_context;
-	if (p_node->view_name == "RCTRootView") {
+	if (p_node->descriptor && !p_node->descriptor->get_traits().creates_host && p_node->descriptor->get_traits().has_native_children) {
 		result.native_parent_tag = p_node->tag;
 		return result;
 	}
-	if (p_node->view_name == "RCTRawText") {
+	if (p_node->descriptor && p_node->descriptor->get_traits().contributes_text) {
 		return result;
 	}
 	result.native_parent_tag = p_node->tag;
-	if (p_node->view_name == "RCTText") {
+	if (p_node->descriptor && p_node->descriptor->get_traits().collects_text) {
 		result.text_host_tag = p_node->tag;
 	}
 	const String pointer_events = String(p_node->props.get("pointerEvents", "auto")).to_lower();
@@ -106,7 +108,7 @@ bool index_tree(const Ref<RNShadowNode> &p_root, HashMap<int, IndexedNode> &r_in
 
 Vector<Ref<RNShadowNode>> native_children(const Ref<RNShadowNode> &p_node) {
 	Vector<Ref<RNShadowNode>> result;
-	if (p_node.is_null() || p_node->view_name == "RCTRawText") {
+	if (p_node.is_null() || (p_node->descriptor && !p_node->descriptor->get_traits().has_native_children)) {
 		return result;
 	}
 	for (const Ref<RNShadowNode> &child : p_node->children) {
@@ -251,7 +253,7 @@ void diff_node(const Ref<RNShadowNode> &p_old, const Ref<RNShadowNode> &p_new, c
 	}
 	RNMountContext old_children_context = child_context(p_old, p_old_context);
 	RNMountContext new_children_context = child_context(p_new, p_new_context);
-	if (p_new->view_name == "RCTText" && p_old->collect_text() != p_new->collect_text()) {
+	if (p_new->descriptor && p_new->descriptor->get_traits().collects_text && p_old->collect_text() != p_new->collect_text()) {
 		add_update(p_old, p_new, p_new_context.native_parent_tag, r_buckets);
 	}
 	diff_raw_children(p_old, p_new, new_children_context, r_buckets);
