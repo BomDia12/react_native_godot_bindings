@@ -44,8 +44,8 @@ global.__godotFlushTimers = () => {
   const now = Date.now();
   Array.from(TIMERS.keys()).forEach(id => {
     const timer = TIMERS.get(id);
-    if (timer.due > now) {
-	  return;
+    if (timer == null || timer.due > now) {
+      return;
     }
     if (timer.repeatMs == null) {
       TIMERS.delete(id);
@@ -53,7 +53,7 @@ global.__godotFlushTimers = () => {
       timer.due = now + timer.repeatMs;
     }
     timer.fn(...timer.args);
-	});
+  });
 };
 
 const unsupported = operation => {

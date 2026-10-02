@@ -35,4 +35,23 @@ TEST_CASE("[ReactNativeBindings][ValueCodec] native records reject non-string ke
 	CHECK(String(runtime->evaluate("typeof invalidRecord")) == "undefined");
 }
 
+TEST_CASE("[ReactNativeBindings][ValueCodec] empty object and session handles reject the entire conversion") {
+	HermesRuntimeSingleton *runtime = HermesRuntimeSingleton::get_singleton();
+	REQUIRE(runtime != nullptr);
+	runtime->reset();
+
+	for (const char *wrapper : { "Object", "Session" }) {
+		const String empty_handle = vformat("({$godot: '%s', handle: ''})", wrapper);
+		for (const String &source : { empty_handle, vformat("({valid: 1, target: %s})", empty_handle) }) {
+			ERR_PRINT_OFF;
+			CHECK(runtime->evaluate(source).get_type() == Variant::NIL);
+			ERR_PRINT_ON;
+			CHECK(runtime->get_last_error().contains("E_VALIDATION"));
+			CHECK(runtime->get_last_error().contains("handle"));
+		}
+		CHECK(String(runtime->evaluate(vformat("({$godot: '%s', handle: 'opaque-token'})", wrapper))) == "opaque-token");
+		CHECK(runtime->get_last_error().is_empty());
+	}
+}
+
 } // namespace TestRNValueCodec

@@ -360,8 +360,11 @@ bool from_js_object(jsi::Runtime &p_runtime, const jsi::Object &p_object, const 
 	}
 	if ((p_schema.type == RNValueType::OBJECT && require_wrapper("Object")) || (p_schema.type == RNValueType::SESSION && require_wrapper("Session"))) {
 		String handle;
-		if (!read_string(p_runtime, p_object.getProperty(p_runtime, "handle"), handle, r_context, r_error, child_path(p_path, "handle")) || handle.is_empty()) {
+		if (!read_string(p_runtime, p_object.getProperty(p_runtime, "handle"), handle, r_context, r_error, child_path(p_path, "handle"))) {
 			return false;
+		}
+		if (handle.is_empty()) {
+			return fail(r_context, r_error, RNErrorCode::VALIDATION, "handle must not be empty", child_path(p_path, "handle"));
 		}
 		r_value = handle;
 		return true;
