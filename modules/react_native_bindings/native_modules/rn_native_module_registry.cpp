@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <vector>
 
 namespace {
 
@@ -696,13 +697,22 @@ void RNNativeModuleRegistry::deliver_locked(facebook::jsi::Runtime &p_runtime, u
 			WARN_PRINT(error.describe());
 			continue;
 		}
-		for (auto &entry : subscriptions) {
-			Subscription &subscription = entry.second;
+		std::vector<std::string> subscription_tokens;
+		for (const auto &entry : subscriptions) {
+			const Subscription &subscription = entry.second;
 			if (subscription.generation != generation || subscription.module_name != event.module_name || subscription.event != event.event || subscription.session_token != event.session_token || !subscription.callback) {
 				continue;
 			}
+			subscription_tokens.push_back(entry.first);
+		}
+		for (const std::string &token : subscription_tokens) {
+			auto found = subscriptions.find(token);
+			if (found == subscriptions.end()) {
+				continue;
+			}
+			facebook::jsi::Function callback = facebook::jsi::Value(p_runtime, *found->second.callback).getObject(p_runtime).getFunction(p_runtime);
 			try {
-				subscription.callback->call(p_runtime, payload);
+				callback.call(p_runtime, payload);
 			} catch (const facebook::jsi::JSIException &exception) {
 				WARN_PRINT(from_utf8(exception.what()));
 			}

@@ -1,4 +1,5 @@
 #include "../native_modules/rn_native_module_registry.h"
+#include "../runtime/react_native_runtime_coordinator.h"
 #include "../singletons/hermes_runtime_singleton.h"
 
 #include "tests/test_macros.h"
@@ -118,6 +119,118 @@ TEST_CASE("[ReactNativeBindings][NativeModules] deferred promises and subscripti
 	CHECK(registry->has_pending_work());
 	runtime->evaluate("deferredSubscription.remove(); undefined;");
 	REQUIRE(runtime->get_last_error().is_empty());
+	CHECK_FALSE(registry->has_pending_work());
+	runtime->uninstall_host_object("__testNativeModules");
+}
+
+TEST_CASE("[ReactNativeBindings][NativeModules] event callbacks can change subscriptions during delivery") {
+	HermesRuntimeSingleton *runtime = HermesRuntimeSingleton::get_singleton();
+	REQUIRE(runtime != nullptr);
+	runtime->reset();
+	const uint64_t generation = runtime->get_runtime_generation();
+	auto state = std::make_shared<RNRuntimeCoordinatorState>();
+	RNSurfaceRoute route;
+	route.root_tag = 11;
+	route.runtime_generation = generation;
+	route.surface_epoch = 1;
+	route.status = RNSurfaceStatus::ACTIVE;
+	state->routes[route.root_tag] = route;
+	auto registry = std::make_shared<RNNativeModuleRegistry>(state);
+	registry->begin_generation(generation);
+	RNEventSchema changed;
+	changed.name = "changed";
+	changed.subscription_name = "onChanged";
+	changed.payload = RNValueSchema::value(RNValueType::STRING);
+	changed.requires_session = true;
+	RNModuleDefinition definition;
+	definition.name = "EventFixture";
+	definition.events.push_back(changed);
+	definition.factory = []() { return std::make_unique<CompletedAsyncModule>(); };
+	RNError error;
+	REQUIRE(registry->register_module(definition, error));
+	runtime->install_host_object("__testNativeModules", registry);
+	runtime->evaluate(
+			"globalThis.eventModule = __testNativeModules.get('EventFixture');"
+			"globalThis.eventSession = __testNativeModules.openSession(11);"
+			"globalThis.eventCalls = [];"
+			"globalThis.eventSubscriptions = [];"
+			"undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	const String session = runtime->get_global("eventSession");
+	REQUIRE_FALSE(session.is_empty());
+
+	SUBCASE("a callback removes itself before another queued event") {
+		runtime->evaluate(
+				"globalThis.selfSubscription = eventModule.onChanged(eventSession, value => {"
+				"  eventCalls.push(value);"
+				"  selfSubscription.remove();"
+				"});"
+				"undefined;");
+		REQUIRE(runtime->get_last_error().is_empty());
+		registry->queue_event("EventFixture", "changed", session, generation, String("first"));
+		registry->queue_event("EventFixture", "changed", session, generation, String("second"));
+		runtime->dispatch_native_module_deliveries(registry);
+		const Array calls = runtime->get_global("eventCalls");
+		REQUIRE(calls.size() == 1);
+		CHECK(String(calls[0]) == "first");
+	}
+
+	SUBCASE("removed listeners do not receive the current event") {
+		runtime->evaluate(
+				"for (let i = 0; i < 8; ++i) {"
+				"  eventSubscriptions.push(eventModule.onChanged(eventSession, value => {"
+				"    eventCalls.push(value);"
+				"    eventSubscriptions.forEach(subscription => subscription.remove());"
+				"  }));"
+				"}"
+				"undefined;");
+		REQUIRE(runtime->get_last_error().is_empty());
+		registry->queue_event("EventFixture", "changed", session, generation, String("first"));
+		runtime->dispatch_native_module_deliveries(registry);
+		CHECK(Array(runtime->get_global("eventCalls")).size() == 1);
+	}
+
+	SUBCASE("new listeners begin with the next event") {
+		runtime->evaluate(
+				"globalThis.selfSubscription = eventModule.onChanged(eventSession, value => {"
+				"  eventCalls.push(value);"
+				"  selfSubscription.remove();"
+				"  for (let i = 0; i < 128; ++i) {"
+				"    eventSubscriptions.push(eventModule.onChanged(eventSession, next => eventCalls.push(next)));"
+				"  }"
+				"});"
+				"undefined;");
+		REQUIRE(runtime->get_last_error().is_empty());
+		registry->queue_event("EventFixture", "changed", session, generation, String("first"));
+		runtime->dispatch_native_module_deliveries(registry);
+		CHECK(Array(runtime->get_global("eventCalls")).size() == 1);
+		registry->queue_event("EventFixture", "changed", session, generation, String("second"));
+		runtime->dispatch_native_module_deliveries(registry);
+		const Array calls = runtime->get_global("eventCalls");
+		REQUIRE(calls.size() == 129);
+		for (int index = 1; index < calls.size(); ++index) {
+			CHECK(String(calls[index]) == "second");
+		}
+		runtime->evaluate("eventSubscriptions.forEach(subscription => subscription.remove()); undefined;");
+		REQUIRE(runtime->get_last_error().is_empty());
+	}
+
+	SUBCASE("closing a session stops its remaining callbacks and queued events") {
+		runtime->evaluate(
+				"for (let i = 0; i < 8; ++i) {"
+				"  eventModule.onChanged(eventSession, value => {"
+				"    eventCalls.push(value);"
+				"    __testNativeModules.closeSession(eventSession);"
+				"  });"
+				"}"
+				"undefined;");
+		REQUIRE(runtime->get_last_error().is_empty());
+		registry->queue_event("EventFixture", "changed", session, generation, String("first"));
+		registry->queue_event("EventFixture", "changed", session, generation, String("second"));
+		runtime->dispatch_native_module_deliveries(registry);
+		CHECK(Array(runtime->get_global("eventCalls")).size() == 1);
+	}
+
 	CHECK_FALSE(registry->has_pending_work());
 	runtime->uninstall_host_object("__testNativeModules");
 }

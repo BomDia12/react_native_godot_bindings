@@ -61,6 +61,11 @@ run the outer microtask checkpoint. Late or duplicate completions are ignored.
 discard work once according to their lifetime. Subscription callbacks remain strong JSI
 references until `{remove()}`, session/surface closure, or reset.
 
+Event delivery snapshots the matching subscription tokens for each event. Callbacks may
+remove themselves or other subscriptions, close their session, or add subscriptions.
+Removed subscriptions are skipped immediately, and new subscriptions begin with the
+next event. The running callback remains retained until it returns.
+
 ## Local resource paths
 
 Built-in local file/import operations accept normalized `res://` and `user://` paths
