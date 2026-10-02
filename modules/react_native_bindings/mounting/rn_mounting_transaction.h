@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../components/rn_host_descriptor.h"
 #include "rn_mounting_mutation.h"
 
 #include "core/math/rect2.h"
@@ -15,5 +16,7 @@ struct RNMountingTransaction {
 	Ref<RNShadowNode> new_root;
 	Vector<RNMountingMutation> mutations;
 	HashMap<int, Rect2> prepared_layouts;
-	Vector<ObjectID> detached_new_hosts;
+	HashMap<int, RNPreparedHostState> prepared_states;
+	HashMap<int, std::shared_ptr<const RNHostDescriptor>> prepared_host_descriptors;
+	HashMap<int, Variant> captured_native_states;
 };

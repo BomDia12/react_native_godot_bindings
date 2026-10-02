@@ -1,7 +1,9 @@
 #pragma once
 
+#include "../components/rn_host_descriptor_registry.h"
 #include "../mounting/rn_layout_tree.h"
 #include "../mounting/rn_tree_differ.h"
+#include "../runtime/react_native_runtime_coordinator.h"
 
 #include "tests/test_macros.h"
 
@@ -15,6 +17,9 @@ Ref<RNShadowNode> mounting_node(int p_tag, const String &p_name, const Dictionar
 	node->runtime_generation = 3;
 	node->surface_epoch = 7;
 	node->view_name = p_name;
+	if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+		node->descriptor = coordinator->get_descriptor_registry()->find(p_name);
+	}
 	node->props = p_props;
 	return node;
 }

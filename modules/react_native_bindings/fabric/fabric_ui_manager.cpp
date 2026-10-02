@@ -1,18 +1,20 @@
 #include "fabric_ui_manager.h"
 
+#include "../components/rn_host_descriptor_registry.h"
+#include "../interop/rn_value_codec.h"
 #include "rn_event_target.h"
 
 #include "core/error/error_macros.h"
 
+#include <cmath>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <vector>
 
 const char *FabricUIManager::GLOBAL_NAME = "nativeFabricUIManager";
 
 namespace {
-constexpr int MAX_PROP_DEPTH = 8;
-
 String string_from_utf8(const std::string &p_value) {
 	return String::utf8(p_value.c_str(), int(p_value.length()));
 }
@@ -49,48 +51,19 @@ void argument_error(facebook::jsi::Runtime &p_runtime, const char *p_method, siz
 	throw facebook::jsi::JSError(p_runtime, std::string(p_method) + ": argument " + std::to_string(p_index) + " expected " + p_expected + ", got " + actual + ".");
 }
 
-Variant jsi_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value, int p_depth) {
-	if (p_depth > MAX_PROP_DEPTH || p_value.isNull() || p_value.isUndefined()) {
-		return Variant();
+Variant jsi_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value, const String &p_path) {
+	if (p_value.isObject() && p_value.getObject(rt).isFunction(rt)) {
+		return true;
 	}
-	if (p_value.isBool()) {
-		return p_value.getBool();
+	RNDecodedValue decoded = RNValueCodec::from_js(rt, p_value, RNValueSchema::value(RNValueType::DYNAMIC), "Fabric", p_path);
+	if (!decoded.ok()) {
+		throw facebook::jsi::JSError(rt, string_to_utf8(decoded.error.describe()));
 	}
-	if (p_value.isNumber()) {
-		return p_value.getNumber();
-	}
-	if (p_value.isString()) {
-		return string_from_utf8(p_value.getString(rt).utf8(rt));
-	}
-	if (!p_value.isObject()) {
-		return Variant();
-	}
-	facebook::jsi::Object object = p_value.getObject(rt);
-	if (object.isFunction(rt) || object.isHostObject(rt)) {
-		return Variant();
-	}
-	if (object.isArray(rt)) {
-		facebook::jsi::Array js_array = object.asArray(rt);
-		Array result;
-		for (size_t i = 0; i < js_array.size(rt); ++i) {
-			result.push_back(jsi_to_variant(rt, js_array.getValueAtIndex(rt, i), p_depth + 1));
-		}
-		return result;
-	}
-	Dictionary result;
-	facebook::jsi::Array names = object.getPropertyNames(rt);
-	for (size_t i = 0; i < names.size(rt); ++i) {
-		facebook::jsi::Value key = names.getValueAtIndex(rt, i);
-		if (key.isString()) {
-			facebook::jsi::String key_string = key.getString(rt);
-			result[string_from_utf8(key_string.utf8(rt))] = jsi_to_variant(rt, object.getProperty(rt, key_string), p_depth + 1);
-		}
-	}
-	return result;
+	return decoded.value;
 }
 
 Dictionary props_from(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_value) {
-	const Variant value = jsi_to_variant(rt, p_value, 0);
+	const Variant value = jsi_to_variant(rt, p_value, "props");
 	return value.get_type() == Variant::DICTIONARY ? Dictionary(value) : Dictionary();
 }
 
@@ -126,7 +99,7 @@ void merge_props(facebook::jsi::Runtime &rt, const facebook::jsi::Value &p_updat
 		if (value.isNull() || value.isUndefined()) {
 			r_props.erase(name);
 		} else {
-			r_props[name] = jsi_to_variant(rt, value, 0);
+			r_props[name] = jsi_to_variant(rt, value, "props." + name);
 		}
 	}
 }
@@ -182,43 +155,13 @@ facebook::jsi::Value wrap_node(facebook::jsi::Runtime &rt, const Ref<RNShadowNod
 	return facebook::jsi::Object::createFromHostObject(rt, std::make_shared<RNShadowNodeHandle>(p_node));
 }
 
-facebook::jsi::Value variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &p_value, int p_depth = 0) {
-	if (p_depth > MAX_PROP_DEPTH) {
-		return facebook::jsi::Value::undefined();
+facebook::jsi::Value variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &p_value) {
+	facebook::jsi::Value result;
+	RNError error;
+	if (!RNValueCodec::to_js(rt, p_value, RNValueSchema::value(RNValueType::DYNAMIC), result, error, nullptr, "Fabric", "payload")) {
+		throw facebook::jsi::JSError(rt, string_to_utf8(error.describe()));
 	}
-	switch (p_value.get_type()) {
-		case Variant::NIL:
-			return facebook::jsi::Value::null();
-		case Variant::BOOL:
-			return facebook::jsi::Value(bool(p_value));
-		case Variant::INT:
-			return facebook::jsi::Value(double(int64_t(p_value)));
-		case Variant::FLOAT:
-			return facebook::jsi::Value(double(p_value));
-		case Variant::STRING:
-		case Variant::STRING_NAME:
-			return facebook::jsi::String::createFromUtf8(rt, string_to_utf8(String(p_value)));
-		case Variant::ARRAY: {
-			const Array array = p_value;
-			facebook::jsi::Array result(rt, array.size());
-			for (int i = 0; i < array.size(); ++i) {
-				result.setValueAtIndex(rt, i, variant_to_jsi(rt, array[i], p_depth + 1));
-			}
-			return result;
-		}
-		case Variant::DICTIONARY: {
-			const Dictionary dictionary = p_value;
-			facebook::jsi::Object result(rt);
-			const Array keys = dictionary.keys();
-			for (int i = 0; i < keys.size(); ++i) {
-				const String key = keys[i];
-				result.setProperty(rt, string_to_utf8(key).c_str(), variant_to_jsi(rt, dictionary[keys[i]], p_depth + 1));
-			}
-			return result;
-		}
-		default:
-			return facebook::jsi::Value::undefined();
-	}
+	return result;
 }
 
 const RNMountedNodeSnapshot *snapshot_node(const std::shared_ptr<RNRuntimeCoordinatorState> &p_state, const Ref<RNShadowNode> &p_node, std::shared_ptr<const RNSurfaceSnapshot> &r_snapshot) {
@@ -309,6 +252,9 @@ void FabricUIManager::register_surface(const RNSurfaceRoute &p_route) {
 	root->runtime_generation = p_route.runtime_generation;
 	root->surface_epoch = p_route.surface_epoch;
 	root->view_name = "RCTRootView";
+	if (auto shared = state.lock(); shared && shared->descriptor_registry) {
+		root->descriptor = shared->descriptor_registry->find(root->view_name);
+	}
 	root->event_target = std::make_shared<RNEventTarget>(root->tag, root->runtime_generation, root->root_tag, root->surface_epoch);
 	virtual_roots[p_route.root_tag] = root;
 	event_targets[{ p_route.root_tag, root->tag }] = root->event_target;
@@ -383,8 +329,8 @@ facebook::jsi::Value FabricUIManager::create_node(facebook::jsi::Runtime &rt, co
 	if (!p_args[2].isNumber()) {
 		argument_error(rt, "createNode", 2, "number", p_args, p_argc);
 	}
-	if (!p_args[3].isObject()) {
-		argument_error(rt, "createNode", 3, "object", p_args, p_argc);
+	if (!p_args[3].isObject() && !p_args[3].isNull()) {
+		argument_error(rt, "createNode", 3, "object or null", p_args, p_argc);
 	}
 	if (!p_args[4].isObject()) {
 		argument_error(rt, "createNode", 4, "object", p_args, p_argc);
@@ -405,6 +351,13 @@ facebook::jsi::Value FabricUIManager::create_node(facebook::jsi::Runtime &rt, co
 	node->runtime_generation = route->second.runtime_generation;
 	node->surface_epoch = route->second.surface_epoch;
 	node->view_name = string_from_utf8(p_args[1].getString(rt).utf8(rt));
+	if (!shared->descriptor_registry) {
+		throw facebook::jsi::JSError(rt, "E_NATIVE: host descriptor registry is unavailable.");
+	}
+	node->descriptor = shared->descriptor_registry->find(node->view_name);
+	if (!node->descriptor) {
+		throw facebook::jsi::JSError(rt, string_to_utf8(vformat("E_UNKNOWN_COMPONENT [createNode]: no Godot host descriptor is registered for '%s'.", node->view_name)));
+	}
 	auto existing_target = event_targets.find({ root_tag, node->tag });
 	if (existing_target != event_targets.end() && !existing_target->second.expired()) {
 		throw facebook::jsi::JSError(rt, "createNode: duplicate live tag in this surface.");
@@ -733,7 +686,7 @@ facebook::jsi::Value FabricUIManager::dispatch_command(facebook::jsi::Runtime &r
 	}
 	request.kind = RNImperativeRequestKind::COMMAND;
 	request.command_name = string_from_utf8(p_args[1].getString(rt).utf8(rt));
-	request.payload = jsi_to_variant(rt, p_args[2], 0);
+	request.payload = jsi_to_variant(rt, p_args[2], "command.args");
 	RNSurfaceOperation operation;
 	operation.kind = RNSurfaceOperationKind::IMPERATIVE;
 	operation.imperative = request;
@@ -760,6 +713,30 @@ facebook::jsi::Value FabricUIManager::report_surface_error(facebook::jsi::Runtim
 		WARN_PRINT(vformat("ReactNativeRootView %d failed inside its error boundary: %s", root_tag, route->second.error));
 	}
 	return facebook::jsi::Value::undefined();
+}
+
+facebook::jsi::Value FabricUIManager::find_shadow_node_by_tag(facebook::jsi::Runtime &rt, const facebook::jsi::Value *p_args, size_t p_argc) {
+	if (p_argc != 1 || !p_args[0].isNumber()) {
+		return facebook::jsi::Value::null();
+	}
+	const double value = p_args[0].getNumber();
+	if (!std::isfinite(value) || std::trunc(value) != value || value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+		return facebook::jsi::Value::null();
+	}
+	const int tag = int(value);
+	auto shared = state.lock();
+	if (!shared) {
+		return facebook::jsi::Value::null();
+	}
+	for (const auto &entry : shared->snapshots) {
+		if (entry.second) {
+			const RNMountedNodeSnapshot *node = entry.second->nodes.getptr(tag);
+			if (node && node->shadow_node.is_valid()) {
+				return wrap_node(rt, node->shadow_node);
+			}
+		}
+	}
+	return facebook::jsi::Value::null();
 }
 
 void FabricUIManager::dispatch_event_locked(facebook::jsi::Runtime &p_runtime, const RNNativeEvent &p_event, uint64_t p_generation) {
@@ -899,6 +876,7 @@ facebook::jsi::Value FabricUIManager::get(facebook::jsi::Runtime &rt, const face
 	RN_HOST_METHOD("setNativeProps", 2, set_native_props);
 	RN_HOST_METHOD("dispatchCommand", 3, dispatch_command);
 	RN_HOST_METHOD("__godotReportSurfaceError", 3, report_surface_error);
+	RN_HOST_METHOD("findShadowNodeByTag_DEPRECATED", 1, find_shadow_node_by_tag);
 #undef RN_HOST_METHOD
 	if (name == "unstable_DefaultEventPriority") {
 		return facebook::jsi::Value(EVENT_PRIORITY_DEFAULT);
@@ -919,7 +897,7 @@ facebook::jsi::Value FabricUIManager::get(facebook::jsi::Runtime &rt, const face
 }
 
 std::vector<facebook::jsi::PropNameID> FabricUIManager::getPropertyNames(facebook::jsi::Runtime &rt) {
-	static const char *NAMES[] = { "createNode", "cloneNode", "cloneNodeWithNewChildren", "cloneNodeWithNewProps", "cloneNodeWithNewChildrenAndProps", "createChildSet", "appendChild", "appendChildToSet", "completeRoot", "registerEventHandler", "setIsJSResponder", "measure", "measureInWindow", "measureLayout", "getBoundingClientRect", "setNativeProps", "dispatchCommand", "__godotReportSurfaceError", "unstable_DefaultEventPriority", "unstable_DiscreteEventPriority", "unstable_ContinuousEventPriority", "unstable_IdleEventPriority", "unstable_getCurrentEventPriority" };
+	static const char *NAMES[] = { "createNode", "cloneNode", "cloneNodeWithNewChildren", "cloneNodeWithNewProps", "cloneNodeWithNewChildrenAndProps", "createChildSet", "appendChild", "appendChildToSet", "completeRoot", "registerEventHandler", "setIsJSResponder", "measure", "measureInWindow", "measureLayout", "getBoundingClientRect", "setNativeProps", "dispatchCommand", "findShadowNodeByTag_DEPRECATED", "__godotReportSurfaceError", "unstable_DefaultEventPriority", "unstable_DiscreteEventPriority", "unstable_ContinuousEventPriority", "unstable_IdleEventPriority", "unstable_getCurrentEventPriority" };
 	std::vector<facebook::jsi::PropNameID> names;
 	for (const char *entry : NAMES) {
 		names.push_back(facebook::jsi::PropNameID::forAscii(rt, entry));

@@ -9,6 +9,7 @@
 #include <memory>
 
 class RNEventTarget;
+class RNHostDescriptor;
 
 // One node of Fabric's shadow tree.
 //
@@ -28,6 +29,7 @@ public:
 	Dictionary props;
 	Vector<Ref<RNShadowNode>> children;
 	std::shared_ptr<RNEventTarget> event_target;
+	std::shared_ptr<const RNHostDescriptor> descriptor;
 	HashMap<String, uint64_t> declarative_prop_revisions;
 	int validated_depth = 1;
 	bool children_replaced = false;

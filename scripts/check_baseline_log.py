@@ -14,6 +14,7 @@ DIAGNOSTIC_TOKENS = (
     "nativeFabricUIManager.",
     "Mounting unrecognized view",
     "RNViewStyle: non-numeric color",
+    "RN_GODOT_COMPAT:",
     "Hermes",
 )
 

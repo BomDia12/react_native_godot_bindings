@@ -1,5 +1,3 @@
-import './godot.preamble';
-
 import React, {useRef, useState} from 'react';
 import {AppRegistry, Pressable, StyleSheet, Text, View} from 'react-native';
 
@@ -164,7 +162,7 @@ AppRegistry.registerComponent('GodotInteractionApp', () => App);
 global.__godotRunApplication = (applicationKey, rootTag) =>
   AppRegistry.runApplication(applicationKey, {
     rootTag,
-    initialProps: {},
+    initialProps: {rootTag},
     fabric: true,
   });
 

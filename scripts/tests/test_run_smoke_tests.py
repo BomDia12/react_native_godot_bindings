@@ -3,12 +3,13 @@ import io
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from run_smoke_tests import SmokeResult, find_godot_binary, summarize
+from run_smoke_tests import SmokeResult, find_godot_binary, prepare_project_imports, summarize
 
 
 class RunSmokeTestsTests(unittest.TestCase):
@@ -36,6 +37,33 @@ class RunSmokeTestsTests(unittest.TestCase):
         self.assertFalse(passed)
         self.assertIn("first failure", output.getvalue())
         self.assertIn("second failure", output.getvalue())
+
+    @mock.patch("run_smoke_tests.subprocess.run")
+    def test_import_preparation_runs_once_per_project_and_writes_logs(self, run):
+        run.return_value = mock.Mock(returncode=0, stdout="imported\n", stderr="")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log_dir = root / "logs"
+            log_dir.mkdir()
+            manifests = [
+                mock.Mock(project_dir=Path("sample")),
+                mock.Mock(project_dir=Path("sample")),
+                mock.Mock(project_dir=Path("other")),
+            ]
+            prepare_project_imports(root, Path("/godot"), manifests, log_dir)
+            self.assertEqual(run.call_count, 2)
+            self.assertTrue((log_dir / "import-sample.log").is_file())
+            self.assertTrue((log_dir / "import-other.log").is_file())
+
+    @mock.patch("run_smoke_tests.subprocess.run")
+    def test_import_preparation_rejects_import_errors(self, run):
+        run.return_value = mock.Mock(returncode=0, stdout="ERROR: broken import\n", stderr="")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log_dir = root / "logs"
+            log_dir.mkdir()
+            with self.assertRaisesRegex(RuntimeError, "Godot import failed"):
+                prepare_project_imports(root, Path("/godot"), [mock.Mock(project_dir=Path("sample"))], log_dir)
 
     def _create_binary(self, godot_dir: Path, name: str) -> Path:
         binary = godot_dir / "bin" / name

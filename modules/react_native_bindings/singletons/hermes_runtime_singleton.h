@@ -29,9 +29,6 @@ class HostObject;
 class HermesRuntimeSingleton : public Object {
 	GDCLASS(HermesRuntimeSingleton, Object);
 
-	static constexpr int MAX_CONVERSION_DEPTH = 6;
-	static constexpr int MAX_OBJECT_PROPERTIES = 128;
-
 	static HermesRuntimeSingleton *singleton;
 
 	std::unique_ptr<facebook::hermes::HermesRuntime> runtime;
@@ -41,17 +38,19 @@ class HermesRuntimeSingleton : public Object {
 	HashMap<String, std::shared_ptr<facebook::jsi::HostObject>> host_objects;
 	std::vector<std::weak_ptr<class HermesRuntimeLifecycle>> lifecycle_objects;
 	uint64_t runtime_generation = 1;
+	bool microtask_checkpoint_active = false;
 
 	Variant evaluate_locked(const String &code, const String &source);
 	Variant call_function_locked(const String &function_name, const Array &args);
 	void set_global_locked(const String &name, const Variant &value);
 	Variant get_global_locked(const String &name);
-	Variant jsi_value_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &value, int depth);
-	Variant object_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Object &object, int depth);
-	facebook::jsi::Value variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &value, int depth);
+	Variant jsi_value_to_variant(facebook::jsi::Runtime &rt, const facebook::jsi::Value &value);
+	facebook::jsi::Value variant_to_jsi(facebook::jsi::Runtime &rt, const Variant &value);
 	void ensure_runtime_locked();
 	void install_import_function_locked();
+	void install_runtime_functions_locked();
 	void install_host_objects_locked();
+	void run_microtask_checkpoint_locked();
 	void run_pre_reset_hooks_locked();
 	bool is_lifecycle_registered_locked(const std::shared_ptr<class HermesRuntimeLifecycle> &lifecycle) const;
 	bool require_main_thread(const char *p_method) const;
@@ -71,9 +70,11 @@ public:
 	Variant call_function(const String &function_name, const Array &args = Array());
 	void set_global(const String &name, const Variant &value);
 	Variant get_global(const String &name);
+	bool has_global_function(const String &name);
 	void reset();
 	uint64_t get_runtime_generation() const;
 	void dispatch_queued_events(const std::shared_ptr<class FabricUIManager> &p_ui_manager);
+	void dispatch_native_module_deliveries(const std::shared_ptr<class RNNativeModuleRegistry> &p_registry);
 	bool is_ready() const;
 	String get_last_error() const;
 	// Resolves an importModule() specifier to source code, as either a String or a

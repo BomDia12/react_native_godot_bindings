@@ -34,6 +34,7 @@ class FabricUIManager : public facebook::jsi::HostObject, public HermesRuntimeLi
 	facebook::jsi::Value set_native_props(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
 	facebook::jsi::Value dispatch_command(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
 	facebook::jsi::Value report_surface_error(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
+	facebook::jsi::Value find_shadow_node_by_tag(facebook::jsi::Runtime &rt, const facebook::jsi::Value *args, size_t argc);
 	void dispatch_event_locked(facebook::jsi::Runtime &p_runtime, const RNNativeEvent &p_event, uint64_t p_generation);
 
 public:

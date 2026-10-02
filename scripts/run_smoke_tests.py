@@ -79,6 +79,38 @@ def build_bundles(repo_root: Path, groups: list[BundleGroup]) -> None:
         )
 
 
+def prepare_project_imports(
+    repo_root: Path,
+    godot_binary: Path,
+    manifests: list[SmokeManifest],
+    log_dir: Path,
+) -> None:
+    for project_dir in sorted({manifest.project_dir for manifest in manifests}):
+        command = [
+            str(godot_binary),
+            "--headless",
+            "--editor",
+            "--path",
+            str(repo_root / project_dir),
+            "--import",
+            "--quit",
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True, errors="replace", check=False)
+        log = completed.stdout + completed.stderr
+        safe_name = project_dir.as_posix().replace("/", "-")
+        log_path = log_dir / f"import-{safe_name}.log"
+        log_path.write_text(log, encoding="utf-8")
+        import_errors = [
+            line
+            for line in log.splitlines()
+            if "SCRIPT ERROR:" in line or "ERROR:" in line or "Import failed" in line
+        ]
+        if completed.returncode != 0 or import_errors:
+            detail = import_errors[0] if import_errors else f"exit status {completed.returncode}"
+            raise RuntimeError(f"Godot import failed for {project_dir.as_posix()}: {detail}; see {log_path}")
+        print(f"Imported {project_dir.as_posix()} (log: {log_path.relative_to(repo_root).as_posix()})")
+
+
 def run_test(
     repo_root: Path,
     godot_binary: Path,
@@ -163,6 +195,7 @@ def main() -> int:
         log_dir = Path(os.environ.get("SMOKE_LOG_DIR", REPO_ROOT / "artifacts/smoke-logs")).resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
         build_bundles(REPO_ROOT, groups)
+        prepare_project_imports(REPO_ROOT, godot_binary, manifests, log_dir)
     except (ManifestError, OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as error:
         print(f"Smoke setup failed: {error}", file=sys.stderr)
         return 1

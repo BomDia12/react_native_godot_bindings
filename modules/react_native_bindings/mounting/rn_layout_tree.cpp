@@ -2,9 +2,6 @@
 
 #include "../fabric/rn_layout.h"
 
-#include "scene/resources/font.h"
-#include "scene/theme/theme_db.h"
-
 #include <yoga/Yoga.h>
 
 #include <cmath>
@@ -27,27 +24,33 @@ bool dictionaries_equal(const Dictionary &p_left, const Dictionary &p_right) {
 }
 
 bool is_layout_participant(const Ref<RNShadowNode> &p_node) {
-	return p_node.is_valid() && p_node->view_name != "RCTRawText";
+	return p_node.is_valid() && p_node->descriptor && p_node->descriptor->get_traits().participates_in_layout;
 }
 
-YGSize measure_text(YGNodeConstRef p_node, float p_width, YGMeasureMode p_width_mode, float p_height, YGMeasureMode p_height_mode) {
-	(void)p_height;
-	(void)p_height_mode;
+RNMeasureMode measure_mode(YGMeasureMode p_mode) {
+	switch (p_mode) {
+		case YGMeasureModeExactly:
+			return RNMeasureMode::EXACTLY;
+		case YGMeasureModeAtMost:
+			return RNMeasureMode::AT_MOST;
+		case YGMeasureModeUndefined:
+			return RNMeasureMode::UNDEFINED;
+	}
+	return RNMeasureMode::UNDEFINED;
+}
+
+YGSize measure_descriptor(YGNodeConstRef p_node, float p_width, YGMeasureMode p_width_mode, float p_height, YGMeasureMode p_height_mode) {
 	const RNLayoutMeasureContext *context = static_cast<const RNLayoutMeasureContext *>(YGNodeGetContext(p_node));
-	const Ref<Font> font = ThemeDB::get_singleton()->get_fallback_font();
-	if (!context || font.is_null()) {
+	if (!context || !context->descriptor) {
 		return YGSize{ 0.0f, 0.0f };
 	}
-	const float font_size = RNLayout::text_font_size(context->props);
-	const float wrap_width = p_width_mode == YGMeasureModeUndefined || !std::isfinite(p_width) ? -1.0f : p_width;
-	const Size2 measured = font->get_multiline_string_size(context->text, HORIZONTAL_ALIGNMENT_LEFT, wrap_width, font_size);
-	float width = float(measured.width);
-	if (p_width_mode == YGMeasureModeExactly) {
-		width = p_width;
-	} else if (p_width_mode == YGMeasureModeAtMost) {
-		width = MIN(width, p_width);
-	}
-	return YGSize{ width, float(measured.height) };
+	RNMeasureConstraints constraints;
+	constraints.width = p_width;
+	constraints.height = p_height;
+	constraints.width_mode = measure_mode(p_width_mode);
+	constraints.height_mode = measure_mode(p_height_mode);
+	const Size2 measured = context->descriptor->measure(context->prepared_state, constraints);
+	return YGSize{ measured.x, measured.y };
 }
 
 } // namespace
@@ -94,7 +97,7 @@ void RNLayoutTree::free_prepared_removed() {
 	prepared_removed_records.clear();
 }
 
-YGNodeRef RNLayoutTree::prepare_node(const Ref<RNShadowNode> &p_node, int p_parent_tag, HashMap<int, bool> &r_seen, String &r_error) {
+YGNodeRef RNLayoutTree::prepare_node(const Ref<RNShadowNode> &p_node, int p_parent_tag, const HashMap<int, RNPreparedHostState> *p_prepared_states, HashMap<int, bool> &r_seen, String &r_error) {
 	if (!is_layout_participant(p_node)) {
 		return nullptr;
 	}
@@ -121,16 +124,35 @@ YGNodeRef RNLayoutTree::prepare_node(const Ref<RNShadowNode> &p_node, int p_pare
 		record.props = p_node->props.duplicate(true);
 		stats.style_writes++;
 	}
-	if (p_node->view_name == "RCTText") {
-		const String text = p_node->collect_text();
+	if (p_node->descriptor->get_traits().measured_leaf) {
+		RNPreparedHostState prepared_state;
+		if (p_prepared_states) {
+			const RNPreparedHostState *state = p_prepared_states->getptr(p_node->tag);
+			if (!state) {
+				r_error = vformat("missing prepared descriptor state for measured tag %d", p_node->tag);
+				return nullptr;
+			}
+			prepared_state = *state;
+		} else {
+			RNError prepare_error;
+			if (!p_node->descriptor->prepare(*p_node.ptr(), prepared_state, prepare_error)) {
+				r_error = prepare_error.describe();
+				return nullptr;
+			}
+		}
+		const String text = prepared_state.text;
 		if (!record.context->measure_initialized) {
 			record.context->text = text;
 			record.context->props = p_node->props.duplicate(true);
+			record.context->prepared_state = prepared_state;
+			record.context->descriptor = p_node->descriptor;
 			record.context->measure_initialized = true;
-			YGNodeSetMeasureFunc(record.yoga_node, measure_text);
+			YGNodeSetMeasureFunc(record.yoga_node, measure_descriptor);
 		} else if (record.context->text != text || props_changed) {
 			record.context->text = text;
 			record.context->props = p_node->props.duplicate(true);
+			record.context->prepared_state = prepared_state;
+			record.context->descriptor = p_node->descriptor;
 			YGNodeMarkDirty(record.yoga_node);
 			stats.text_nodes_dirtied++;
 		}
@@ -142,7 +164,7 @@ YGNodeRef RNLayoutTree::prepare_node(const Ref<RNShadowNode> &p_node, int p_pare
 		if (!is_layout_participant(child)) {
 			continue;
 		}
-		YGNodeRef yoga_child = prepare_node(child, p_node->tag, r_seen, r_error);
+		YGNodeRef yoga_child = prepare_node(child, p_node->tag, p_prepared_states, r_seen, r_error);
 		if (!yoga_child) {
 			return nullptr;
 		}
@@ -184,7 +206,7 @@ void RNLayoutTree::capture_layout(YGNodeRef p_node, HashMap<int, Rect2> &r_layou
 	}
 }
 
-bool RNLayoutTree::prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, HashMap<int, Rect2> &r_layouts, String &r_error) {
+bool RNLayoutTree::prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, HashMap<int, Rect2> &r_layouts, String &r_error, const HashMap<int, RNPreparedHostState> *p_prepared_states) {
 	r_error = String();
 	if (p_root.is_null()) {
 		r_error = "layout root is null";
@@ -197,7 +219,7 @@ bool RNLayoutTree::prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_const
 		return true;
 	}
 	HashMap<int, bool> seen;
-	YGNodeRef yoga_root = prepare_node(p_root, 0, seen, r_error);
+	YGNodeRef yoga_root = prepare_node(p_root, 0, p_prepared_states, seen, r_error);
 	if (!yoga_root) {
 		return false;
 	}

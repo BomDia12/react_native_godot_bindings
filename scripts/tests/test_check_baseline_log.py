@@ -44,6 +44,13 @@ class CheckBaselineLogTests(unittest.TestCase):
         failures = validate_log("WARNING: reviewed 12\nRN_SMOKE_OK: case\n", self.allowlist, 0, "case")
         self.assertEqual(failures, [])
 
+    def test_structured_compatibility_diagnostic_requires_allowlist(self):
+        line = "RN_GODOT_COMPAT: E_UNHANDLED_REJECTION [Promise.onUnhandled] boom rejection=1"
+        failures = validate_log(line + "\nRN_SMOKE_OK: case\n", self.allowlist, 0, "case")
+        self.assertTrue(any("unallowlisted diagnostic" in failure for failure in failures))
+        self.allowlist.write_text("RN_GODOT_COMPAT: E_UNHANDLED_REJECTION .*\n", encoding="utf-8")
+        self.assertEqual(validate_log(line + "\nRN_SMOKE_OK: case\n", self.allowlist, 0, "case"), [])
+
     def test_rejected_diagnostic_has_five_preceding_lines(self):
         lines = [f"line {number}" for number in range(1, 8)] + ["ERROR: rejected"]
         failures = validate_log("\n".join(lines) + "\nRN_SMOKE_OK: case\n", self.allowlist, 0, "case")

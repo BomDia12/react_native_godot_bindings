@@ -6,6 +6,7 @@
 #include "core/error/error_macros.h"
 
 #include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,37 @@ std::string to_utf8(const String &p_value) {
 
 String from_utf8(const std::string &p_value) {
 	return String::utf8(p_value.c_str(), int(p_value.length()));
+}
+
+int require_integer(facebook::jsi::Runtime &p_runtime, const facebook::jsi::Value &p_value, const char *p_operation) {
+	if (!p_value.isNumber()) {
+		throw facebook::jsi::JSError(p_runtime, std::string(p_operation) + " requires an integer.");
+	}
+	const double value = p_value.getNumber();
+	constexpr double MAX_SAFE_INTEGER = 9007199254740991.0;
+	if (!std::isfinite(value) || std::trunc(value) != value || std::abs(value) > MAX_SAFE_INTEGER || value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+		throw facebook::jsi::JSError(p_runtime, std::string(p_operation) + " requires a finite safe integer in the native int range.");
+	}
+	return int(value);
+}
+
+String require_string(facebook::jsi::Runtime &p_runtime, const facebook::jsi::Value &p_value, const char *p_operation) {
+	if (!p_value.isString()) {
+		throw facebook::jsi::JSError(p_runtime, std::string(p_operation) + " requires a string.");
+	}
+	const std::string value = p_value.getString(p_runtime).utf8(p_runtime);
+	if (value.find('\0') != std::string::npos) {
+		throw facebook::jsi::JSError(p_runtime, std::string(p_operation) + " rejects strings containing NUL.");
+	}
+	return from_utf8(value);
+}
+
+facebook::jsi::String string_value(facebook::jsi::Runtime &p_runtime, const String &p_value, const char *p_operation) {
+	const std::string value = to_utf8(p_value);
+	if (value.find('\0') != std::string::npos) {
+		throw facebook::jsi::JSError(p_runtime, std::string(p_operation) + " cannot return a string containing NUL.");
+	}
+	return facebook::jsi::String::createFromUtf8(p_runtime, value);
 }
 
 Ref<RNShadowNode> node_from(facebook::jsi::Runtime &p_runtime, const facebook::jsi::Value &p_value) {
@@ -41,7 +73,7 @@ ResolvedNode resolve(const std::shared_ptr<RNRuntimeCoordinatorState> &p_state, 
 		return result;
 	}
 	if (p_value.isNumber()) {
-		result.root_tag = int(p_value.getNumber());
+		result.root_tag = require_integer(p_runtime, p_value, "NativeDOM document lookup");
 		result.tag = result.root_tag;
 		result.document = true;
 	} else {
@@ -79,6 +111,9 @@ facebook::jsi::Array number_array(facebook::jsi::Runtime &p_runtime, std::initia
 	facebook::jsi::Array result(p_runtime, p_values.size());
 	size_t index = 0;
 	for (double value : p_values) {
+		if (!std::isfinite(value)) {
+			throw facebook::jsi::JSError(p_runtime, "NativeDOM cannot return a non-finite number.");
+		}
 		result.setValueAtIndex(p_runtime, index++, value);
 	}
 	return result;
@@ -124,12 +159,12 @@ facebook::jsi::Value NativeDOM::get(facebook::jsi::Runtime &rt, const facebook::
 	};
 	if (name == "linkRootNode") {
 		return host_fn(2, [this](facebook::jsi::Runtime &inner, const facebook::jsi::Value *args, size_t argc) {
-			if (argc < 2 || !args[0].isNumber() || !args[1].isObject()) {
+			if (argc < 2 || !args[1].isObject()) {
 				return facebook::jsi::Value::undefined();
 			}
 			auto shared = state.lock();
 			auto manager = shared ? shared->ui_manager.lock() : nullptr;
-			return manager ? manager->link_root_node(inner, int(args[0].getNumber()), args[1].getObject(inner)) : facebook::jsi::Value::undefined();
+			return manager ? manager->link_root_node(inner, require_integer(inner, args[0], "NativeDOM.linkRootNode"), args[1].getObject(inner)) : facebook::jsi::Value::undefined();
 		});
 	}
 	if (name == "compareDocumentPosition") {
@@ -214,7 +249,7 @@ facebook::jsi::Value NativeDOM::get(facebook::jsi::Runtime &rt, const facebook::
 			if (!document.snapshot) {
 				return facebook::jsi::Value::undefined();
 			}
-			const String id = from_utf8(args[1].getString(inner).utf8(inner));
+			const String id = require_string(inner, args[1], "NativeDOM.getElementById");
 			const Vector<int> *matches = document.snapshot->native_id_index.getptr(id);
 			return matches && !matches->is_empty() ? instance_handle(inner, document.snapshot->nodes.getptr((*matches)[0])) : facebook::jsi::Value::undefined();
 		});
@@ -225,13 +260,13 @@ facebook::jsi::Value NativeDOM::get(facebook::jsi::Runtime &rt, const facebook::
 	if (name == "getTagName") {
 		return host_fn(1, [this](facebook::jsi::Runtime &inner, const facebook::jsi::Value *args, size_t argc) {
 			ResolvedNode value = argc ? resolve(state.lock(), inner, args[0]) : ResolvedNode();
-			return facebook::jsi::String::createFromUtf8(inner, to_utf8(value.node ? "RN:" + value.node->view_name : String()));
+			return string_value(inner, value.node ? "RN:" + value.node->view_name : String(), "NativeDOM.getTagName");
 		});
 	}
 	if (name == "getTextContent") {
 		return host_fn(1, [this](facebook::jsi::Runtime &inner, const facebook::jsi::Value *args, size_t argc) {
 			ResolvedNode value = argc ? resolve(state.lock(), inner, args[0]) : ResolvedNode();
-			return facebook::jsi::String::createFromUtf8(inner, to_utf8(value.node ? value.node->text_content : String()));
+			return string_value(inner, value.node ? value.node->text_content : String(), "NativeDOM.getTextContent");
 		});
 	}
 	if (name == "getBorderWidth") {
@@ -306,7 +341,7 @@ facebook::jsi::Value NativeDOM::get(facebook::jsi::Runtime &rt, const facebook::
 			if (!shared) {
 				return facebook::jsi::Value(false);
 			}
-			const int pointer_id = int(args[1].getNumber());
+			const int pointer_id = require_integer(inner, args[1], "NativeDOM pointer capture");
 			if (name == "hasPointerCapture") {
 				return facebook::jsi::Value(shared->pointer_capture.has_capture(node->root_tag, node->surface_epoch, node->tag, pointer_id));
 			}

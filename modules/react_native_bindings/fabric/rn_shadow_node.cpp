@@ -1,5 +1,7 @@
 #include "rn_shadow_node.h"
 
+#include "../components/rn_host_descriptor.h"
+
 #include "core/templates/local_vector.h"
 
 Ref<RNShadowNode> RNShadowNode::clone(bool p_new_children, const Dictionary *p_new_props) const {
@@ -13,6 +15,7 @@ Ref<RNShadowNode> RNShadowNode::clone(bool p_new_children, const Dictionary *p_n
 	copy->view_name = view_name;
 	copy->props = p_new_props ? p_new_props->duplicate(true) : props.duplicate(true);
 	copy->event_target = event_target;
+	copy->descriptor = descriptor;
 	copy->declarative_prop_revisions = declarative_prop_revisions;
 	copy->validated_depth = p_new_children ? 1 : validated_depth;
 	copy->children_replaced = p_new_children;
@@ -61,7 +64,7 @@ bool RNShadowNode::is_within_depth_limit(const Ref<RNShadowNode> &p_root) {
 String RNShadowNode::collect_text() const {
 	String result;
 
-	if (view_name == "RCTRawText") {
+	if (descriptor && descriptor->get_traits().contributes_text) {
 		result += String(props.get("text", String()));
 	}
 

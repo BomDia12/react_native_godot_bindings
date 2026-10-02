@@ -13,6 +13,8 @@
   const commit = () => commitChildren([leaf, sibling]);
 
   globalThis.__godotMountingRegressionEvents = [];
+  globalThis.__godotInvalidShadowLookup =
+    ui.findShadowNodeByTag_DEPRECATED(1e100) === null;
   globalThis.__godotMountingRegression = (action, tag) => {
     switch (action) {
       case 'setup':

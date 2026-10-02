@@ -18,5 +18,7 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 | Ninja | CI `1.11` | Workflow |
 | Compiler | CI GCC 13 with C++20 | Workflow and Godot build |
 
-Only the Linux editor and headless runtime path are currently tested. Other platforms
-remain pending in the compatibility matrix.
+Only the Linux editor and headless runtime path are currently tested. The Godot Metro
+adapter map is pinned to the React Native 0.87.1 public module layout and must be reviewed
+with every React Native update. Other build/export targets remain pending in the
+compatibility matrix.
