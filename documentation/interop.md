@@ -17,6 +17,12 @@ embedded NUL, arrays, plain records, and `Uint8Array`. Typed wrappers represent 
 {$godot: 'int64', value: '9223372036854775807'}
 ```
 
+`INTEGER` schemas accept values from -9,007,199,254,740,991 through
+9,007,199,254,740,991, including native argument and record-field defaults. Use an
+`INT64` schema for larger signed 64-bit values. Defaults use the same nullability as
+explicit arguments or record fields: either the value schema or the argument/field
+may allow null.
+
 Functions are not data values. Event subscriptions and internal microtasks validate and
 retain JSI functions through dedicated callback paths. Symbols, BigInt, sparse arrays,
 class instances, arbitrary HostObjects, cycles, non-finite numbers, unsafe integers,
@@ -36,6 +42,9 @@ component, root, tag, generation, or revision context. Stable codes are
 `E_DUPLICATE_REGISTRATION`, `E_STALE_HANDLE`, `E_OBJECT_GONE`, `E_CANCELLED`,
 `E_SESSION_CLOSED`, `E_RUNTIME_RESET`, `E_NATIVE`, `E_UNHANDLED_REJECTION`, and
 `E_LIMIT`. Sync methods throw this shape; async methods reject with it.
+
+Native strings exceeding the aggregate payload ceiling report `E_LIMIT`; embedded NUL
+characters report `E_VALIDATION`.
 
 Unhandled Promise rejections are reported through the native diagnostic path in both
 production and development bundles. A rejection handled later produces the matching

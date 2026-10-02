@@ -550,8 +550,11 @@ bool to_js_value(jsi::Runtime &p_runtime, const Variant &p_value, const RNValueS
 				return fail(r_context, r_error, RNErrorCode::VALIDATION, "expected string", p_path);
 			}
 			const std::string utf8 = to_utf8(String(p_value));
-			if (utf8.find('\0') != std::string::npos || !add_payload(r_context, r_error, utf8.size(), p_path)) {
+			if (utf8.find('\0') != std::string::npos) {
 				return fail(r_context, r_error, RNErrorCode::VALIDATION, "strings cannot contain embedded NUL", p_path);
+			}
+			if (!add_payload(r_context, r_error, utf8.size(), p_path)) {
+				return false;
 			}
 			r_value = jsi::String::createFromUtf8(p_runtime, utf8);
 			return true;

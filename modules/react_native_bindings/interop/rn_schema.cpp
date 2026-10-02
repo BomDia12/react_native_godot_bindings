@@ -138,8 +138,10 @@ bool rn_validate_value_schema(const RNValueSchema &p_schema, RNError &r_error, c
 			return false;
 		}
 		if (field.has_default) {
+			RNValueSchema value_schema = *field.value;
+			value_schema.nullable = value_schema.nullable || field.nullable;
 			RNError default_error;
-			if (!rn_validate_native_value(field.default_value, *field.value, default_error, p_path + "." + String(field.name) + ".default")) {
+			if (!rn_validate_native_value(field.default_value, value_schema, default_error, p_path + "." + String(field.name) + ".default")) {
 				r_error = default_error;
 				return false;
 			}
@@ -161,8 +163,12 @@ bool rn_validate_method_schema(const RNMethodSchema &p_schema, RNError &r_error,
 		if (!rn_validate_value_schema(argument.value, r_error, p_path + ".args." + String(argument.name))) {
 			return false;
 		}
-		if (argument.has_default && !rn_validate_native_value(argument.default_value, argument.value, r_error, p_path + ".args." + String(argument.name) + ".default")) {
-			return false;
+		if (argument.has_default) {
+			RNValueSchema value_schema = argument.value;
+			value_schema.nullable = value_schema.nullable || argument.nullable;
+			if (!rn_validate_native_value(argument.default_value, value_schema, r_error, p_path + ".args." + String(argument.name) + ".default")) {
+				return false;
+			}
 		}
 	}
 	return rn_validate_value_schema(p_schema.result, r_error, p_path + ".result");
@@ -193,8 +199,14 @@ bool rn_validate_native_value(const Variant &p_value, const RNValueSchema &p_sch
 			return p_value.get_type() == Variant::BOOL || fail(r_error, "expected boolean", p_path);
 		case RNValueType::FLOAT:
 			return finite_number(p_value) || fail(r_error, "expected finite number", p_path);
-		case RNValueType::INTEGER:
-			return p_value.get_type() == Variant::INT || fail(r_error, "expected integer", p_path);
+		case RNValueType::INTEGER: {
+			if (p_value.get_type() != Variant::INT) {
+				return fail(r_error, "expected integer", p_path);
+			}
+			constexpr int64_t MAX_SAFE_INTEGER = 9007199254740991;
+			const int64_t value = p_value;
+			return (value >= -MAX_SAFE_INTEGER && value <= MAX_SAFE_INTEGER) || fail(r_error, "integer is outside Number.MAX_SAFE_INTEGER", p_path);
+		}
 		case RNValueType::STRING:
 			return string_without_nul(p_value) || fail(r_error, "expected a string without embedded NUL", p_path);
 		case RNValueType::ARRAY: {

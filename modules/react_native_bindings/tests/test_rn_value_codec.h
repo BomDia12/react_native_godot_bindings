@@ -54,4 +54,23 @@ TEST_CASE("[ReactNativeBindings][ValueCodec] empty object and session handles re
 	}
 }
 
+TEST_CASE("[ReactNativeBindings][ValueCodec] oversized native strings preserve payload-limit errors") {
+	HermesRuntimeSingleton *runtime = HermesRuntimeSingleton::get_singleton();
+	REQUIRE(runtime != nullptr);
+	runtime->reset();
+
+	const String oversized = String("x").repeat(16 * 1024 * 1024 + 1);
+	ERR_PRINT_OFF;
+	runtime->set_global("oversizedString", oversized);
+	ERR_PRINT_ON;
+	CHECK(runtime->get_last_error().contains("E_LIMIT"));
+	CHECK(runtime->get_last_error().contains("maximum aggregate payload"));
+	CHECK_FALSE(runtime->get_last_error().contains("NUL"));
+	CHECK(String(runtime->evaluate("typeof oversizedString")) == "undefined");
+
+	runtime->set_global("validString", String("valid"));
+	CHECK(runtime->get_last_error().is_empty());
+	CHECK(String(runtime->get_global("validString")) == "valid");
+}
+
 } // namespace TestRNValueCodec
