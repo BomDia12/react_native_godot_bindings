@@ -97,7 +97,7 @@ void RNLayoutTree::free_prepared_removed() {
 	prepared_removed_records.clear();
 }
 
-YGNodeRef RNLayoutTree::prepare_node(const Ref<RNShadowNode> &p_node, int p_parent_tag, HashMap<int, bool> &r_seen, String &r_error) {
+YGNodeRef RNLayoutTree::prepare_node(const Ref<RNShadowNode> &p_node, int p_parent_tag, const HashMap<int, RNPreparedHostState> *p_prepared_states, HashMap<int, bool> &r_seen, String &r_error) {
 	if (!is_layout_participant(p_node)) {
 		return nullptr;
 	}
@@ -126,10 +126,19 @@ YGNodeRef RNLayoutTree::prepare_node(const Ref<RNShadowNode> &p_node, int p_pare
 	}
 	if (p_node->descriptor->get_traits().measured_leaf) {
 		RNPreparedHostState prepared_state;
-		RNError prepare_error;
-		if (!p_node->descriptor->prepare(*p_node.ptr(), prepared_state, prepare_error)) {
-			r_error = prepare_error.describe();
-			return nullptr;
+		if (p_prepared_states) {
+			const RNPreparedHostState *state = p_prepared_states->getptr(p_node->tag);
+			if (!state) {
+				r_error = vformat("missing prepared descriptor state for measured tag %d", p_node->tag);
+				return nullptr;
+			}
+			prepared_state = *state;
+		} else {
+			RNError prepare_error;
+			if (!p_node->descriptor->prepare(*p_node.ptr(), prepared_state, prepare_error)) {
+				r_error = prepare_error.describe();
+				return nullptr;
+			}
 		}
 		const String text = prepared_state.text;
 		if (!record.context->measure_initialized) {
@@ -155,7 +164,7 @@ YGNodeRef RNLayoutTree::prepare_node(const Ref<RNShadowNode> &p_node, int p_pare
 		if (!is_layout_participant(child)) {
 			continue;
 		}
-		YGNodeRef yoga_child = prepare_node(child, p_node->tag, r_seen, r_error);
+		YGNodeRef yoga_child = prepare_node(child, p_node->tag, p_prepared_states, r_seen, r_error);
 		if (!yoga_child) {
 			return nullptr;
 		}
@@ -197,7 +206,7 @@ void RNLayoutTree::capture_layout(YGNodeRef p_node, HashMap<int, Rect2> &r_layou
 	}
 }
 
-bool RNLayoutTree::prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, HashMap<int, Rect2> &r_layouts, String &r_error) {
+bool RNLayoutTree::prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, HashMap<int, Rect2> &r_layouts, String &r_error, const HashMap<int, RNPreparedHostState> *p_prepared_states) {
 	r_error = String();
 	if (p_root.is_null()) {
 		r_error = "layout root is null";
@@ -210,7 +219,7 @@ bool RNLayoutTree::prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_const
 		return true;
 	}
 	HashMap<int, bool> seen;
-	YGNodeRef yoga_root = prepare_node(p_root, 0, seen, r_error);
+	YGNodeRef yoga_root = prepare_node(p_root, 0, p_prepared_states, seen, r_error);
 	if (!yoga_root) {
 		return false;
 	}

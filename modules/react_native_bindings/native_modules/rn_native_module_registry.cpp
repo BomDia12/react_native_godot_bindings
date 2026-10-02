@@ -750,5 +750,5 @@ void RNNativeModuleRegistry::before_runtime_reset_locked(facebook::jsi::Runtime 
 
 bool RNNativeModuleRegistry::has_pending_work() const {
 	std::lock_guard<std::mutex> lock(delivery_mutex);
-	return !jobs.empty() || !completions.empty() || !events.empty();
+	return !jobs.empty() || !completions.empty() || !events.empty() || !pending_promises.empty() || !subscriptions.empty();
 }

@@ -17,6 +17,6 @@ struct RNMountingTransaction {
 	Vector<RNMountingMutation> mutations;
 	HashMap<int, Rect2> prepared_layouts;
 	HashMap<int, RNPreparedHostState> prepared_states;
+	HashMap<int, std::shared_ptr<const RNHostDescriptor>> prepared_host_descriptors;
 	HashMap<int, Variant> captured_native_states;
-	Vector<ObjectID> detached_new_hosts;
 };

@@ -50,7 +50,7 @@ class RNLayoutTree {
 	HashMap<int, Rect2> layouts;
 	RNLayoutTreeStats stats;
 
-	YGNodeRef prepare_node(const Ref<RNShadowNode> &p_node, int p_parent_tag, HashMap<int, bool> &r_seen, String &r_error);
+	YGNodeRef prepare_node(const Ref<RNShadowNode> &p_node, int p_parent_tag, const HashMap<int, RNPreparedHostState> *p_prepared_states, HashMap<int, bool> &r_seen, String &r_error);
 	void capture_layout(YGNodeRef p_node, HashMap<int, Rect2> &r_layouts) const;
 	void free_prepared_removed();
 	void free_all();
@@ -59,7 +59,7 @@ public:
 	RNLayoutTree();
 	~RNLayoutTree();
 
-	bool prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, HashMap<int, Rect2> &r_layouts, String &r_error);
+	bool prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, HashMap<int, Rect2> &r_layouts, String &r_error, const HashMap<int, RNPreparedHostState> *p_prepared_states = nullptr);
 	void publish();
 	bool rebuild(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, String &r_error);
 	void clear();
