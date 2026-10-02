@@ -5,6 +5,7 @@
 
 #include "core/string/print_string.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -598,14 +599,26 @@ void RNNativeModuleRegistry::queue_event(const String &p_module, const StringNam
 
 void RNNativeModuleRegistry::cancel_request(const String &p_request_token, const RNError &p_error) {
 	auto pending = pending_promises.find(to_utf8(p_request_token));
-	if (pending == pending_promises.end() || pending->second.settled) {
+	if (pending == pending_promises.end() || pending->second.settled || cancelled_requests.has(p_request_token)) {
 		return;
 	}
 	cancelled_requests.insert(p_request_token);
+	NativeCompletion cancellation;
+	cancellation.request_token = p_request_token;
+	cancellation.generation = generation;
+	cancellation.error = p_error;
+	{
+		std::lock_guard<std::mutex> lock(delivery_mutex);
+		completions.erase(
+				std::remove_if(completions.begin(), completions.end(), [&p_request_token](const NativeCompletion &p_completion) {
+					return p_completion.request_token == p_request_token;
+				}),
+				completions.end());
+		completions.push_back(cancellation);
+	}
 	if (std::shared_ptr<RNNativeModule> *module = instances.getptr(pending->second.module_name)) {
 		(*module)->cancel(p_request_token);
 	}
-	queue_completion(p_request_token, generation, Variant(), p_error);
 }
 
 void RNNativeModuleRegistry::reject_promise_locked(facebook::jsi::Runtime &p_runtime, PendingPromise &p_pending, const RNError &p_error) {

@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {createRequire} = require('node:module');
 const path = require('node:path');
+const vm = require('node:vm');
 const {isForeignPlatformModule} = require('../resolver.cjs');
 
 const sampleRoot = path.resolve(__dirname, '../../../samples/view-text');
@@ -34,6 +35,17 @@ for (const dev of [false, true]) {
         assert.match(result.code, new RegExp(marker));
       }
       assert.doesNotMatch(result.code, /wrong-native-js|wrong-generic-js/);
+      const context = {console};
+      context.globalThis = context;
+      vm.runInNewContext(result.code, context);
+      assert.equal(
+        context.__godotResolverFixture.pointerEnterSkipsBubbling,
+        true,
+      );
+      assert.equal(
+        context.__godotResolverFixture.pointerLeaveSkipsBubbling,
+        true,
+      );
     },
   );
 }

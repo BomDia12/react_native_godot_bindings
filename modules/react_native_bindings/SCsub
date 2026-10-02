@@ -67,6 +67,10 @@ module_source_dirs = [
 for subdir in module_source_dirs:
 	env_rn.add_source_files(module_objects, "%s/*.cpp" % subdir)
 
+if env["tests"]:
+	env_rn.Append(CPPDEFINES=["TESTS_ENABLED"])
+	env_rn.add_source_files(module_objects, "tests/*.cpp")
+
 env_rn.Depends(module_objects, [hermes_lib, hermes_jsi_lib])
 env.modules_sources.extend(module_objects)
 

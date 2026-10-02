@@ -18,12 +18,19 @@
 #include "core/error/error_macros.h"
 #include "core/object/class_db.h"
 
+#ifdef TESTS_ENABLED
+void rn_force_link_native_module_registry_tests();
+#endif
+
 static ReactNativeFileSingleton *react_native_file_singleton = nullptr;
 static HermesRuntimeSingleton *hermes_runtime_singleton = nullptr;
 static ReactNativeRuntimeCoordinator *react_native_runtime_coordinator = nullptr;
 
 void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_CORE) {
+#ifdef TESTS_ENABLED
+		rn_force_link_native_module_registry_tests();
+#endif
 		ClassDB::register_class<HermesRuntimeSingleton>();
 		ClassDB::register_class<ReactNativeFileSingleton>();
 

@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -715,10 +716,14 @@ facebook::jsi::Value FabricUIManager::report_surface_error(facebook::jsi::Runtim
 }
 
 facebook::jsi::Value FabricUIManager::find_shadow_node_by_tag(facebook::jsi::Runtime &rt, const facebook::jsi::Value *p_args, size_t p_argc) {
-	if (p_argc != 1 || !p_args[0].isNumber() || !std::isfinite(p_args[0].getNumber()) || std::trunc(p_args[0].getNumber()) != p_args[0].getNumber()) {
+	if (p_argc != 1 || !p_args[0].isNumber()) {
 		return facebook::jsi::Value::null();
 	}
-	const int tag = int(p_args[0].getNumber());
+	const double value = p_args[0].getNumber();
+	if (!std::isfinite(value) || std::trunc(value) != value || value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+		return facebook::jsi::Value::null();
+	}
+	const int tag = int(value);
 	auto shared = state.lock();
 	if (!shared) {
 		return facebook::jsi::Value::null();

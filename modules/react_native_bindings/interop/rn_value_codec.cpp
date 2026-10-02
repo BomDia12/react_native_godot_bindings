@@ -1,5 +1,7 @@
 #include "rn_value_codec.h"
 
+#include "core/templates/hash_set.h"
+
 #include <jsi/jsi.h>
 
 #include <cmath>
@@ -587,8 +589,16 @@ bool to_js_value(jsi::Runtime &p_runtime, const Variant &p_value, const RNValueS
 			jsi::Object result(p_runtime);
 			r_context.stats.allocated_containers++;
 			const Array keys = source.keys();
+			HashSet<String> converted_keys;
 			for (int i = 0; i < keys.size(); ++i) {
-				const String key = keys[i];
+				if (keys[i].get_type() != Variant::STRING && keys[i].get_type() != Variant::STRING_NAME) {
+					return fail(r_context, r_error, RNErrorCode::VALIDATION, "record keys must be strings", p_path);
+				}
+				const String key = keys[i].get_type() == Variant::STRING ? String(keys[i]) : String(StringName(keys[i]));
+				if (converted_keys.has(key)) {
+					return fail(r_context, r_error, RNErrorCode::VALIDATION, "record keys must remain unique strings", p_path);
+				}
+				converted_keys.insert(key);
 				const std::string key_utf8 = to_utf8(key);
 				if (key_utf8.find('\0') != std::string::npos) {
 					return fail(r_context, r_error, RNErrorCode::VALIDATION, "record keys cannot contain an embedded NUL", p_path);

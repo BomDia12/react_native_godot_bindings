@@ -11,6 +11,14 @@ const bubble = name => ({
   },
 });
 
+const enterLeave = name => ({
+  phasedRegistrationNames: {
+    captured: name + 'Capture',
+    bubbled: name,
+    skipBubbling: true,
+  },
+});
+
 const bubblingEventTypes = {
   topBlur: bubble('onBlur'),
   topClick: bubble('onClick'),
@@ -23,8 +31,8 @@ const bubblingEventTypes = {
   topTouchStart: bubble('onTouchStart'),
   topPointerCancel: bubble('onPointerCancel'),
   topPointerDown: bubble('onPointerDown'),
-  topPointerEnter: bubble('onPointerEnter'),
-  topPointerLeave: bubble('onPointerLeave'),
+  topPointerEnter: enterLeave('onPointerEnter'),
+  topPointerLeave: enterLeave('onPointerLeave'),
   topPointerMove: bubble('onPointerMove'),
   topPointerOut: bubble('onPointerOut'),
   topPointerOver: bubble('onPointerOver'),

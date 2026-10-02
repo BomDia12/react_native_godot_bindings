@@ -1,4 +1,5 @@
 import Platform from 'react-native/Libraries/Utilities/Platform';
+import BaseViewConfig from 'react-native/Libraries/NativeComponent/BaseViewConfig';
 import js from './selected-js';
 import jsx from './selected-jsx';
 import ts from './selected-ts';
@@ -19,4 +20,10 @@ global.__godotResolverFixture = {
   tsx,
   nativeFallback,
   genericFallback,
+  pointerEnterSkipsBubbling:
+    BaseViewConfig.bubblingEventTypes.topPointerEnter.phasedRegistrationNames
+      .skipBubbling === true,
+  pointerLeaveSkipsBubbling:
+    BaseViewConfig.bubblingEventTypes.topPointerLeave.phasedRegistrationNames
+      .skipBubbling === true,
 };

@@ -35,6 +35,8 @@ func _ready() -> void:
 	HermesRuntime.evaluate(FileAccess.get_file_as_string("res://smoke/tests/mounting_regressions/mounting_regressions.js"), "mounting-regressions.js")
 	if not expect(HermesRuntime.get_last_error().is_empty(), "fixture evaluation failed"):
 		return
+	if not expect(HermesRuntime.get_global("__godotInvalidShadowLookup"), "out-of-range shadow lookup did not return null"):
+		return
 	action("setup")
 	await frames()
 	host = surface.get_node("ReactNativeMountContainer").get_child(0)
