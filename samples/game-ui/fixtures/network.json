@@ -1,0 +1,27 @@
+{
+  "routes": {
+    "/inventory": {
+      "json": [
+        {
+          "id": "potion",
+          "title": "Health potion",
+          "quantity": 4
+        }
+      ]
+    },
+    "/icon.png": {
+      "asset": "samples/game-ui/assets/item.png"
+    }
+  },
+  "websocket_messages": [
+    {
+      "item": "potion",
+      "quantity": 7
+    }
+  ],
+  "tls": {
+    "certificate": "samples/game-ui/fixtures/tls/ca.pem",
+    "key": "samples/game-ui/fixtures/tls/server-key.pem",
+    "ca": "samples/game-ui/fixtures/tls/ca.pem"
+  }
+}

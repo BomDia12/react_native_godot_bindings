@@ -7,6 +7,7 @@
 #include "core/io/resource_loader.h"
 #include "scene/theme/theme_db.h"
 
+#include <algorithm>
 #include <cmath>
 
 bool rn_resolve_font(const Dictionary &p_props, const RNHostContext &p_context, RNFontSnapshot &r_font, RNError &r_error) {
@@ -51,8 +52,25 @@ bool rn_resolve_font(const Dictionary &p_props, const RNHostContext &p_context, 
 			r_error = RNError::make(RNErrorCode::VALIDATION, "fontSize must be finite and in (0, 4096]", "font.resolve", "props.fontSize");
 			return false;
 		}
-		r_font.size = MAX(1, int(Math::round(size)));
 	}
+	const Variant allow = p_props.get("allowFontScaling", true);
+	const Variant cap = p_props.get("maxFontSizeMultiplier", Variant());
+	if (allow.get_type() != Variant::BOOL || (cap.get_type() != Variant::NIL && ((cap.get_type() != Variant::INT && cap.get_type() != Variant::FLOAT) || !std::isfinite(double(cap)) || double(cap) < 0 || (double(cap) > 0 && double(cap) < 1)))) {
+		r_error = RNError::make(RNErrorCode::VALIDATION, "Invalid font scaling properties", "font.resolve");
+		return false;
+	}
+	r_font.multiplier = bool(allow) ? p_context.font_scale : 1;
+	if (bool(allow) && cap.get_type() != Variant::NIL && double(cap) > 0) {
+		r_font.multiplier = std::min(r_font.multiplier, double(cap));
+	}
+	const double effective = double(size) * r_font.multiplier;
+	if (!std::isfinite(effective) || effective <= 0 || effective > 65536) {
+		r_error = RNError::make(RNErrorCode::VALIDATION, "Scaled font size exceeds native bounds", "font.resolve");
+		return false;
+	}
+	r_font.size = MAX(1, int(Math::round(effective)));
+	r_font.revision = hash_murmur3_one_64(p_context.metrics_revision, r_font.revision);
+	r_font.revision = hash_murmur3_one_double(r_font.multiplier, r_font.revision);
 	if (p_props.has("color") && !RNViewStyle::color_of(p_props, "color", r_font.color)) {
 		r_error = RNError::make(RNErrorCode::VALIDATION, "Invalid text color", "font.resolve", "props.color");
 		return false;

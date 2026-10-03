@@ -1,0 +1,136 @@
+# Native services and game validation
+
+The Linux editor/headless application gate passed locally on 2026-10-03. The
+versioned application is `samples/game-ui`; its built standalone copy is staged at
+`../godotProjects/Phase6BGame`. Three GDScript enemies and a Godot-owned inventory
+drive four independent RN surfaces through declared script capabilities. Direct
+and repeated frame updates work with no server and start zero HTTP requests.
+
+## Provenance
+
+The base pins in `baseline.env` are unchanged: Godot
+`ed1daf0bf001b61586d9930840f2f1394092c079`, Hermes
+`3477757eb2475555cf8d8df24bfb1deb0613880d` (`250829098.0.17`), React Native
+`0.87.1`, React `19.2.3`, Metro `0.87.0`, and Yoga's recorded RN revision
+`a59eff64fa907ed6e919fafe6cbd26d1d54c2de3`.
+
+The existing additive Godot patch set is unchanged, with identity
+`8a31c29161c6326aa93ae6bf1a3f7e4e4605d5ca29ecc757122808711234bd25`.
+Local gates used the verified `.phase6a/godot` worktree through
+`GODOT_SOURCE_DIR`, leaving unrelated changes in the default engine checkout
+untouched. Provenance checks validate the selected checkout against the pin and
+declared patch manifest. The new test-only dependency is `websockets==15.0.1`;
+production HTTP and sockets use Godot's native transports.
+
+## Completed gates
+
+| Gate | Result |
+|---|---|
+| Pinned dev editor/module build, tests and warnings as errors | Passed |
+| Module contracts | 96 cases, 5,091 assertions passed |
+| Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
+| Python script/fixture contracts | 26 tests passed |
+| JavaScript contracts, after `npm ci` in both packages | 18 tests passed per package |
+| Complete headless suite | All 19 discovered manifests passed |
+| Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
+| Formatting, tracked smoke inputs and engine provenance | Passed |
+| Standalone staged project | Imported and ran all four application roots successfully |
+
+The headless suite retains all eleven existing renderer/component scenarios and
+adds `game-direct-sync`, `game-frame-sync`, `game-root-lifecycle`,
+`game-inventory-ui`, `game-http-binary`, `game-websocket-sync`,
+`game-theme-geometry`, and `game-presentations`. Each manifest runs once in the
+common runner. Success markers follow native identity/value/geometry checks,
+actual React observations and, for network scenarios, local server records.
+
+Contracts cover monotonic scheduling, a shared native/timer/idle callback budget,
+per-callback Hermes checkpoints and enqueue-ordered native events/completions;
+typed Dictionary schemas/defaults and unrelated script capabilities; session and
+surface isolation; native inherited/capped/disabled font scaling; settings bounds;
+Blob chunks exceeding the codec ceiling, collector reclamation and URL/native
+pins; and cookie scope/expiry/bounds.
+
+The application suite checks root removal/re-entry/reload and generation cleanup,
+direct inventory commands, lists/editors/assets, application metrics and locale
+RTL invalidation, native pause/resume, same-root/custom Alert and Godot bubbling.
+Real HTTPRequest scenarios include binary/NUL, non-2xx, gzip, verified fixture TLS,
+redirects/cookies, multipart, cancellation/timeout, shared image cache/credential
+isolation, pool reuse and native backing reclamation. WebSocketPeer scenarios
+include text/binary/protocol, ordered backpressure, message limits, graceful and
+unclean close, and reset cleanup before Godot-authoritative UI updates.
+
+Local logs are under `artifacts/phase6b-*.log` and `artifacts/smoke-logs/`; CI
+uploads smoke/import/fixture diagnostics on failure. Reproduce from the binding
+repository after bootstrap:
+
+```sh
+export GODOT_SOURCE_DIR="$PWD/.phase6a/godot" # or the clean pinned default checkout
+scripts/verify_provenance.py
+scripts/check_format.sh
+python3 -m unittest discover -s scripts/tests
+npm --prefix samples/view-text ci
+npm --prefix samples/view-text run test:godot
+npm --prefix samples/game-ui ci
+npm --prefix samples/game-ui run test:godot
+scripts/build_godot.sh -j2 accesskit=no module_mono_enabled=no
+scripts/run_cpp_tests.sh
+"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64" --headless --test --test-case='*[TextEdit]*,*[RichTextLabel]*'
+python3 scripts/run_smoke_tests.py
+scripts/run_component_display.sh
+python3 scripts/stage_game_demo.py
+"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64" --headless --editor --path ../godotProjects/Phase6BGame --import
+```
+
+Install `requirements-ci.txt` in the Python environment used by the runner, or set
+`SMOKE_FIXTURE_PYTHON` to that environment's interpreter. The display gate requires
+Xvfb, xauth and software OpenGL, or `COMPONENT_DISPLAY_READY=1` on an actual display.
+See [demo instructions](../samples/game-ui/DEMO.md) for interactive play.
+
+## Display and input-method boundary
+
+Xvfb verifies native focus, selection/editing, clipping, popup/window lifetime,
+root input ordering, Alert presentation and clipboard round-trip. This host has
+no XIM input-method server; it emits the exact missing-XIM warning in the display
+allowlist. Native composition notification/replacement/rollback contracts pass,
+but no OS IME candidate-window result is claimed.
+
+To reproduce the remaining real Linux input-method check:
+
+1. Start an actual Linux desktop with an active IBus or Fcitx input method and
+   launch the pinned editor from that session, retaining its normal input-method
+   environment.
+2. Build the gallery and open `samples/game-ui` with
+   `res://smoke/tests/component_contracts/SmokeMain.tscn`, or open the staged game.
+3. Focus the uncontrolled editor, compose non-Latin text, inspect candidate-window
+   placement, commit/cancel composition and verify one insertion. Repeat in the
+   controlled editor and the native Window editor.
+4. During composition, change the controlled value and reload/remove the owning
+   surface; check native selection/focus and absence of stale callbacks or duplicate
+   insertion. Record desktop/backend/input-method versions and observed results.
+
+Result on this host: actual candidate-window behavior remains unverified because
+only Xvfb is available. Broader backend IME conformance remains pending.
+
+## Declared limits and compatibility review
+
+HTTP exposes complete responses, with synthesized XHR state progression rather
+than incremental responseText. Appearance is application-controlled unless host
+following is opted in. SafeAreaView retains the upstream non-iOS View fallback;
+RefreshControl remains pending and the game uses an explicit refresh button.
+Unsupported Clipboard/Linking/Vibration providers reject explicitly. Headless
+Window evidence covers logical content/lifetime, with actual native presentation
+checked separately on the display lane.
+
+Full animation/transform/rich-text fidelity, accessibility/AccessKit, screenshot
+diffs, handheld behavior, other export targets, 3D and complete upstream renderer
+adoption remain outside this gate. Public RN compatibility rows remain partial or
+pending where those differences or missing evidence apply.
+
+The bounded compatibility review inspected tagged `v0.87.1` public exports,
+Flow/types, FabricUIManager, style contracts and the relevant Alert, timers,
+networking/Blob/WebSocket, AppRegistry, appearance/metrics/lifecycle, I18n,
+Keyboard, Clipboard, Linking, Vibration and emitter implementations. Public row
+IDs and existing single-platform exclusions were retained; no public surface was
+added or removed. Service/component/style evidence and application/test rows were
+updated. Godot-only helpers and internal hooks remain in extension documentation,
+outside the RN public matrices.

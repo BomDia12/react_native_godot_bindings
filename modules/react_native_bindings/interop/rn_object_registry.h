@@ -47,7 +47,16 @@ public:
 	String register_object(const String &p_session_token, ObjectID p_object, const String &p_capability, RNError &r_error);
 	Object *resolve_object(const String &p_token, const String &p_session_token, const String &p_capability, RNError &r_error);
 	void unregister_object(ObjectID p_object);
+	void unregister_handle(const String &p_token) { objects.erase(p_token); }
 	void close_surface(int p_root_tag, uint64_t p_epoch);
 	void clear_generation();
+	int session_count() const {
+		int count = 0;
+		for (const auto &entry : sessions) {
+			count += entry.value.open ? 1 : 0;
+		}
+		return count;
+	}
+	int object_count() const { return objects.size(); }
 	uint64_t get_generation() const { return generation; }
 };

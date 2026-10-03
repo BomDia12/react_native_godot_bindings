@@ -9,15 +9,18 @@ if [[ -z "$GODOT_BINARY" ]]; then
     exit 1
 fi
 mkdir -p "$REPO_ROOT/artifacts/smoke-logs"
-DISPLAY_LOG="$REPO_ROOT/artifacts/smoke-logs/game-component-display.log"
-COMMAND=("$GODOT_BINARY" --path "$REPO_ROOT/samples/game-ui" --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy res://smoke/tests/component_contracts/SmokeMain.tscn)
-set +e
-if [[ ${COMPONENT_DISPLAY_READY:-0} == 1 ]]; then
-    timeout 90s "${COMMAND[@]}" > "$DISPLAY_LOG" 2>&1
-else
-    command -v xvfb-run >/dev/null || { echo "Install Xvfb to run the native display gate." >&2; exit 1; }
-    LIBGL_ALWAYS_SOFTWARE=1 timeout 90s xvfb-run -a -s '-screen 0 1280x960x24 -nolisten tcp' "${COMMAND[@]}" > "$DISPLAY_LOG" 2>&1
-fi
-DISPLAY_EXIT=$?
-set -e
-python3 "$SCRIPT_DIR/check_baseline_log.py" --log "$DISPLAY_LOG" --allowlist "$REPO_ROOT/documentation/expected-warnings-component-display.txt" --exit-code "$DISPLAY_EXIT" --test-id game-component-contracts
+for CASE in component_contracts presentations theme_geometry; do
+    TEST_ID="game-${CASE//_/-}"
+    DISPLAY_LOG="$REPO_ROOT/artifacts/smoke-logs/$TEST_ID-display.log"
+    COMMAND=("$GODOT_BINARY" --path "$REPO_ROOT/samples/game-ui" --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy "res://smoke/tests/$CASE/SmokeMain.tscn")
+    set +e
+    if [[ ${COMPONENT_DISPLAY_READY:-0} == 1 ]]; then
+        timeout 90s "${COMMAND[@]}" > "$DISPLAY_LOG" 2>&1
+    else
+        command -v xvfb-run >/dev/null || { echo "Install Xvfb to run the native display gate." >&2; exit 1; }
+        LIBGL_ALWAYS_SOFTWARE=1 timeout 90s xvfb-run -a -s '-screen 0 1280x960x24 -nolisten tcp' "${COMMAND[@]}" > "$DISPLAY_LOG" 2>&1
+    fi
+    DISPLAY_EXIT=$?
+    set -e
+    python3 "$SCRIPT_DIR/check_baseline_log.py" --log "$DISPLAY_LOG" --allowlist "$REPO_ROOT/documentation/expected-warnings-component-display.txt" --exit-code "$DISPLAY_EXIT" --test-id "$TEST_ID"
+done

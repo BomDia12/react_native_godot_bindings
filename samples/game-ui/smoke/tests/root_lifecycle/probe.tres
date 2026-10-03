@@ -1,0 +1,8 @@
+[gd_resource type="RNSceneBinding" format=3]
+
+[resource]
+capability = "ClimateSensor"
+snapshot_method = &"snapshot"
+snapshot_schema = {"type": "record", "fields": {"temperature": {"type": "number"}, "label": {"type": "string"}}}
+commands = {"adjust": {"method": "adjust", "mode": "sync", "arguments": [{"name": "amount", "value": {"type": "number"}, "optional": true}], "result": {"type": "number"}}, "restart": {"method": "restart_ui", "mode": "sync", "arguments": [], "result": {"type": "void"}}}
+signals = {"sampled": {"event": "sample", "arguments": ["temperature", "label"], "payload": {"type": "record", "fields": {"temperature": {"type": "number"}, "label": {"type": "string"}}}}}

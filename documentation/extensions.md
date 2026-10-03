@@ -163,3 +163,63 @@ limits under `react_native/images/` are snapshotted per runtime generation; cach
 zero disables cache ownership, while other ceilings must be positive. Mounted
 textures retain their budget reservation after cache eviction. Static PNG/JPEG/WebP
 codecs and imported native textures are bounded before decoding or allocation.
+
+## Script-authored scene capabilities
+
+The frozen native registry contains the generic GodotScene module, not application
+schemas. New scripts/resources attach an RNSceneBinding without recompiling C++:
+
+```gdscript
+var resource := RNSceneBinding.new()
+resource.capability = "ClimateSensor"
+resource.snapshot_method = &"snapshot"
+resource.snapshot_schema = {"type": "record", "fields": {"temperature": {"type": "number"}}}
+resource.commands = {"adjust": {"method": "adjust", "mode": "sync",
+    "arguments": [{"name": "amount", "value": {"type": "number"}}],
+    "result": {"type": "number"}}}
+var error := root.attach_scene_binding(sensor, resource)
+```
+
+Schema versioning belongs to the project: change `schema_version` with incompatible
+payloads. [Interop](interop.md#script-capability-resources) describes validation and
+readiness/sequence ownership. The lifecycle smoke also loads an equivalent `.tres`.
+
+## Root registration and Alerts
+
+```js
+import {GodotAppRegistry, useGodotAlert} from 'react-native-godot/app-registry';
+GodotAppRegistry.registerComponent('Inventory', () => Inventory, {alerts: true});
+// Inside Inventory: const alert = useGodotAlert(); await alert('Saved', 'Done');
+```
+
+Options are Godot helper options; upstream AppRegistry's third argument remains the
+`section` boolean (`options.section` forwards it). `alerts` defaults to false; true
+uses a local Godot AcceptDialog. A custom function receives the copied presentation
+payload and returns/resolves `{buttonId, dismissed}` or `{handled:false}` to decline.
+The request stays bound to its originating root/epoch. `useGodotRoot()` exposes that
+session/origin and root-bound alert function; store the function for timers/promises.
+No ambient scope survives a microtask automatically.
+
+A root can set `set_alert_handler(callable)`; the application fallback is installed with `GodotAlerts.set_alert_handler(callable)`.
+The Callable receives `(requestId, origin, payload)` and completes asynchronously
+with `root.complete_alert(requestId, {buttonId: 0, dismissed: false})`; the application
+singleton `GodotAlerts.complete_alert(requestId, result)` completes unattributed requests.
+Handlers complete explicitly; their return value is ignored.
+Default originless requests remain originless. Decline bubbles once; presenter failure,
+origin destruction/reload and stale stored callbacks cancel rather than selecting a
+sibling. Native dialogs attach to the origin's presentation Window; Window's React
+content retains the same root context.
+
+## Native service lifecycle
+
+Modules can implement `shutdown`, `on_session_closed`,
+`on_surface_closed`, `on_scene_binding_changed`, `process_frame`, `has_pending_work`
+and `on_result_delivered`. The registry owns generation instances and invokes shutdown
+before JSI caches disappear. Copied native events are bounded and immutable; listener
+snapshots retain a cursor when the frame budget is exhausted. Hermes checkpoints follow
+each delivered callback. Native jobs never carry JSI references.
+
+The shared image service receives the pooled HTTP adapter before bundle evaluation.
+Its start/complete/cancel contract and existing descriptor publication hooks remain as
+above; failed preparation starts no transport work. A module completion must honor the
+generation and release retained response ownership when delivery/conversion fails.

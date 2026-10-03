@@ -4,15 +4,24 @@
 #include "../components/rn_host_descriptor_registry.h"
 #include "../fabric/fabric_ui_manager.h"
 #include "../fabric/native_dom.h"
+#include "../native_modules/rn_blob_service.h"
+#include "../native_modules/rn_http_service.h"
 #include "../native_modules/rn_native_module_registry.h"
 #include "../root_view/react_native_root_view.h"
 #include "../singletons/hermes_runtime_singleton.h"
 #include "../singletons/react_native_file_singleton.h"
+#include "rn_runtime_scheduler.h"
 
+#include "core/config/engine.h"
+#include "core/config/project_settings.h"
 #include "core/error/error_macros.h"
+#include "core/io/config_file.h"
 #include "core/object/callable_mp.h"
 #include "core/object/object.h"
+#include "core/string/translation_server.h"
 #include "scene/main/scene_tree.h"
+#include "scene/main/window.h"
+#include "servers/text/text_server.h"
 
 #include <algorithm>
 #include <climits>
@@ -22,7 +31,6 @@
 namespace {
 constexpr const char *RUN_APPLICATION_FUNCTION = "__godotRunApplication";
 constexpr const char *STOP_APPLICATION_FUNCTION = "__godotStopApplication";
-constexpr const char *FLUSH_TIMERS_FUNCTION = "__godotFlushTimers";
 constexpr const char *NATIVE_DOM_GLOBAL = "__godotNativeDOM";
 constexpr const char *HOST_DESCRIPTORS_GLOBAL = "__godotHostDescriptors";
 constexpr const char *NATIVE_MODULES_GLOBAL = "__godotNativeModules";
@@ -190,6 +198,7 @@ ReactNativeRuntimeCoordinator::ReactNativeRuntimeCoordinator() {
 	native_dom = std::make_shared<NativeDOM>(state);
 	descriptor_jsi_registry = std::make_shared<RNHostDescriptorJSIRegistry>(state->descriptor_registry);
 	native_module_registry = std::make_shared<RNNativeModuleRegistry>(state);
+	scheduler = std::make_shared<RNRuntimeScheduler>();
 
 	HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton();
 	ERR_FAIL_NULL(hermes);
@@ -197,6 +206,7 @@ ReactNativeRuntimeCoordinator::ReactNativeRuntimeCoordinator() {
 	hermes->install_host_object(NATIVE_DOM_GLOBAL, native_dom);
 	hermes->install_host_object(HOST_DESCRIPTORS_GLOBAL, descriptor_jsi_registry);
 	hermes->install_host_object(NATIVE_MODULES_GLOBAL, native_module_registry);
+	hermes->install_host_object("__godotScheduler", scheduler);
 
 	ReactNativeFileSingleton *files = ReactNativeFileSingleton::get_singleton();
 	if (files) {
@@ -208,6 +218,15 @@ void ReactNativeRuntimeCoordinator::shutdown_scene() {
 	state->shutting_down = true;
 	disconnect_frame_signal();
 	native_module_registry->begin_generation(0);
+	if (state->http && ObjectDB::get_instance(state->http_id)) {
+		state->http->shutdown();
+		state->http.reset();
+	}
+	if (state->blobs) {
+		state->blobs->shutdown();
+		state->blobs.reset();
+	}
+	state->images.reset();
 	clear_generation_state();
 }
 
@@ -219,6 +238,8 @@ ReactNativeRuntimeCoordinator::~ReactNativeRuntimeCoordinator() {
 		files->disconnect("react_native_file_changed", callable_mp(this, &ReactNativeRuntimeCoordinator::_on_react_native_file_changed));
 	}
 	if (HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton()) {
+		hermes->uninstall_host_object("__godotBlobCollectors");
+		hermes->uninstall_host_object("__godotScheduler");
 		hermes->uninstall_host_object(NATIVE_MODULES_GLOBAL);
 		hermes->uninstall_host_object(NATIVE_DOM_GLOBAL);
 		hermes->uninstall_host_object(HOST_DESCRIPTORS_GLOBAL);
@@ -296,6 +317,45 @@ bool ReactNativeRuntimeCoordinator::ensure_bundle() {
 	if (state->bundle_generation == generation && state->bundle_status == RNBundleStatus::FAILED) {
 		return false;
 	}
+	RNError settings_error;
+	if (!RNServiceSettings::snapshot(state->service_settings, settings_error)) {
+		state->bundle_status = RNBundleStatus::FAILED;
+		state->bundle_error = settings_error.describe();
+		return false;
+	}
+	state->font_scale = state->service_settings.font_scale;
+	ProjectSettings *project = ProjectSettings::get_singleton();
+	Ref<ConfigFile> direction;
+	direction.instantiate();
+	direction->load("user://react_native_direction.cfg");
+	state->swap_rtl = direction->get_value("direction", "swap_rtl", project->get_setting("react_native/i18n/swap_rtl", true));
+	state->force_rtl = direction->get_value("direction", "force_rtl", project->get_setting("react_native/i18n/force_rtl", false));
+	state->allow_rtl = direction->get_value("direction", "allow_rtl", project->get_setting("react_native/i18n/allow_rtl", true));
+	state->is_rtl = state->force_rtl || (state->allow_rtl && TextServerManager::get_singleton()->get_primary_interface()->is_locale_right_to_left(TranslationServer::get_singleton()->get_locale()));
+	if (state->blobs) {
+		state->blobs->shutdown();
+	}
+	if (state->http && ObjectDB::get_instance(state->http_id)) {
+		state->http->shutdown();
+	}
+	state->http.reset();
+	state->blobs = std::make_shared<RNBlobService>(state->service_settings.limit("binary/max_blob_bytes"));
+	hermes->install_host_object("__godotBlobCollectors", state->blobs->collector_provider());
+	RNHTTPService *http = memnew(RNHTTPService(state->service_settings));
+	SceneTree *tree = SceneTree::get_singleton();
+	if (!tree || !tree->get_root()) {
+		memdelete(http);
+		state->bundle_error = "HTTP services require a SceneTree.";
+		state->bundle_status = RNBundleStatus::FAILED;
+		return false;
+	}
+	tree->get_root()->call_deferred("add_child", http);
+	state->http_id = http->get_instance_id();
+	state->http = std::shared_ptr<RNHTTPService>(http, [id = state->http_id](RNHTTPService *p_service) {
+		if (ObjectDB::get_instance(id) != p_service) { return; } if (p_service->get_parent()) { p_service->get_parent()->remove_child(p_service); } memdelete(p_service); });
+	state->images = RNImageService::for_generation(generation);
+	state->images->set_transport(rn_http_image_transport(state->http));
+	scheduler->configure(state->service_settings.limit("scheduler/max_tasks_per_frame"), state->service_settings.limit("scheduler/idle_budget_ms"));
 	state->bundle_generation = generation;
 	native_module_registry->begin_generation(generation);
 	state->bundle_status = RNBundleStatus::EVALUATING;
@@ -352,6 +412,15 @@ void ReactNativeRuntimeCoordinator::start_root(ReactNativeRootView *p_root) {
 void ReactNativeRuntimeCoordinator::register_root(ReactNativeRootView *p_root) {
 	ERR_FAIL_NULL(p_root);
 	const uint64_t id = uint64_t(p_root->get_instance_id());
+	if (RNJSNativeCallScope::active()) {
+		pending_lifecycle.push_back([this, id] {
+			auto root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(ObjectID(id)));
+			if (root && root->is_inside_tree()) {
+				register_root(root);
+			}
+		});
+		return;
+	}
 	state->registered_roots[id] = p_root->get_application_key();
 	connect_frame_signal(p_root);
 	if (!find_route(p_root->get_instance_id())) {
@@ -368,11 +437,18 @@ void ReactNativeRuntimeCoordinator::stop_route(RNSurfaceRoute &p_route, bool p_d
 		enqueue_events(root->_prepare_surface_stop());
 	}
 	enqueue_events(state->pointer_capture.clear_surface(p_route.root_tag, p_route.surface_epoch, p_route.runtime_generation));
-	if (HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton()) {
-		hermes->dispatch_queued_events(ui_manager);
-		Array args;
-		args.push_back(p_route.root_tag);
-		hermes->call_function(STOP_APPLICATION_FUNCTION, args);
+	auto stop_application = [this, tag = p_route.root_tag] {
+		if (HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton()) {
+			hermes->dispatch_queued_events(ui_manager);
+			Array args;
+			args.push_back(tag);
+			hermes->call_function(STOP_APPLICATION_FUNCTION, args);
+		}
+	};
+	if (RNJSNativeCallScope::active()) {
+		pending_lifecycle.push_back(stop_application);
+	} else {
+		stop_application();
 	}
 	ui_manager->remove_surface(p_route.root_tag, p_route.surface_epoch);
 	state->snapshots.erase(p_route.root_tag);
@@ -392,13 +468,19 @@ void ReactNativeRuntimeCoordinator::unregister_root(ReactNativeRootView *p_root)
 		state->routes.erase(tag);
 	}
 	state->registered_roots.erase(id);
-	if (state->registered_roots.empty() && !native_module_registry->has_pending_work()) {
-		disconnect_frame_signal();
-	}
 }
 
 void ReactNativeRuntimeCoordinator::reload_root(ReactNativeRootView *p_root) {
 	ERR_FAIL_NULL(p_root);
+	if (RNJSNativeCallScope::active()) {
+		const ObjectID id = p_root->get_instance_id();
+		pending_lifecycle.push_back([this, id] {
+			if (auto root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(id))) {
+				reload_root(root);
+			}
+		});
+		return;
+	}
 	if (RNSurfaceRoute *route = find_route(p_root->get_instance_id())) {
 		const int tag = route->root_tag;
 		stop_route(*route, true);
@@ -496,6 +578,10 @@ void ReactNativeRuntimeCoordinator::clear_generation_state() {
 }
 
 void ReactNativeRuntimeCoordinator::_on_react_native_file_changed(const String &p_path, const String &p_content, bool p_exists) {
+	if (RNJSNativeCallScope::active()) {
+		pending_lifecycle.push_back([this] { _on_react_native_file_changed(String(), String(), false); });
+		return;
+	}
 	(void)p_path;
 	(void)p_content;
 	(void)p_exists;
@@ -530,22 +616,37 @@ void ReactNativeRuntimeCoordinator::_on_react_native_file_changed(const String &
 }
 
 void ReactNativeRuntimeCoordinator::_process_frame() {
-	if (state->shutting_down || (state->registered_roots.empty() && !native_module_registry->has_pending_work())) {
-		if (state->registered_roots.empty()) {
-			disconnect_frame_signal();
-		}
+	const double frame_started = scheduler->now();
+	const int frame_rate = Engine::get_singleton()->get_max_fps();
+	const double frame_budget = 1000.0 / (frame_rate > 0 ? frame_rate : 60);
+	std::deque<std::function<void()>> lifecycle;
+	lifecycle.swap(pending_lifecycle);
+	for (auto &operation : lifecycle) {
+		operation();
+	}
+	if (state->shutting_down || (state->registered_roots.empty() && !native_module_registry->has_pending_work() && !scheduler->has_pending_work() && (!state->http || !ObjectDB::get_instance(state->http_id) || !state->http->has_pending_work()) && (!state->blobs || !state->blobs->has_pending_work()))) {
 		return;
 	}
 	HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton();
 	if (!hermes) {
 		return;
 	}
-	if (state->bundle_status == RNBundleStatus::READY && hermes->has_global_function(FLUSH_TIMERS_FUNCTION)) {
-		hermes->call_function(FLUSH_TIMERS_FUNCTION);
+	if (state->blobs) {
+		state->blobs->drain_releases();
+	}
+	if (state->http && ObjectDB::get_instance(state->http_id)) {
+		state->http->process_requests();
 	}
 	native_module_registry->process_jobs();
-	hermes->dispatch_native_module_deliveries(native_module_registry);
+	native_module_registry->process_frame(scheduler->now());
+	const size_t native_delivered = hermes->dispatch_native_module_deliveries(native_module_registry);
 	hermes->dispatch_queued_events(ui_manager);
+	bool visual_frame = false;
+	for (const auto &entry : state->registered_roots) {
+		auto root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(ObjectID(entry.first)));
+		visual_frame = visual_frame || (root && root->is_visible_in_tree() && root->get_size().x > 0 && root->get_size().y > 0);
+	}
+	hermes->dispatch_scheduler(scheduler, false, visual_frame, 0, native_delivered);
 
 	for (auto &queue_entry : state->operation_queues) {
 		std::deque<RNSurfaceOperation> &operation_queue = queue_entry.second;
@@ -599,4 +700,5 @@ void ReactNativeRuntimeCoordinator::_process_frame() {
 			}
 		}
 	}
+	hermes->dispatch_scheduler(scheduler, true, false, std::max(0.0, frame_budget - (scheduler->now() - frame_started)));
 }

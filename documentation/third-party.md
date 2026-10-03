@@ -48,3 +48,12 @@ applications inherit their Godot theme by default.
 React Native files are not vendored or modified in references. Narrow Metro source
 adaptations are guarded by SHA-256 of the installed 0.87.1 source bytes in
 `js/godot/source-adaptations.json`, under the upstream React Native MIT license.
+
+## Local network fixture
+
+`requirements-ci.txt` pins test-only `websockets==15.0.1` (BSD-3-Clause, upstream
+https://github.com/python-websockets/websockets). It runs only in the Python localhost
+fixture and is not linked or shipped in the Godot runtime. HTTP/TLS fixtures use Python
+stdlib servers; the checked-in test certificate/key identifies only localhost, is
+non-production test material, and is trusted explicitly in the test project. Native
+HTTP/TLS/WebSocket use Godot's existing facilities and licenses.

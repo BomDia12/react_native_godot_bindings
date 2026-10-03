@@ -449,7 +449,11 @@ bool from_js_value(jsi::Runtime &p_runtime, const jsi::Value &p_value, const RNV
 		if (p_schema.type != RNValueType::FLOAT && p_schema.type != RNValueType::DYNAMIC) {
 			return fail(r_context, r_error, RNErrorCode::VALIDATION, "expected another value type, got number", p_path);
 		}
-		r_value = number;
+		if (p_schema.type == RNValueType::DYNAMIC && std::trunc(number) == number && std::abs(number) <= MAX_SAFE_INTEGER && !(number == 0 && std::signbit(number))) {
+			r_value = int64_t(number);
+		} else {
+			r_value = number;
+		}
 		return true;
 	}
 	if (p_value.isString()) {

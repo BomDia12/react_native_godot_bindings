@@ -72,9 +72,11 @@ public:
 	Variant get_global(const String &name);
 	bool has_global_function(const String &name);
 	void reset();
+	void collect_garbage();
 	uint64_t get_runtime_generation() const;
 	void dispatch_queued_events(const std::shared_ptr<class FabricUIManager> &p_ui_manager);
-	void dispatch_native_module_deliveries(const std::shared_ptr<class RNNativeModuleRegistry> &p_registry);
+	size_t dispatch_native_module_deliveries(const std::shared_ptr<class RNNativeModuleRegistry> &p_registry);
+	void dispatch_scheduler(const std::shared_ptr<class RNRuntimeScheduler> &p_scheduler, bool p_idle, bool p_visual_frame, double p_available_ms = 2, size_t p_native_delivered = 0);
 	bool is_ready() const;
 	String get_last_error() const;
 	// Resolves an importModule() specifier to source code, as either a String or a

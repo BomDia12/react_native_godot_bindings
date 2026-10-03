@@ -235,6 +235,82 @@ TEST_CASE("[ReactNativeBindings][NativeModules] event callbacks can change subsc
 	runtime->uninstall_host_object("__testNativeModules");
 }
 
+TEST_CASE("[ReactNativeBindings][NativeModules] bounded listener snapshots checkpoint and retain immutable payloads") {
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	runtime->reset();
+	auto state = std::make_shared<RNRuntimeCoordinatorState>();
+	state->service_settings.limits["scheduler/max_tasks_per_frame"] = 2;
+	auto registry = std::make_shared<RNNativeModuleRegistry>(state);
+	const uint64_t generation = runtime->get_runtime_generation();
+	registry->begin_generation(generation);
+	RNModuleDefinition definition;
+	definition.name = "BoundedEvents";
+	definition.factory = [] { return std::make_unique<CompletedAsyncModule>(); };
+	RNEventSchema event;
+	event.name = "changed";
+	event.subscription_name = "onChanged";
+	event.payload = RNValueSchema::value(RNValueType::DYNAMIC);
+	definition.events.push_back(event);
+	RNError error;
+	REQUIRE(registry->register_module(definition, error));
+	runtime->install_host_object("__boundedEvents", registry);
+	runtime->evaluate("globalThis.callbackCount=0;globalThis.checkpointCount=0;globalThis.payloads=[];for(let i=0;i<5;i++){__boundedEvents.get('BoundedEvents').onChanged(value=>{payloads.push(value.value);if(checkpointCount!==callbackCount)throw Error('checkpoint missing');callbackCount++;Promise.resolve().then(()=>checkpointCount++);});}undefined;");
+	Dictionary payload;
+	payload["value"] = 1;
+	REQUIRE(registry->queue_event("BoundedEvents", "changed", "", generation, payload));
+	payload["value"] = 99;
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(int(runtime->get_global("callbackCount")) == 2);
+	CHECK(int(runtime->get_global("checkpointCount")) == 2);
+	CHECK(registry->has_pending_work());
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(int(runtime->get_global("callbackCount")) == 4);
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(int(runtime->get_global("callbackCount")) == 5);
+	CHECK(runtime->evaluate("payloads.every(value=>value===1)") == Variant(true));
+	runtime->uninstall_host_object("__boundedEvents");
+}
+class OrderedCompletionModule : public CompletedAsyncModule {
+public:
+	void start_async(const StringName &, const Array &, const RNCallContext &, const RNCompletionToken &p_completion) override {
+		p_completion.emit("changed", String("before"));
+		p_completion.complete(String("done"));
+		p_completion.emit("changed", String("after"));
+	}
+};
+TEST_CASE("[ReactNativeBindings][NativeModules] native event and completion order survives promise checkpoints") {
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	runtime->reset();
+	auto registry = std::make_shared<RNNativeModuleRegistry>(std::shared_ptr<RNRuntimeCoordinatorState>());
+	registry->begin_generation(runtime->get_runtime_generation());
+	RNModuleDefinition definition;
+	definition.name = "OrderedCompletion";
+	definition.factory = [] { return std::make_unique<OrderedCompletionModule>(); };
+	RNMethodSchema method;
+	method.name = "work";
+	method.mode = RNCallMode::ASYNC;
+	method.result = RNValueSchema::value(RNValueType::STRING);
+	definition.methods.push_back(method);
+	RNEventSchema event;
+	event.name = "changed";
+	event.subscription_name = "onChanged";
+	event.payload = RNValueSchema::value(RNValueType::STRING);
+	definition.events.push_back(event);
+	RNError error;
+	REQUIRE(registry->register_module(definition, error));
+	runtime->install_host_object("__orderedCompletion", registry);
+	runtime->evaluate("globalThis.deliveryOrder=[];var ordered=__orderedCompletion.get('OrderedCompletion');var subscription=ordered.onChanged(value=>deliveryOrder.push(value));ordered.work().then(value=>{deliveryOrder.push(value);subscription.remove();});undefined;");
+	registry->process_jobs();
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(runtime->evaluate("JSON.stringify(deliveryOrder)") == Variant("[\"before\",\"done\"]"));
+	runtime->uninstall_host_object("__orderedCompletion");
+}
 } // namespace TestRNNativeModuleRegistry
 
-void rn_force_link_native_module_registry_tests() {}
+void rn_force_link_scheduler_tests();
+void rn_force_link_service_tests();
+
+void rn_force_link_native_module_registry_tests() {
+	rn_force_link_scheduler_tests();
+	rn_force_link_service_tests();
+}

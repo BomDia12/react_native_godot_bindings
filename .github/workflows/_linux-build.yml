@@ -84,7 +84,7 @@ jobs:
           path: |
             .scons-cache
             .ccache
-          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'scripts/build_godot.sh', 'scripts/godot_patches.py', 'patches/godot/**', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/examples/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/runtime/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
+          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'requirements-ci.txt', 'scripts/build_godot.sh', 'scripts/godot_patches.py', 'patches/godot/**', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/config.py', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/examples/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/runtime/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
           restore-keys: |
             compiler-${{ runner.os }}-gcc13-
 
@@ -204,4 +204,4 @@ jobs:
           path: |
             hermes-build.log
             godot-build.log
-            artifacts/smoke-logs/*.log
+            artifacts/smoke-logs/**

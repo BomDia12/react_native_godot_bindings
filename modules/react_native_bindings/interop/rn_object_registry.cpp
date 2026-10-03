@@ -31,6 +31,21 @@ String RNObjectRegistry::open_session(int p_root_tag, RNError &r_error) {
 		r_error = RNError::make(RNErrorCode::STALE_HANDLE, vformat("root %d is not live in generation %d", p_root_tag, generation), "openSession", "rootTag");
 		return String();
 	}
+	if (sessions.size() >= 4096) {
+		Vector<String> closed;
+		for (const auto &entry : sessions) {
+			if (!entry.value.open) {
+				closed.push_back(entry.key);
+			}
+		}
+		for (const String &token : closed) {
+			sessions.erase(token);
+		}
+		if (sessions.size() >= 4096) {
+			r_error = RNError::make(RNErrorCode::LIMIT, "live session limit exceeded", "openSession");
+			return String();
+		}
+	}
 	RNSessionRecord record;
 	record.token = issue_token("session");
 	record.generation = generation;
@@ -101,6 +116,10 @@ String RNObjectRegistry::register_object(const String &p_session_token, ObjectID
 		if (entry.value.session_token == p_session_token && entry.value.object_id == p_object && entry.value.capability == p_capability) {
 			return entry.key;
 		}
+	}
+	if (objects.size() >= 4096) {
+		r_error = RNError::make(RNErrorCode::LIMIT, "object handle limit exceeded", "registerObject");
+		return String();
 	}
 	RNObjectRecord record;
 	record.token = issue_token("object");
