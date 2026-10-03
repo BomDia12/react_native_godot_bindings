@@ -14,12 +14,12 @@ CREATED_CHECKOUT=false
 if [[ ! -e "$GODOT_SOURCE_DIR" ]]; then
 	git clone --filter=blob:none --no-checkout https://github.com/godotengine/godot.git "$GODOT_SOURCE_DIR"
 	CREATED_CHECKOUT=true
-elif [[ ! -d "$GODOT_SOURCE_DIR/.git" ]]; then
+elif [[ ! -e "$GODOT_SOURCE_DIR/.git" ]]; then
 	echo "Godot source path exists but is not a Git checkout: $GODOT_SOURCE_DIR" >&2
 	exit 1
 fi
 
-if [[ "$CREATED_CHECKOUT" == false && -n $(git -C "$GODOT_SOURCE_DIR" status --porcelain) ]]; then
+if [[ "$CREATED_CHECKOUT" == false && $(git -C "$GODOT_SOURCE_DIR" rev-parse HEAD) != "$GODOT_COMMIT" && -n $(git -C "$GODOT_SOURCE_DIR" status --porcelain) ]]; then
 	echo "Godot checkout has local modifications; refusing to change revisions: $GODOT_SOURCE_DIR" >&2
 	exit 1
 fi
@@ -27,6 +27,13 @@ fi
 if [[ "$CREATED_CHECKOUT" == true || $(git -C "$GODOT_SOURCE_DIR" rev-parse HEAD 2>/dev/null || true) != "$GODOT_COMMIT" ]]; then
 	git -C "$GODOT_SOURCE_DIR" fetch --depth 1 origin "$GODOT_COMMIT"
 	git -C "$GODOT_SOURCE_DIR" checkout --detach "$GODOT_COMMIT"
+fi
+
+if [[ ${GODOT_APPLY_PATCHES:-1} == 1 ]]; then
+	python3 "$SCRIPT_DIR/godot_patches.py" "$GODOT_SOURCE_DIR" --apply
+elif [[ -n $(git -C "$GODOT_SOURCE_DIR" status --porcelain) ]]; then
+	echo "Clean-source bootstrap requires an unmodified Godot checkout" >&2
+	exit 1
 fi
 
 git -C "$REPO_ROOT" submodule update --init --recursive modules/react_native_bindings/engines/hermes

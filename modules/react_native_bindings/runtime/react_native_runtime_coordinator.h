@@ -92,6 +92,17 @@ struct RNMountedNodeSnapshot {
 	bool self_targetable = false;
 	bool visible = true;
 	bool clips_contents = false;
+	Transform2D visual_transform;
+	Transform2D inverse_visual_transform;
+	ObjectID viewport_id;
+	Rect2 viewport_rect;
+	Point2 scroll_offset;
+	Size2 content_size;
+	HashMap<int, Vector<Rect2>> span_bounds;
+	Vector<Rect2> span_rects;
+	Vector<int> paint_child_tags;
+	bool has_visual_geometry = false;
+	bool transform_invertible = true;
 };
 
 struct RNSurfaceSnapshot {
@@ -99,6 +110,7 @@ struct RNSurfaceSnapshot {
 	uint64_t runtime_generation = 0;
 	uint64_t surface_epoch = 0;
 	uint64_t revision = 0;
+	uint64_t native_visual_revision = 0;
 	HashMap<int, RNMountedNodeSnapshot> nodes;
 	HashMap<String, Vector<int>> native_id_index;
 };
@@ -252,4 +264,5 @@ public:
 	void reject_commit(int p_root_tag, uint64_t p_epoch, uint64_t p_revision, const String &p_error);
 	void mark_surface_mounted(int p_root_tag, uint64_t p_epoch, uint64_t p_revision);
 	void _process_frame();
+	void shutdown_scene();
 };

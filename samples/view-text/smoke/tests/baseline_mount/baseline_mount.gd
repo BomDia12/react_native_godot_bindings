@@ -9,8 +9,8 @@ const EXPECTED_OPACITY := 0.8
 func smoke_id() -> String:
 	return "baseline-mount"
 
-func find_sentinel(node: Node) -> Label:
-	if node is Label and node.text == SENTINEL:
+func find_sentinel(node: Node) -> RNTextControl:
+	if node is RNTextControl and node.get_parsed_text() == SENTINEL:
 		return node
 
 	for child in node.get_children():
@@ -35,8 +35,10 @@ func find_styled_panel(node: Node) -> Panel:
 
 func has_only_expected_node_types(node: Node) -> bool:
 	for child in node.get_children():
-		if not child is Panel and not child is Label and not (child is Control and child.name == "ReactNativeMountContainer"):
+		if not child is Panel and not child is RNTextControl and not (child is Control and child.name == "ReactNativeMountContainer"):
 			return false
+		if child is RNTextControl:
+			continue
 		if not has_only_expected_node_types(child):
 			return false
 
@@ -55,7 +57,7 @@ func validate_smoke() -> String:
 
 	var label := find_sentinel(mounted_root)
 	if label == null:
-		return "sentinel Label was not mounted"
+		return "sentinel RNTextControl was not mounted"
 
 	var styled_panel := find_styled_panel(mounted_root)
 	if styled_panel == null:
@@ -64,9 +66,9 @@ func validate_smoke() -> String:
 		return "styled View has an empty Yoga layout"
 	if label.size.x <= 0.0 or label.size.y <= 0.0:
 		return "sentinel Text has an empty Yoga layout"
-	if not label.get_theme_color("font_color").is_equal_approx(EXPECTED_TEXT_COLOR):
+	if not label.get_theme_color("default_color").is_equal_approx(EXPECTED_TEXT_COLOR):
 		return "sentinel Text color does not match the fixture"
-	if label.get_theme_font_size("font_size") != EXPECTED_FONT_SIZE:
+	if label.get_theme_font_size("normal_font_size") != EXPECTED_FONT_SIZE:
 		return "sentinel Text font size does not match the fixture"
 	if not is_equal_approx(styled_panel.modulate.a, EXPECTED_OPACITY):
 		return "styled View opacity does not match the fixture"

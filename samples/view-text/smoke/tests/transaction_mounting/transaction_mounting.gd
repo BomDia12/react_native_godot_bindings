@@ -18,8 +18,8 @@ func action(name: String) -> void:
 	stage += 1
 	stage_frame = frames
 
-func find_label(node: Node, text: String) -> Label:
-	if node is Label and node.text == text:
+func find_label(node: Node, text: String) -> RNTextControl:
+	if node is RNTextControl and node.get_parsed_text() == text:
 		return node
 	for child in node.get_children():
 		var found := find_label(child, text)
@@ -42,8 +42,8 @@ func item_order() -> Array[String]:
 		if not child is Panel:
 			continue
 		for grandchild in child.get_children():
-			if grandchild is Label:
-				result.append(grandchild.text)
+			if grandchild is RNTextControl:
+				result.append(grandchild.get_parsed_text())
 	return result
 
 func record_id(text: String) -> void:

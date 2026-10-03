@@ -43,10 +43,21 @@ class RNLayoutTree {
 	YGConfigRef config = nullptr;
 	std::unordered_map<int, Record> records;
 	std::vector<Record> prepared_removed_records;
+	struct Boundary {
+		int tag = 0;
+		RNChildLayoutPolicy policy = RNChildLayoutPolicy::ORDINARY;
+		std::shared_ptr<const RNHostDescriptor> descriptor;
+		RNPreparedHostState state;
+		Vector<YGNodeRef> children;
+	};
+	Vector<Boundary> boundaries;
+	HashMap<int, Rect2> prepared_layouts;
 	Ref<RNShadowNode> published_root;
 	Ref<RNShadowNode> prepared_root;
 	Size2 published_constraint;
 	Size2 prepared_constraint;
+	HashMap<int, uint64_t> published_dependencies;
+	HashMap<int, uint64_t> prepared_dependencies;
 	HashMap<int, Rect2> layouts;
 	RNLayoutTreeStats stats;
 
@@ -61,7 +72,7 @@ public:
 
 	bool prepare(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, HashMap<int, Rect2> &r_layouts, String &r_error, const HashMap<int, RNPreparedHostState> *p_prepared_states = nullptr);
 	void publish();
-	bool rebuild(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, String &r_error);
+	bool rebuild(const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, String &r_error, const HashMap<int, RNPreparedHostState> *p_prepared_states = nullptr);
 	void clear();
 
 	const RNLayoutTreeStats &get_stats() const { return stats; }

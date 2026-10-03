@@ -11,7 +11,7 @@ development-only compatibility getter throws when accessed.
 |---|---|---|---|---|---|
 | API-ACCESSIBILITY | `AccessibilityInfo` | pending | No native service. | none | none |
 | API-ALERT | `Alert` | pending | No native service. | none | none |
-| API-ANIMATED | `Animated` | pending | Animation integration is not verified. | none | none |
+| API-ANIMATED | `Animated` | pending | General animation integration is not verified; list sticky headers use a guarded JS path. | [source adaptations](../../js/godot/source-adaptations.cjs) | [COMPONENT-CONTRACTS](test-coverage.md) |
 | API-APPEARANCE | `Appearance` | pending | A fixed preamble shim is not production support. | none | none |
 | API-APP-REGISTRY | `AppRegistry` | partially supported | Registers components and starts independent Fabric surfaces; Godot assigns process-wide root tags, gives each surface an operation queue with commit coalescing and imperative ordering, isolates surface failures, and does not implement the full native lifecycle contract. | [bundle entry](../../samples/view-text/godot.entry.js), [applications](../../samples/view-text/multi_root.entry.js), [runtime coordinator](../../modules/react_native_bindings/runtime/react_native_runtime_coordinator.cpp), [root view](../../modules/react_native_bindings/root_view/react_native_root_view.cpp) | [MULTI-ROOT-SMOKE](test-coverage.md) |
 | API-APP-STATE | `AppState` | pending | No native service. | none | none |

@@ -5,6 +5,9 @@ const {adapterFor} = require('./rn-overrides.cjs');
 
 function createGodotResolver({reactNativeRoot, godotRoot}) {
   return (context, moduleName) => {
+    if (moduleName === 'react-native-godot/GodotWindow') { return {type: 'sourceFile', filePath: path.join(godotRoot, 'components/GodotWindow.js')}; }
+    if (moduleName === 'react-native-godot/fonts') { return {type: 'sourceFile', filePath: path.join(godotRoot, 'fonts.js')}; }
+    if (moduleName === 'react-native-godot/TextInputHost') { return {type: 'sourceFile', filePath: path.join(godotRoot, 'adapters/TextInputHost.godot.js')}; }
     const resolved = context.resolveRequest(context, moduleName, 'godot');
     if (resolved.type !== 'sourceFile') {
       return resolved;

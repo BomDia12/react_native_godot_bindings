@@ -84,6 +84,13 @@ bool index_tree(const Ref<RNShadowNode> &p_root, HashMap<int, IndexedNode> &r_in
 			r_error = vformat("duplicate shadow tag %d", current.node->tag);
 			return false;
 		}
+		if (current.node->descriptor && (current.node->descriptor->get_traits().contributes_text || current.node->view_name == "RCTVirtualText")) {
+			const IndexedNode *parent = r_index.getptr(current.parent_tag);
+			if (!parent || !parent->node->descriptor || !parent->node->descriptor->get_traits().collects_text) {
+				r_error = "Raw text and virtual text must be inside a Text paragraph";
+				return false;
+			}
+		}
 		if (current.node->root_tag != p_root->root_tag || current.node->runtime_generation != p_root->runtime_generation || current.node->surface_epoch != p_root->surface_epoch) {
 			r_error = vformat("tag %d belongs to another surface", current.node->tag);
 			return false;

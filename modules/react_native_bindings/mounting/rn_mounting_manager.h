@@ -54,6 +54,7 @@ class RNMountingManager {
 	uint64_t surface_epoch = 0;
 	uint64_t published_revision = 0;
 	bool transaction_in_flight = false;
+	bool publication_pending = false;
 	HashMap<int, ObjectID> prepared_hosts;
 	int fail_before_mutation = -1;
 	int fail_after_mutation = -1;
@@ -69,6 +70,9 @@ class RNMountingManager {
 	Control *create_host(const Ref<RNShadowNode> &p_node, const RNHostContext &p_context);
 	bool apply_host_props(Control *p_host, const std::shared_ptr<const RNHostDescriptor> &p_descriptor, const RNPreparedHostState &p_state, const RNHostContext &p_context, String &r_error);
 	void apply_layout(Control *p_host, const Rect2 &p_layout);
+	int native_child_position(Control *p_parent, int p_index) const;
+	void refresh_geometry(RNSurfaceSnapshot &r_snapshot, const Transform2D &p_window_transform) const;
+	void sort_paint_order(HashMap<int, RNMountedNode> &r_records);
 	bool prepare_transaction(RNMountingTransaction &r_transaction, const Ref<RNShadowNode> &p_next_root, const Size2 &p_constraint, String &r_error);
 	bool apply_transaction(RNMountingTransaction &p_transaction, const Ref<RNShadowNode> &p_declarative_root, const HashMap<int, Dictionary> &p_next_overrides, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
 	void destroy_detached_hosts(RNMountingTransaction &p_transaction);
@@ -89,6 +93,12 @@ public:
 	bool apply_direct_props(int p_tag, const Dictionary &p_patch, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
 	void publish_transform(const Transform2D &p_window_transform);
 	bool dispatch_command(int p_tag, const StringName &p_command, const Variant &p_arguments, String &r_error);
+	bool is_transaction_in_flight() const { return transaction_in_flight; }
+	bool is_current_host(int p_tag, ObjectID p_id, uint64_t p_revision) const;
+	void activate_published_hosts();
+	int tag_for_input_control(Control *p_control) const;
+	Control *focus_control(int p_tag) const;
+	bool owns_native_activation(int p_tag) const;
 
 	const Ref<RNShadowNode> &get_committed_root() const { return committed_root; }
 	const RNRegistry &get_registry() const { return registry; }

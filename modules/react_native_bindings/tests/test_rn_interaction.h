@@ -56,6 +56,67 @@ RNSurfaceSnapshot make_snapshot(const Ref<RNShadowNode> &p_root, const Size2 &p_
 	return snapshot;
 }
 
+TEST_CASE("[ReactNativeBindings][Interaction] native visual geometry uses inverse coordinates, paint order and exact clips") {
+	Ref<RNShadowNode> lower = make_node(2, "RCTView", Rect2(0, 0, 40, 20));
+	Ref<RNShadowNode> upper = make_node(3, "RCTView", Rect2(0, 0, 40, 20));
+	RNSurfaceSnapshot snapshot = make_snapshot(make_root({ lower, upper }), Size2(300, 300));
+	snapshot.nodes[1].has_visual_geometry = true;
+	snapshot.nodes[1].paint_child_tags = { 3, 2 };
+	for (int tag : { 2, 3 }) {
+		RNMountedNodeSnapshot &node = snapshot.nodes[tag];
+		node.has_visual_geometry = true;
+		node.visual_transform = Transform2D(Math::deg_to_rad(90.0), Point2(80, 40));
+		node.inverse_visual_transform = node.visual_transform.affine_inverse();
+		node.viewport_rect = Rect2(Point2(), node.local_rect.size);
+	}
+	const Point2 point(70, 60);
+	CHECK(RNInputRouter::hit_test(snapshot, point).tag == 2);
+	CHECK(RNInputRouter::hit_test(snapshot, Point2(5, 5)).tag == 0);
+	RNInputRouter router;
+	Ref<InputEventMouseButton> press;
+	press.instantiate();
+	press->set_button_index(MouseButton::LEFT);
+	press->set_pressed(true);
+	const auto routed = router.route_pointer(press, snapshot, 1, 1, point, point);
+	bool saw_pointer = false;
+	for (const RNNativeEvent &event : routed.events) {
+		if (event.name == "topPointerDown") {
+			saw_pointer = true;
+			CHECK(float(event.payload["offsetX"]) == doctest::Approx(20));
+			CHECK(float(event.payload["offsetY"]) == doctest::Approx(10));
+		}
+	}
+	CHECK(saw_pointer);
+	snapshot.nodes[2].transform_invertible = false;
+	CHECK(RNInputRouter::hit_test(snapshot, point).tag == 3);
+	snapshot.nodes[3].clips_contents = true;
+	snapshot.nodes[3].viewport_rect = Rect2(0, 0, 5, 5);
+	CHECK(RNInputRouter::hit_test(snapshot, point).tag == 0);
+}
+
+TEST_CASE("[ReactNativeBindings][Interaction] native host fallback targets its ancestor without retargeting a sibling") {
+	Ref<RNShadowNode> label = make_node(3, "RCTText", Rect2(0, 0, 40, 20));
+	Ref<RNShadowNode> sibling = make_node(4, "RCTView", Rect2(0, 0, 40, 20));
+	Ref<RNShadowNode> parent = make_node(2, "RCTView", Rect2(0, 0, 100, 100));
+	parent->children = { label, sibling };
+	const RNSurfaceSnapshot snapshot = make_snapshot(make_root({ parent }), Size2(300, 300));
+	CHECK(RNInputRouter::hit_test(snapshot, Point2(10, 10)).tag == 4);
+	RNInputRouter router;
+	Ref<InputEventMouseButton> press;
+	press.instantiate();
+	press->set_button_index(MouseButton::LEFT);
+	press->set_pressed(true);
+	const auto routed = router.route_pointer(press, snapshot, 1, 1, Point2(10, 10), Point2(10, 10), 3);
+	bool saw_pointer = false;
+	for (const RNNativeEvent &event : routed.events) {
+		if (event.name == "topPointerDown") {
+			saw_pointer = true;
+			CHECK(event.tag == 2);
+		}
+	}
+	CHECK(saw_pointer);
+}
+
 TEST_CASE("[ReactNativeBindings][Interaction] clones preserve one weak event target") {
 	std::shared_ptr<RNEventTarget> target = std::make_shared<RNEventTarget>(42, 7);
 	Ref<RNShadowNode> node = make_node(42, "RCTView", Rect2());
@@ -121,6 +182,8 @@ TEST_CASE("[ReactNativeBindings][Interaction] hit testing clips children and app
 	slop["right"] = 12;
 	child->props["hitSlop"] = slop;
 	parent->props["overflow"] = "visible";
+	CHECK(RNInputRouter::hit_test(make_snapshot(root, Size2(300, 300)), Point2(101, 30)).tag == 0);
+	parent->props["__testLayout"] = Rect2(20, 20, 120, 40);
 	CHECK(RNInputRouter::hit_test(make_snapshot(root, Size2(300, 300)), Point2(101, 30)).tag == 3);
 }
 
@@ -195,7 +258,7 @@ TEST_CASE("[ReactNativeBindings][Interaction] mouse hover and moves preserve con
 	CHECK(left.events[1].name == "topPointerLeave");
 }
 
-TEST_CASE("[ReactNativeBindings][Interaction] secondary mouse buttons use W3C values without clicks") {
+TEST_CASE("[ReactNativeBindings][Interaction] secondary mouse buttons emit desktop clicks without primary activation") {
 	Ref<RNShadowNode> target = make_node(2, "RCTView", Rect2(0, 0, 100, 100));
 	Ref<RNShadowNode> root = make_root({ target });
 	RNInputRouter router;
@@ -209,13 +272,17 @@ TEST_CASE("[ReactNativeBindings][Interaction] secondary mouse buttons use W3C va
 	};
 
 	RNInputRouter::RouteResult right_down = route_button(MouseButton::RIGHT, true);
-	REQUIRE(right_down.events.size() == 1);
+	REQUIRE(right_down.events.size() == 2);
+	CHECK(right_down.events[0].name == "topPointerDown");
+	CHECK(right_down.events[1].name == "topRightClick");
 	CHECK(int64_t(right_down.events[0].payload["button"]) == 2);
 	CHECK(int64_t(right_down.events[0].payload["buttons"]) == 2);
 	CHECK(right_down.focus_tag == 0);
 
 	RNInputRouter::RouteResult middle_down = route_button(MouseButton::MIDDLE, true);
-	REQUIRE(middle_down.events.size() == 1);
+	REQUIRE(middle_down.events.size() == 2);
+	CHECK(middle_down.events[0].name == "topPointerDown");
+	CHECK(middle_down.events[1].name == "topMiddleClick");
 	CHECK(int64_t(middle_down.events[0].payload["button"]) == 1);
 	CHECK(int64_t(middle_down.events[0].payload["buttons"]) == 6);
 

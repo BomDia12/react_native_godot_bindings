@@ -6,6 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from godot_patches import validate as validate_godot_patches
 from smoke_manifest import ManifestError, discover_manifests
 
 
@@ -87,6 +88,11 @@ def main() -> int:
         if actual != expected:
             failures.append(f"{name} revision: expected {expected}, got {actual or 'missing'}")
 
+    try:
+        print(f"Godot patch identity: {validate_godot_patches(godot_dir)}")
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        failures.append(f"Godot patches: {error}")
+
     for required in (yoga_root / "LICENSE", yoga_root / "UPSTREAM.md", hermes_dir / "LICENSE"):
         if not required.is_file():
             failures.append(f"missing provenance file: {required.relative_to(REPO_ROOT)}")
@@ -102,10 +108,6 @@ def main() -> int:
         if not digest_match or digest_match.group(1) != actual_digest:
             failures.append(f"Yoga tree digest: expected {digest_match.group(1) if digest_match else 'missing'}, got {actual_digest}")
 
-    package_path = REPO_ROOT / "samples/view-text/package.json"
-    lock_path = REPO_ROOT / "samples/view-text/package-lock.json"
-    package = json.loads(package_path.read_text(encoding="utf-8"))
-    lock = json.loads(lock_path.read_text(encoding="utf-8"))
     expected_packages = {
         "react": baseline["REACT_VERSION"],
         "react-native": baseline["REACT_NATIVE_VERSION"],
@@ -114,13 +116,17 @@ def main() -> int:
         "@react-native/babel-preset": baseline["REACT_NATIVE_VERSION"],
     }
 
-    declared = {**package.get("dependencies", {}), **package.get("devDependencies", {})}
-    for name, expected in expected_packages.items():
-        if declared.get(name) != expected:
-            failures.append(f"package.json {name}: expected {expected}, got {declared.get(name)}")
-        locked = lock.get("packages", {}).get(f"node_modules/{name}", {}).get("version")
-        if locked != expected:
-            failures.append(f"package-lock.json {name}: expected {expected}, got {locked}")
+    for package_path in sorted((REPO_ROOT / "samples").glob("*/package.json")):
+        package = json.loads(package_path.read_text(encoding="utf-8"))
+        lock_path = package_path.with_name("package-lock.json")
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        declared = {**package.get("dependencies", {}), **package.get("devDependencies", {})}
+        for name, expected in expected_packages.items():
+            if declared.get(name) != expected:
+                failures.append(f"package.json {name}: expected {expected}, got {declared.get(name)}")
+            locked = lock.get("packages", {}).get(f"node_modules/{name}", {}).get("version")
+            if locked != expected:
+                failures.append(f"package-lock.json {name}: expected {expected}, got {locked}")
 
     if (REPO_ROOT / ".nvmrc").read_text(encoding="utf-8").strip() != baseline["NODE_VERSION"]:
         failures.append(".nvmrc does not match NODE_VERSION")

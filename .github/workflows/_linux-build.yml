@@ -37,7 +37,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'samples/view-text/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'samples/view-text/package-lock.json', 'samples/game-ui/package-lock.json') }}
           restore-keys: |
             npm-${{ runner.os }}-
 
@@ -54,7 +54,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: godot
-          key: godot-source-${{ runner.os }}-${{ hashFiles('baseline.env', 'scripts/bootstrap.sh') }}
+          key: godot-source-${{ runner.os }}-${{ hashFiles('baseline.env', 'scripts/bootstrap.sh', 'scripts/godot_patches.py') }}
 
       - name: Load pinned Hermes commit
         run: grep '^HERMES_COMMIT=' baseline.env >> "$GITHUB_ENV"
@@ -84,7 +84,7 @@ jobs:
           path: |
             .scons-cache
             .ccache
-          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/examples/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/runtime/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
+          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'scripts/build_godot.sh', 'scripts/godot_patches.py', 'patches/godot/**', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/examples/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/runtime/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
           restore-keys: |
             compiler-${{ runner.os }}-gcc13-
 
@@ -100,11 +100,11 @@ jobs:
             -o Acquire::ForceIPv4=true
           )
           sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache clang-format cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip
+          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache clang-format cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
           python -m pip install --requirement requirements-ci.txt
 
       - name: Bootstrap pinned sources
-        run: scripts/bootstrap.sh
+        run: GODOT_APPLY_PATCHES=0 scripts/bootstrap.sh
 
       - name: Save clean Godot source cache
         if: steps.godot-source-cache.outputs.cache-hit != 'true'
@@ -112,6 +112,9 @@ jobs:
         with:
           path: godot
           key: ${{ steps.godot-source-cache.outputs.cache-primary-key }}
+
+      - name: Apply declared native contracts
+        run: python3 scripts/godot_patches.py godot --apply
 
       - name: Validate metadata and scripts
         run: |
@@ -123,6 +126,8 @@ jobs:
         run: |
           npm --prefix samples/view-text ci
           npm --prefix samples/view-text run test:godot
+          npm --prefix samples/game-ui ci
+          npm --prefix samples/game-ui run test:godot
 
       - name: Build Hermes
         if: steps.hermes-libraries.outputs.available != 'true'
@@ -167,9 +172,13 @@ jobs:
         run: |
           GODOT_BINARY=$(find godot/bin -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*' -perm -u+x -print -quit)
           "$GODOT_BINARY" --headless --test --test-case='*[ReactNativeBindings]*'
+          "$GODOT_BINARY" --headless --test --test-case='*[TextEdit]*,*[RichTextLabel]*'
 
       - name: Run headless smoke tests
         run: scripts/run_baseline.sh
+
+      - name: Run native component display checks
+        run: scripts/run_component_display.sh
 
       - name: Package Linux baseline
         if: inputs.package_release

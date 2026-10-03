@@ -1,5 +1,7 @@
 #include "rn_builtin_native_modules.h"
 
+#include "rn_image_service.h"
+
 #include "core/config/engine.h"
 #include "core/math/math_funcs.h"
 #include "core/os/os.h"
@@ -83,5 +85,5 @@ bool rn_register_builtin_native_modules(RNNativeModuleRegistry &p_registry, RNEr
 	definition.name = "PlatformConstants";
 	definition.methods.push_back(get_constants);
 	definition.factory = []() { return std::make_unique<RNPlatformConstantsModule>(); };
-	return p_registry.register_module(definition, r_error);
+	return p_registry.register_module(definition, r_error) && rn_register_image_module(p_registry, r_error);
 }

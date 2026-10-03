@@ -11,7 +11,7 @@ GODOT_SOURCE_DIR=${GODOT_SOURCE_DIR:-"$REPO_ROOT/godot"}
 MODULE_DIR="$REPO_ROOT/modules/react_native_bindings"
 HERMES_BUILD_DIR="$MODULE_DIR/engines/build_release"
 
-if [[ ! -d "$GODOT_SOURCE_DIR/.git" ]]; then
+if [[ ! -e "$GODOT_SOURCE_DIR/.git" ]]; then
 	echo "Godot checkout is missing. Run scripts/bootstrap.sh." >&2
 	exit 1
 fi
@@ -20,6 +20,8 @@ if [[ $(git -C "$GODOT_SOURCE_DIR" rev-parse HEAD) != "$GODOT_COMMIT" ]]; then
 	echo "Godot checkout does not match GODOT_COMMIT" >&2
 	exit 1
 fi
+
+python3 "$SCRIPT_DIR/godot_patches.py" "$GODOT_SOURCE_DIR" --apply
 
 for module_file in SCsub config.py register_types.cpp register_types.h; do
 	if [[ ! -f "$MODULE_DIR/$module_file" ]]; then
@@ -49,6 +51,11 @@ scons \
 	custom_modules="$REPO_ROOT/modules" \
 	custom_modules_recursive=no \
 	"$@"
+
+if ! grep -q '^#define MODULE_REACT_NATIVE_BINDINGS_ENABLED' "$GODOT_SOURCE_DIR/modules/modules_enabled.gen.h"; then
+	echo "Godot disabled the React Native module; check native module dependencies." >&2
+	exit 1
+fi
 
 GODOT_BINARY=$(find "$GODOT_SOURCE_DIR/bin" -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*' -perm -u+x -print -quit)
 if [[ -z "$GODOT_BINARY" ]]; then

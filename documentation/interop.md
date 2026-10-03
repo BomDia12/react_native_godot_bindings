@@ -83,3 +83,11 @@ embedded NUL are rejected. `.` and repeated separator segments are normalized on
 case and literal percent characters are preserved. Godot's FileAccess/ResourceLoader
 performs the final virtual-path lookup. A custom native import resolver is a trusted
 extension point and is outside this built-in rule.
+
+## Component service boundary
+
+Component events and GodotImageLoader reuse the existing schema registry and native
+completion queue. Image source records and queryCache arrays are validated before
+native casts. Real HTTP transport, scheduler, Keyboard, scoped Alert and generic
+scene bindings are deferred to Phase 6B. The component gallery uses deterministic
+presentation actions; it does not claim authoritative gameplay or scene round trips.
