@@ -54,7 +54,7 @@ bool read_number(const Dictionary &p_style, const String &p_key, float &r_value)
 
 } //namespace
 
-Ref<StyleBoxFlat> RNViewStyle::build_stylebox(const Dictionary &p_props) {
+Ref<StyleBoxFlat> RNViewStyle::build_stylebox(const Dictionary &p_props, bool p_rtl) {
 	Ref<StyleBoxFlat> box;
 	box.instantiate();
 	box->set_bg_color(Color(0, 0, 0, 0)); // Transparent default, not Godot's panel gray.
@@ -85,6 +85,12 @@ Ref<StyleBoxFlat> RNViewStyle::build_stylebox(const Dictionary &p_props) {
 	if (read_number(p_props, "borderRightWidth", width)) {
 		box->set_border_width(SIDE_RIGHT, int(width));
 	}
+	if (read_number(p_props, "borderStartWidth", width)) {
+		box->set_border_width(p_rtl ? SIDE_RIGHT : SIDE_LEFT, int(width));
+	}
+	if (read_number(p_props, "borderEndWidth", width)) {
+		box->set_border_width(p_rtl ? SIDE_LEFT : SIDE_RIGHT, int(width));
+	}
 
 	// Corner radius: uniform first, then per-corner overrides.
 	float radius = 0.0f;
@@ -102,6 +108,25 @@ Ref<StyleBoxFlat> RNViewStyle::build_stylebox(const Dictionary &p_props) {
 	}
 	if (read_number(p_props, "borderBottomLeftRadius", radius)) {
 		box->set_corner_radius(CORNER_BOTTOM_LEFT, int(radius));
+	}
+	for (const char *vertical : { "Top", "Bottom" }) {
+		for (const char *horizontal : { "Start", "End" }) {
+			const String key = String("border") + vertical + horizontal + "Radius";
+			if (read_number(p_props, key, radius)) {
+				const bool left = (String(horizontal) == "Start") != p_rtl;
+				const bool top = String(vertical) == "Top";
+				box->set_corner_radius(top ? (left ? CORNER_TOP_LEFT : CORNER_TOP_RIGHT) : (left ? CORNER_BOTTOM_LEFT : CORNER_BOTTOM_RIGHT), int(radius));
+			}
+		}
+	}
+	const Array shadows = p_props.get("boxShadow", Array());
+	if (shadows.size() == 1) {
+		const Dictionary shadow = shadows[0];
+		Color shadow_color(0, 0, 0, 1);
+		read_color(shadow, "color", shadow_color);
+		box->set_shadow_color(shadow_color);
+		box->set_shadow_size(MAX(0, int(float(shadow.get("blurRadius", 0.0)) + float(shadow.get("spreadDistance", 0.0)))));
+		box->set_shadow_offset(Point2(float(shadow.get("offsetX", 0.0)), float(shadow.get("offsetY", 0.0))));
 	}
 
 	return box;

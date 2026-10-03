@@ -52,6 +52,8 @@ void apply_edge(const Dictionary &p_style, const String &p_prefix, YGNodeRef p_n
 		{ "Right", YGEdgeRight },
 		{ "Horizontal", YGEdgeHorizontal },
 		{ "Vertical", YGEdgeVertical },
+		{ "Start", YGEdgeStart },
+		{ "End", YGEdgeEnd },
 	};
 
 	for (const EdgeName &entry : EDGES) {
@@ -85,6 +87,8 @@ void apply_border_width(const Dictionary &p_style, YGNodeRef p_node) {
 		{ "borderBottomWidth", YGEdgeBottom },
 		{ "borderLeftWidth", YGEdgeLeft },
 		{ "borderRightWidth", YGEdgeRight },
+		{ "borderStartWidth", YGEdgeStart },
+		{ "borderEndWidth", YGEdgeEnd },
 	};
 
 	for (const BorderEdge &entry : EDGES) {
@@ -159,6 +163,9 @@ YGAlign parse_align(const String &p_value, YGAlign p_default) {
 }
 
 void apply_style_values(YGNodeRef p_node, const Dictionary &p_style) {
+	const String direction = p_style.get("direction", "inherit");
+	YGNodeStyleSetDirection(p_node, direction == "rtl" ? YGDirectionRTL : direction == "ltr" ? YGDirectionLTR
+																							 : YGDirectionInherit);
 	if (p_style.has("flexDirection")) {
 		YGNodeStyleSetFlexDirection(p_node, parse_flex_direction(p_style["flexDirection"]));
 	}
@@ -246,6 +253,8 @@ void apply_style_values(YGNodeRef p_node, const Dictionary &p_style) {
 		{ "bottom", YGEdgeBottom },
 		{ "left", YGEdgeLeft },
 		{ "right", YGEdgeRight },
+		{ "start", YGEdgeStart },
+		{ "end", YGEdgeEnd },
 	};
 	for (const Offset &offset : OFFSETS) {
 		if (is_number(p_style.get(offset.key, Variant()))) {
@@ -264,6 +273,7 @@ float font_size_of(const Dictionary &p_props) {
 } //namespace
 
 void RNLayout::reset_style(YGNodeRef p_node) {
+	YGNodeStyleSetDirection(p_node, YGDirectionInherit);
 	YGNodeStyleSetFlexDirection(p_node, YGFlexDirectionColumn);
 	YGNodeStyleSetJustifyContent(p_node, YGJustifyFlexStart);
 	YGNodeStyleSetAlignItems(p_node, YGAlignStretch);
@@ -281,7 +291,7 @@ void RNLayout::reset_style(YGNodeRef p_node) {
 	YGNodeStyleSetMinHeight(p_node, YGUndefined);
 	YGNodeStyleSetMaxWidth(p_node, YGUndefined);
 	YGNodeStyleSetMaxHeight(p_node, YGUndefined);
-	for (YGEdge edge : { YGEdgeAll, YGEdgeTop, YGEdgeBottom, YGEdgeLeft, YGEdgeRight, YGEdgeHorizontal, YGEdgeVertical }) {
+	for (YGEdge edge : { YGEdgeAll, YGEdgeTop, YGEdgeBottom, YGEdgeLeft, YGEdgeRight, YGEdgeHorizontal, YGEdgeVertical, YGEdgeStart, YGEdgeEnd }) {
 		YGNodeStyleSetMargin(p_node, edge, YGUndefined);
 		YGNodeStyleSetPadding(p_node, edge, YGUndefined);
 		YGNodeStyleSetBorder(p_node, edge, YGUndefined);
@@ -291,7 +301,7 @@ void RNLayout::reset_style(YGNodeRef p_node) {
 	YGNodeStyleSetGap(p_node, YGGutterColumn, YGUndefined);
 	YGNodeStyleSetDisplay(p_node, YGDisplayFlex);
 	YGNodeStyleSetPositionType(p_node, YGPositionTypeRelative);
-	for (YGEdge edge : { YGEdgeTop, YGEdgeBottom, YGEdgeLeft, YGEdgeRight }) {
+	for (YGEdge edge : { YGEdgeTop, YGEdgeBottom, YGEdgeLeft, YGEdgeRight, YGEdgeStart, YGEdgeEnd }) {
 		YGNodeStyleSetPosition(p_node, edge, YGUndefined);
 	}
 }

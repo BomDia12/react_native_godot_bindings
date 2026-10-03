@@ -16,6 +16,7 @@ DIAGNOSTIC_TOKENS = (
     "RNViewStyle: non-numeric color",
     "RN_GODOT_COMPAT:",
     "Hermes",
+    "Animated: `useNativeDriver`",
 )
 
 

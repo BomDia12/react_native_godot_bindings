@@ -4,6 +4,19 @@ import ReactNativeStyleAttributes, {
   colorAttribute,
 } from 'react-native/Libraries/Components/View/ReactNativeStyleAttributes';
 
+const optionalRecord = value => {
+  if (value == null) {
+    return null;
+  }
+  const result = {};
+  for (const key of Object.keys(value)) {
+    if (value[key] !== undefined) {
+      result[key] = value[key];
+    }
+  }
+  return result;
+};
+
 const bubble = name => ({
   phasedRegistrationNames: {
     captured: name + 'Capture',
@@ -22,6 +35,8 @@ const enterLeave = name => ({
 const bubblingEventTypes = {
   topBlur: bubble('onBlur'),
   topClick: bubble('onClick'),
+  topMiddleClick: bubble('onMiddleClick'),
+  topRightClick: bubble('onRightClick'),
   topFocus: bubble('onFocus'),
   topKeyDown: bubble('onKeyDown'),
   topKeyUp: bubble('onKeyUp'),
@@ -43,6 +58,8 @@ const bubblingEventTypes = {
 
 const directEventTypes = {
   topLayout: {registrationName: 'onLayout'},
+  topGodotContextMenuAction: {registrationName: 'onGodotContextMenuAction'},
+  topAccessibilityAction: {registrationName: 'onAccessibilityAction'},
 };
 
 const validAttributes = {
@@ -56,6 +73,22 @@ const validAttributes = {
   hitSlop: true,
   nativeID: true,
   onClick: true,
+  onMiddleClick: true,
+  onMiddleClickCapture: true,
+  onRightClick: true,
+  onRightClickCapture: true,
+  godotContextMenu: true,
+  onGodotContextMenuAction: true,
+  accessible: true,
+  accessibilityLabel: true,
+  accessibilityRole: true,
+  accessibilityHint: true,
+  accessibilityState: {process: optionalRecord},
+  accessibilityValue: {process: optionalRecord},
+  accessibilityActions: {process: value => value?.map(optionalRecord)},
+  accessibilityElementsHidden: true,
+  importantForAccessibility: true,
+  onAccessibilityAction: true,
   onFocus: true,
   onBlur: true,
   onKeyDown: true,

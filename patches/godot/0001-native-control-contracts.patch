@@ -1,0 +1,1944 @@
+diff --git a/core/io/image.cpp b/core/io/image.cpp
+index 93ba6f0c81..111065e33c 100644
+--- a/core/io/image.cpp
++++ b/core/io/image.cpp
+@@ -40,6 +40,44 @@
+ #include "core/templates/hash_map.h"
+ #include "core/variant/dictionary.h"
+ 
++thread_local Image::LoadLimits Image::active_load_limits;
++
++Image::ScopedLoadLimits::ScopedLoadLimits(const LoadLimits &p_limits) : previous(active_load_limits) {
++	active_load_limits = p_limits;
++	if (previous.max_workspace_bytes && (!p_limits.max_workspace_bytes || previous.max_workspace_bytes < p_limits.max_workspace_bytes)) {
++		active_load_limits.max_workspace_bytes = previous.max_workspace_bytes;
++	}
++	if (previous.max_encoded_bytes && (!p_limits.max_encoded_bytes || previous.max_encoded_bytes < p_limits.max_encoded_bytes)) {
++		active_load_limits.max_encoded_bytes = previous.max_encoded_bytes;
++	}
++	if (previous.max_allocation_bytes && (!p_limits.max_allocation_bytes || previous.max_allocation_bytes < p_limits.max_allocation_bytes)) {
++		active_load_limits.max_allocation_bytes = previous.max_allocation_bytes;
++	}
++}
++
++Image::ScopedLoadLimits::~ScopedLoadLimits() {
++	active_load_limits = previous;
++}
++
++Image::LoadLimits Image::get_load_limits() {
++	return active_load_limits;
++}
++
++bool Image::is_load_buffer_allowed(uint64_t p_bytes) {
++	return !active_load_limits.max_encoded_bytes || p_bytes <= active_load_limits.max_encoded_bytes;
++}
++
++bool Image::is_load_size_allowed(uint64_t p_width, uint64_t p_height, uint32_t p_bytes_per_pixel, bool p_mipmaps) {
++	if (!active_load_limits.max_allocation_bytes) {
++		return true;
++	}
++	if (!p_width || !p_height || !p_bytes_per_pixel || p_bytes_per_pixel > 16 || p_width > MAX_WIDTH || p_height > MAX_HEIGHT) {
++		return false;
++	}
++	const uint64_t pixels = active_load_limits.max_allocation_bytes / p_bytes_per_pixel / (p_mipmaps ? 2 : 1);
++	return p_width <= pixels / p_height;
++}
++
+ const char *Image::format_names[Image::FORMAT_MAX] = {
+ 	"Lum8",
+ 	"LumAlpha8",
+@@ -4802,3 +4840,29 @@ Dictionary Image::compute_image_metrics(const Ref<Image> p_compared_image, bool
+ 	result["peak_snr"] = image_metric_peak_snr;
+ 	return result;
+ }
++
++Error Image::probe_buffer(const uint8_t *p_data, size_t p_size, Size2i &r_size, BufferFormat &r_format) {
++	r_format = BUFFER_UNKNOWN;
++	r_size = Size2i();
++	if (!p_data || p_size < 12) {
++		return ERR_FILE_CORRUPT;
++	}
++	if (!is_load_buffer_allowed(p_size)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	BufferProbe probe = nullptr;
++	if (!memcmp(p_data, "\x89PNG\r\n\x1a\n", 8)) {
++		r_format = BUFFER_PNG;
++		probe = png_buffer_probe;
++	} else if (p_data[0] == 0xff && p_data[1] == 0xd8) {
++		r_format = BUFFER_JPEG;
++		probe = jpeg_buffer_probe;
++	} else if (!memcmp(p_data, "RIFF", 4) && !memcmp(p_data + 8, "WEBP", 4)) {
++		r_format = BUFFER_WEBP;
++		probe = webp_buffer_probe;
++	}
++	if (!probe) {
++		return ERR_UNAVAILABLE;
++	}
++	return probe(p_data, p_size, r_size);
++}
+diff --git a/core/io/image.h b/core/io/image.h
+index e6d101b5f0..99362efeeb 100644
+--- a/core/io/image.h
++++ b/core/io/image.h
+@@ -64,6 +64,39 @@ typedef Vector<uint8_t> (*SaveDDSBufferFunc)(const Ref<Image> &p_img);
+ class Image : public Resource {
+ 	GDCLASS(Image, Resource);
+ 
++public:
++	struct LoadLimits {
++		uint64_t max_encoded_bytes = 0;
++		uint64_t max_allocation_bytes = 0;
++		uint64_t max_workspace_bytes = 0;
++	};
++
++	class ScopedLoadLimits {
++		LoadLimits previous;
++
++	public:
++		explicit ScopedLoadLimits(const LoadLimits &p_limits);
++		~ScopedLoadLimits();
++		ScopedLoadLimits(const ScopedLoadLimits &) = delete;
++		ScopedLoadLimits &operator=(const ScopedLoadLimits &) = delete;
++	};
++
++	enum BufferFormat { BUFFER_UNKNOWN,
++		BUFFER_PNG,
++		BUFFER_JPEG,
++		BUFFER_WEBP };
++	using BufferProbe = Error (*)(const uint8_t *, size_t, Size2i &);
++	static inline BufferProbe png_buffer_probe = nullptr;
++	static inline BufferProbe jpeg_buffer_probe = nullptr;
++	static inline BufferProbe webp_buffer_probe = nullptr;
++	static Error probe_buffer(const uint8_t *p_data, size_t p_size, Size2i &r_size, BufferFormat &r_format);
++	static LoadLimits get_load_limits();
++	static bool is_load_buffer_allowed(uint64_t p_bytes);
++	static bool is_load_size_allowed(uint64_t p_width, uint64_t p_height, uint32_t p_bytes_per_pixel, bool p_mipmaps = false);
++
++private:
++	static thread_local LoadLimits active_load_limits;
++
+ public:
+ 	enum {
+ 		MAX_WIDTH = (1 << 24), // Force a limit somehow.
+diff --git a/drivers/png/image_loader_png.cpp b/drivers/png/image_loader_png.cpp
+index cdb707f8f1..d2de8a6d4b 100644
+--- a/drivers/png/image_loader_png.cpp
++++ b/drivers/png/image_loader_png.cpp
+@@ -34,6 +34,9 @@
+ 
+ Error ImageLoaderPNG::load_image(Ref<Image> p_image, Ref<FileAccess> f, BitField<ImageFormatLoader::LoaderFlags> p_flags, float p_scale) {
+ 	const uint64_t buffer_size = f->get_length();
++	if (!Image::is_load_buffer_allowed(buffer_size)) {
++		return ERR_OUT_OF_MEMORY;
++	}
+ 	Vector<uint8_t> file_buffer;
+ 	Error err = file_buffer.resize(buffer_size);
+ 	if (err) {
+@@ -96,6 +99,7 @@ Vector<uint8_t> ImageLoaderPNG::lossless_pack_png(const Ref<Image> &p_image) {
+ }
+ 
+ ImageLoaderPNG::ImageLoaderPNG() {
++	Image::png_buffer_probe = PNGDriverCommon::png_probe_buffer;
+ 	Image::_png_mem_loader_func = load_mem_png;
+ 	Image::_png_mem_unpacker_func = unpack_mem_png;
+ 	Image::png_unpacker = lossless_unpack_png;
+diff --git a/drivers/png/png_driver_common.cpp b/drivers/png/png_driver_common.cpp
+index aa69ad38ee..68671df86e 100644
+--- a/drivers/png/png_driver_common.cpp
++++ b/drivers/png/png_driver_common.cpp
+@@ -59,7 +59,70 @@ static bool check_error(const png_image &image) {
+ 	return false;
+ }
+ 
++Error png_probe_buffer(const uint8_t *p_source, size_t p_size, Size2i &r_size) {
++	if (!Image::is_load_buffer_allowed(p_size)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	if (Image::get_load_limits().max_allocation_bytes) {
++		if (p_size < 8) {
++			return ERR_FILE_CORRUPT;
++		}
++		size_t chunks = 0;
++		for (size_t offset = 8; offset < p_size;) {
++			if (++chunks > 4096 || p_size - offset < 12) {
++				return ERR_FILE_CORRUPT;
++			}
++			const uint32_t size = (uint32_t(p_source[offset]) << 24) | (uint32_t(p_source[offset + 1]) << 16) | (uint32_t(p_source[offset + 2]) << 8) | uint32_t(p_source[offset + 3]);
++			if (size > p_size - offset - 12) {
++				return ERR_FILE_CORRUPT;
++			}
++			const uint8_t *kind = p_source + offset + 4;
++			if (!memcmp(kind, "iCCP", 4) || !memcmp(kind, "zTXt", 4) || !memcmp(kind, "iTXt", 4)) {
++				return ERR_UNAVAILABLE;
++			}
++			offset += size_t(size) + 12;
++		}
++	}
++
++	png_image image = {};
++	image.version = PNG_IMAGE_VERSION;
++	const bool success = png_image_begin_read_from_memory(&image, p_source, p_size);
++	const Size2i dimensions(image.width, image.height);
++	png_image_free(&image);
++	if (!success) {
++		return ERR_FILE_CORRUPT;
++	}
++	if (!Image::is_load_size_allowed(dimensions.x, dimensions.y, 4)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	r_size = dimensions;
++	return OK;
++}
++
+ Error png_to_image(const uint8_t *p_source, size_t p_size, bool p_force_linear, Ref<Image> p_image) {
++	if (!Image::is_load_buffer_allowed(p_size)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	if (Image::get_load_limits().max_allocation_bytes) {
++		if (p_size < 8) {
++			return ERR_FILE_CORRUPT;
++		}
++		size_t chunks = 0;
++		for (size_t offset = 8; offset < p_size;) {
++			if (++chunks > 4096 || p_size - offset < 12) {
++				return ERR_FILE_CORRUPT;
++			}
++			const uint32_t size = (uint32_t(p_source[offset]) << 24) | (uint32_t(p_source[offset + 1]) << 16) | (uint32_t(p_source[offset + 2]) << 8) | uint32_t(p_source[offset + 3]);
++			if (size > p_size - offset - 12) {
++				return ERR_FILE_CORRUPT;
++			}
++			const uint8_t *kind = p_source + offset + 4;
++			if (!memcmp(kind, "iCCP", 4) || !memcmp(kind, "zTXt", 4) || !memcmp(kind, "iTXt", 4)) {
++				return ERR_UNAVAILABLE;
++			}
++			offset += size_t(size) + 12;
++		}
++	}
+ 	png_image png_img;
+ 	memset(&png_img, 0, sizeof(png_img));
+ 	png_img.version = PNG_IMAGE_VERSION;
+@@ -69,6 +132,11 @@ Error png_to_image(const uint8_t *p_source, size_t p_size, bool p_force_linear,
+ 	ERR_FAIL_COND_V_MSG(check_error(png_img), ERR_FILE_CORRUPT, png_img.message);
+ 	ERR_FAIL_COND_V(!success, ERR_FILE_CORRUPT);
+ 
++	if (!Image::is_load_size_allowed(png_img.width, png_img.height, 4)) {
++		png_image_free(&png_img);
++		return ERR_OUT_OF_MEMORY;
++	}
++
+ 	// flags to be masked out of input format to give target format
+ 	const png_uint_32 format_mask = ~(
+ 			// convert component order to RGBA
+diff --git a/drivers/png/png_driver_common.h b/drivers/png/png_driver_common.h
+index dea7229246..ed90bc0fac 100644
+--- a/drivers/png/png_driver_common.h
++++ b/drivers/png/png_driver_common.h
+@@ -35,6 +35,7 @@
+ namespace PNGDriverCommon {
+ 
+ // Attempt to load png from buffer (p_source, p_size) into p_image
++Error png_probe_buffer(const uint8_t *p_source, size_t p_size, Size2i &r_size);
+ Error png_to_image(const uint8_t *p_source, size_t p_size, bool p_force_linear, Ref<Image> p_image);
+ 
+ // Append p_image, as a png, to p_buffer.
+diff --git a/modules/jpg/image_loader_libjpeg_turbo.cpp b/modules/jpg/image_loader_libjpeg_turbo.cpp
+index be3ea549c1..100f1490c7 100644
+--- a/modules/jpg/image_loader_libjpeg_turbo.cpp
++++ b/modules/jpg/image_loader_libjpeg_turbo.cpp
+@@ -32,12 +32,50 @@
+ 
+ #include <turbojpeg.h>
+ 
++static Error jpeg_probe_buffer(const uint8_t *p_buffer, size_t p_size, Size2i &r_size) {
++	if (!Image::is_load_buffer_allowed(p_size)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	const uint64_t workspace = Image::get_load_limits().max_workspace_bytes;
++	if (workspace && workspace < 1048576) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	tjhandle decoder = tj3Init(TJINIT_DECOMPRESS);
++	if (!decoder) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	if (workspace) {
++		tj3Set(decoder, TJPARAM_MAXMEMORY, MIN(workspace / 1048576, uint64_t(INT32_MAX)));
++	}
++	const bool valid = tj3DecompressHeader(decoder, p_buffer, p_size) == 0;
++	Size2i dimensions(tj3Get(decoder, TJPARAM_JPEGWIDTH), tj3Get(decoder, TJPARAM_JPEGHEIGHT));
++	tj3Destroy(decoder);
++	if (!valid) {
++		return ERR_FILE_CORRUPT;
++	}
++	if (!Image::is_load_size_allowed(dimensions.x, dimensions.y, 4)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	r_size = dimensions;
++	return OK;
++}
+ Error jpeg_turbo_load_image_from_buffer(Image *p_image, const uint8_t *p_buffer, int p_buffer_len) {
++	if (p_buffer_len < 0 || !Image::is_load_buffer_allowed(p_buffer_len)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	const uint64_t workspace = Image::get_load_limits().max_workspace_bytes;
++	if (workspace && workspace < 1048576) {
++		return ERR_OUT_OF_MEMORY;
++	}
+ 	tjhandle tj_instance = tj3Init(TJINIT_DECOMPRESS);
+ 	if (tj_instance == nullptr) {
+ 		return FAILED;
+ 	}
+ 
++	if (workspace && tj3Set(tj_instance, TJPARAM_MAXMEMORY, MIN(workspace / 1048576, uint64_t(INT32_MAX))) < 0) {
++		tj3Destroy(tj_instance);
++		return ERR_UNAVAILABLE;
++	}
+ 	if (tj3DecompressHeader(tj_instance, p_buffer, p_buffer_len) < 0) {
+ 		tj3Destroy(tj_instance);
+ 		return ERR_FILE_CORRUPT;
+@@ -46,6 +84,10 @@ Error jpeg_turbo_load_image_from_buffer(Image *p_image, const uint8_t *p_buffer,
+ 	const unsigned int width = tj3Get(tj_instance, TJPARAM_JPEGWIDTH);
+ 	const unsigned int height = tj3Get(tj_instance, TJPARAM_JPEGHEIGHT);
+ 	const TJCS colorspace = (TJCS)tj3Get(tj_instance, TJPARAM_COLORSPACE);
++	if (!Image::is_load_size_allowed(width, height, 4)) {
++		tj3Destroy(tj_instance);
++		return ERR_OUT_OF_MEMORY;
++	}
+ 
+ 	if (tj3Get(tj_instance, TJPARAM_PRECISION) > 8) {
+ 		// TODO: Proceed anyway and convert to rgb8?
+@@ -90,6 +132,9 @@ Error ImageLoaderLibJPEGTurbo::load_image(Ref<Image> p_image, Ref<FileAccess> f,
+ 	Vector<uint8_t> src_image;
+ 	uint64_t src_image_len = f->get_length();
+ 	ERR_FAIL_COND_V(src_image_len == 0, ERR_FILE_CORRUPT);
++	if (!Image::is_load_buffer_allowed(src_image_len)) {
++		return ERR_OUT_OF_MEMORY;
++	}
+ 	src_image.resize(src_image_len);
+ 
+ 	uint8_t *w = src_image.ptrw();
+@@ -192,6 +237,7 @@ static Error _jpeg_turbo_save_func(const String &p_path, const Ref<Image> &p_img
+ }
+ 
+ ImageLoaderLibJPEGTurbo::ImageLoaderLibJPEGTurbo() {
++	Image::jpeg_buffer_probe = jpeg_probe_buffer;
+ 	Image::_jpg_mem_loader_func = _jpeg_turbo_mem_loader_func;
+ 	Image::save_jpg_func = _jpeg_turbo_save_func;
+ 	Image::save_jpg_buffer_func = _jpeg_turbo_buffer_save_func;
+diff --git a/modules/webp/SCsub b/modules/webp/SCsub
+index 808d947a04..5fc4477932 100644
+--- a/modules/webp/SCsub
++++ b/modules/webp/SCsub
+@@ -11,6 +11,7 @@ env_webp = env_modules.Clone()
+ thirdparty_obj = []
+ 
+ if env["builtin_libwebp"]:
++    env_webp.Append(CPPDEFINES=["WEBP_SCOPED_ALLOCATION_HOOKS"])
+     thirdparty_dir = "#thirdparty/libwebp/"
+     thirdparty_sources = [
+         "sharpyuv/sharpyuv.c",
+diff --git a/modules/webp/image_loader_webp.cpp b/modules/webp/image_loader_webp.cpp
+index d0b156bdd7..a6959efd4e 100644
+--- a/modules/webp/image_loader_webp.cpp
++++ b/modules/webp/image_loader_webp.cpp
+@@ -46,6 +46,9 @@ static Ref<Image> _webp_mem_loader_func(const uint8_t *p_webp_data, int p_size)
+ Error ImageLoaderWebP::load_image(Ref<Image> p_image, Ref<FileAccess> f, BitField<ImageFormatLoader::LoaderFlags> p_flags, float p_scale) {
+ 	Vector<uint8_t> src_image;
+ 	uint64_t src_image_len = f->get_length();
++	if (!Image::is_load_buffer_allowed(src_image_len)) {
++		return ERR_OUT_OF_MEMORY;
++	}
+ 	ERR_FAIL_COND_V(src_image_len == 0, ERR_FILE_CORRUPT);
+ 	src_image.resize(src_image_len);
+ 
+@@ -63,6 +66,7 @@ void ImageLoaderWebP::get_recognized_extensions(List<String> *p_extensions) cons
+ }
+ 
+ ImageLoaderWebP::ImageLoaderWebP() {
++	Image::webp_buffer_probe = WebPCommon::webp_probe_buffer;
+ 	Image::_webp_mem_loader_func = _webp_mem_loader_func;
+ 	Image::webp_lossy_packer = WebPCommon::_webp_lossy_pack;
+ 	Image::webp_lossless_packer = WebPCommon::_webp_lossless_pack;
+diff --git a/modules/webp/webp_common.cpp b/modules/webp/webp_common.cpp
+index cab5e9399e..cd32591c9c 100644
+--- a/modules/webp/webp_common.cpp
++++ b/modules/webp/webp_common.cpp
+@@ -35,6 +35,76 @@
+ #include <webp/decode.h>
+ #include <webp/encode.h>
+ 
++#ifdef WEBP_SCOPED_ALLOCATION_HOOKS
++#include <src/utils/utils.h>
++
++#include <cstdlib>
++#include <map>
++
++namespace {
++
++class ScopedWebPAllocations {
++	static thread_local ScopedWebPAllocations *current;
++	ScopedWebPAllocations *previous = nullptr;
++	WebPScopedAlloc previous_allocate = nullptr;
++	WebPScopedFree previous_release = nullptr;
++	std::map<void *, uint64_t> allocations;
++	uint64_t used = 0;
++	uint64_t limit = 0;
++
++	static void *allocate(size_t p_size, int p_clear) {
++		const uint64_t overhead = 128;
++		if (current->used > current->limit || p_size > current->limit - current->used || overhead > current->limit - current->used - p_size) {
++			return nullptr;
++		}
++		void *pointer = p_clear ? std::calloc(1, p_size) : std::malloc(p_size);
++		if (pointer) {
++			current->allocations.emplace(pointer, p_size + overhead);
++			current->used += p_size + overhead;
++		}
++		return pointer;
++	}
++
++	static void release(void *p_pointer) {
++		const auto found = current->allocations.find(p_pointer);
++		if (found != current->allocations.end()) {
++			current->used -= found->second;
++			current->allocations.erase(found);
++			std::free(p_pointer);
++		} else if (current->previous_release) {
++			auto *owner = current;
++			current = owner->previous;
++			owner->previous_release(p_pointer);
++			current = owner;
++		} else {
++			std::free(p_pointer);
++		}
++	}
++
++public:
++	ScopedWebPAllocations() {
++		limit = Image::get_load_limits().max_workspace_bytes;
++		if (limit) {
++			previous = current;
++			WebPGetScopedAllocationHooks(&previous_allocate, &previous_release);
++			current = this;
++			WebPSetScopedAllocationHooks(allocate, release);
++		}
++	}
++
++	~ScopedWebPAllocations() {
++		if (limit) {
++			WebPSetScopedAllocationHooks(previous_allocate, previous_release);
++			current = previous;
++		}
++	}
++};
++
++thread_local ScopedWebPAllocations *ScopedWebPAllocations::current = nullptr;
++
++} // namespace
++#endif
++
+ namespace WebPCommon {
+ Vector<uint8_t> _webp_lossy_pack(const Ref<Image> &p_image, float p_quality) {
+ 	ERR_FAIL_COND_V(p_image.is_null() || p_image->is_empty(), Vector<uint8_t>());
+@@ -121,16 +191,32 @@ Vector<uint8_t> _webp_packer(const Ref<Image> &p_image, float p_quality, bool p_
+ 
+ Ref<Image> _webp_unpack(const Vector<uint8_t> &p_buffer) {
+ 	int size = p_buffer.size();
+-	ERR_FAIL_COND_V(size <= 0, Ref<Image>());
++	ERR_FAIL_COND_V(size < 12, Ref<Image>());
+ 	const uint8_t *r = p_buffer.ptr();
+ 
+ 	// A WebP file uses a RIFF header, which starts with "RIFF____WEBP".
+ 	ERR_FAIL_COND_V(r[0] != 'R' || r[1] != 'I' || r[2] != 'F' || r[3] != 'F' || r[8] != 'W' || r[9] != 'E' || r[10] != 'B' || r[11] != 'P', Ref<Image>());
++	if (!Image::is_load_buffer_allowed(size)) {
++		return Ref<Image>();
++	}
+ 	WebPBitstreamFeatures features;
+ 	if (WebPGetFeatures(r, size, &features) != VP8_STATUS_OK) {
+ 		ERR_FAIL_V_MSG(Ref<Image>(), "Error unpacking WebP image.");
+ 	}
+ 
++	if (!Image::is_load_size_allowed(features.width, features.height, 4)) {
++		return Ref<Image>();
++	}
++	if (Image::get_load_limits().max_allocation_bytes && features.has_animation) {
++		return Ref<Image>();
++	}
++#ifdef WEBP_SCOPED_ALLOCATION_HOOKS
++	ScopedWebPAllocations allocation_scope;
++#else
++	if (Image::get_load_limits().max_workspace_bytes) {
++		return Ref<Image>();
++	}
++#endif
+ 	Vector<uint8_t> dst_image;
+ 	int datasize = features.width * features.height * (features.has_alpha ? 4 : 3);
+ 	dst_image.resize(datasize);
+@@ -150,14 +236,47 @@ Ref<Image> _webp_unpack(const Vector<uint8_t> &p_buffer) {
+ 	return img;
+ }
+ 
++Error webp_probe_buffer(const uint8_t *p_buffer, size_t p_size, Size2i &r_size) {
++	if (!Image::is_load_buffer_allowed(p_size)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	WebPBitstreamFeatures features;
++	if (WebPGetFeatures(p_buffer, p_size, &features) != VP8_STATUS_OK) {
++		return ERR_FILE_CORRUPT;
++	}
++	if (features.has_animation) {
++		return ERR_UNAVAILABLE;
++	}
++	if (!Image::is_load_size_allowed(features.width, features.height, 4)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	r_size = Size2i(features.width, features.height);
++	return OK;
++}
+ Error webp_load_image_from_buffer(Image *p_image, const uint8_t *p_buffer, int p_buffer_len) {
+ 	ERR_FAIL_NULL_V(p_image, ERR_INVALID_PARAMETER);
+ 
++	if (p_buffer_len < 0 || !Image::is_load_buffer_allowed(p_buffer_len)) {
++		return ERR_OUT_OF_MEMORY;
++	}
+ 	WebPBitstreamFeatures features;
+ 	if (WebPGetFeatures(p_buffer, p_buffer_len, &features) != VP8_STATUS_OK) {
+ 		ERR_FAIL_V(ERR_FILE_CORRUPT);
+ 	}
+ 
++	if (!Image::is_load_size_allowed(features.width, features.height, 4)) {
++		return ERR_OUT_OF_MEMORY;
++	}
++	if (Image::get_load_limits().max_allocation_bytes && features.has_animation) {
++		return ERR_UNAVAILABLE;
++	}
++#ifdef WEBP_SCOPED_ALLOCATION_HOOKS
++	ScopedWebPAllocations allocation_scope;
++#else
++	if (Image::get_load_limits().max_workspace_bytes) {
++		return ERR_UNAVAILABLE;
++	}
++#endif
+ 	Vector<uint8_t> dst_image;
+ 	int datasize = features.width * features.height * (features.has_alpha ? 4 : 3);
+ 	dst_image.resize(datasize);
+diff --git a/modules/webp/webp_common.h b/modules/webp/webp_common.h
+index 5a7f914862..595976356d 100644
+--- a/modules/webp/webp_common.h
++++ b/modules/webp/webp_common.h
+@@ -40,5 +40,6 @@ Vector<uint8_t> _webp_lossless_pack(const Ref<Image> &p_image);
+ Vector<uint8_t> _webp_packer(const Ref<Image> &p_image, float p_quality, bool p_lossless);
+ // Given a WebP file, unpack it into an image.
+ Ref<Image> _webp_unpack(const Vector<uint8_t> &p_buffer);
++Error webp_probe_buffer(const uint8_t *p_buffer, size_t p_size, Size2i &r_size);
+ Error webp_load_image_from_buffer(Image *p_image, const uint8_t *p_buffer, int p_buffer_len);
+ } //namespace WebPCommon
+diff --git a/scene/gui/control.cpp b/scene/gui/control.cpp
+index 6aa53873ed..604434c82f 100644
+--- a/scene/gui/control.cpp
++++ b/scene/gui/control.cpp
+@@ -744,6 +744,7 @@ Transform2D Control::_get_internal_transform() const {
+ 	// T(pivot_offset) * R(rotation) * S(scale) * T(-pivot_offset)
+ 	Transform2D xform(data.rotation, data.scale, 0.0f, get_combined_pivot_offset());
+ 	xform.translate_local(-get_combined_pivot_offset());
++	xform *= data.affine_transform;
+ 
+ 	if (is_offset_transform_enabled() && !data.offset_transform->visual_only) {
+ 		xform *= get_offset_transform();
+@@ -1526,7 +1527,7 @@ void Control::set_size(const Size2 &p_size, bool p_keep_offsets) {
+ 	ERR_MAIN_THREAD_GUARD;
+ 	ERR_FAIL_COND(!std::isfinite(p_size.x) || !std::isfinite(p_size.y));
+ 	Size2 new_size = p_size;
+-	Size2 min = get_combined_minimum_size();
++	Size2 min = data.external_layout ? Size2() : get_combined_minimum_size();
+ 	if (new_size.x < min.x) {
+ 		new_size.x = min.x;
+ 	}
+@@ -1534,7 +1535,7 @@ void Control::set_size(const Size2 &p_size, bool p_keep_offsets) {
+ 		new_size.y = min.y;
+ 	}
+ 
+-	Size2 max = get_combined_maximum_size();
++	Size2 max = data.external_layout ? Size2(-1, -1) : get_combined_maximum_size();
+ 	if (max.x >= 0 && new_size.x > max.x) {
+ 		new_size.x = max.x;
+ 	}
+@@ -1631,6 +1632,35 @@ Vector2 Control::get_scale() const {
+ 	return data.scale;
+ }
+ 
++void Control::set_external_layout_enabled(bool p_enabled) {
++	ERR_MAIN_THREAD_GUARD;
++	if (data.external_layout == p_enabled) {
++		return;
++	}
++	data.external_layout = p_enabled;
++	_size_changed();
++}
++
++bool Control::is_external_layout_enabled() const {
++	return data.external_layout;
++}
++
++void Control::set_affine_transform(const Transform2D &p_transform) {
++	ERR_MAIN_THREAD_GUARD;
++	ERR_FAIL_COND(!p_transform.is_finite());
++	if (data.affine_transform == p_transform) {
++		return;
++	}
++	data.affine_transform = p_transform;
++	_notify_transform();
++	queue_redraw();
++	queue_accessibility_update();
++}
++
++Transform2D Control::get_affine_transform() const {
++	return data.affine_transform;
++}
++
+ void Control::set_rotation(real_t p_radians) {
+ 	ERR_MAIN_THREAD_GUARD;
+ 	if (data.rotation == p_radians) {
+@@ -2176,7 +2206,7 @@ void Control::_size_changed() {
+ 	Size2 new_size_cache = Point2(edge_pos[2], edge_pos[3]) - new_pos_cache;
+ 
+ 	Size2 maximum_size = get_combined_maximum_size();
+-	Size2 minimum_size = get_combined_minimum_size();
++	Size2 minimum_size = data.external_layout ? Size2() : get_combined_minimum_size();
+ 
+ 	if (minimum_size.width > new_size_cache.width) {
+ 		if (data.h_grow == GROW_DIRECTION_BEGIN) {
+@@ -4704,6 +4734,10 @@ void Control::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("set_custom_minimum_size", "size"), &Control::set_custom_minimum_size);
+ 	ClassDB::bind_method(D_METHOD("set_global_position", "position", "keep_offsets"), &Control::set_global_position, DEFVAL(false));
+ 	ClassDB::bind_method(D_METHOD("_set_global_position", "position"), &Control::_set_global_position);
++	ClassDB::bind_method(D_METHOD("set_external_layout_enabled", "enabled"), &Control::set_external_layout_enabled);
++	ClassDB::bind_method(D_METHOD("is_external_layout_enabled"), &Control::is_external_layout_enabled);
++	ClassDB::bind_method(D_METHOD("set_affine_transform", "transform"), &Control::set_affine_transform);
++	ClassDB::bind_method(D_METHOD("get_affine_transform"), &Control::get_affine_transform);
+ 	ClassDB::bind_method(D_METHOD("set_rotation", "radians"), &Control::set_rotation);
+ 	ClassDB::bind_method(D_METHOD("set_rotation_degrees", "degrees"), &Control::set_rotation_degrees);
+ 	ClassDB::bind_method(D_METHOD("set_scale", "scale"), &Control::set_scale);
+diff --git a/scene/gui/control.h b/scene/gui/control.h
+index 9f3d248e29..b9723ba027 100644
+--- a/scene/gui/control.h
++++ b/scene/gui/control.h
+@@ -230,6 +230,8 @@ private:
+ 		GrowDirection h_grow = GROW_DIRECTION_END;
+ 		GrowDirection v_grow = GROW_DIRECTION_END;
+ 
++		bool external_layout = false;
++		Transform2D affine_transform;
+ 		real_t rotation = 0.0;
+ 		Vector2 scale = Vector2(1, 1);
+ 		Vector2 pivot_offset;
+@@ -599,6 +601,10 @@ public:
+ 	Rect2 get_screen_rect() const;
+ 	Rect2 get_anchorable_rect() const override;
+ 
++	void set_external_layout_enabled(bool p_enabled);
++	bool is_external_layout_enabled() const;
++	void set_affine_transform(const Transform2D &p_transform);
++	Transform2D get_affine_transform() const;
+ 	void set_scale(const Vector2 &p_scale);
+ 	Vector2 get_scale() const;
+ 	void set_rotation(real_t p_radians);
+diff --git a/scene/gui/line_edit.cpp b/scene/gui/line_edit.cpp
+index b6209ab35f..98ccf9891c 100644
+--- a/scene/gui/line_edit.cpp
++++ b/scene/gui/line_edit.cpp
+@@ -483,7 +483,7 @@ void LineEdit::gui_input(const Ref<InputEvent> &p_event) {
+ 
+ 				if (!text_changed_dirty) {
+ 					if (is_inside_tree()) {
+-						callable_mp(this, &LineEdit::_text_changed).call_deferred();
++						callable_mp(this, &LineEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 					}
+ 					text_changed_dirty = true;
+ 				}
+@@ -890,7 +890,7 @@ void LineEdit::gui_input(const Ref<InputEvent> &p_event) {
+ 			// Mirror paste behavior: defer _text_changed once per frame while emitting text_changed signal.
+ 			if (!text_changed_dirty) {
+ 				if (is_inside_tree() && text.length() != prev_len) {
+-					callable_mp(this, &LineEdit::_text_changed).call_deferred();
++					callable_mp(this, &LineEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 				}
+ 				text_changed_dirty = true;
+ 			}
+@@ -1064,7 +1064,7 @@ void LineEdit::gui_input(const Ref<InputEvent> &p_event) {
+ 		if (text.length() != prev_len) {
+ 			if (!text_changed_dirty) {
+ 				if (is_inside_tree()) {
+-					callable_mp(this, &LineEdit::_text_changed).call_deferred();
++					callable_mp(this, &LineEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 				}
+ 				text_changed_dirty = true;
+ 			}
+@@ -1157,7 +1157,7 @@ void LineEdit::drop_data(const Point2 &p_point, const Variant &p_data) {
+ 		select(caret_column_tmp, caret_column);
+ 		if (!text_changed_dirty) {
+ 			if (is_inside_tree()) {
+-				callable_mp(this, &LineEdit::_text_changed).call_deferred();
++				callable_mp(this, &LineEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 			}
+ 			text_changed_dirty = true;
+ 		}
+@@ -1775,7 +1775,7 @@ void LineEdit::paste_text() {
+ 
+ 		if (!text_changed_dirty) {
+ 			if (is_inside_tree() && text.length() != prev_len) {
+-				callable_mp(this, &LineEdit::_text_changed).call_deferred();
++				callable_mp(this, &LineEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 			}
+ 			text_changed_dirty = true;
+ 		}
+@@ -2117,7 +2117,7 @@ void LineEdit::delete_text(int p_from_column, int p_to_column) {
+ 
+ 	if (!text_changed_dirty) {
+ 		if (is_inside_tree()) {
+-			callable_mp(this, &LineEdit::_text_changed).call_deferred();
++			callable_mp(this, &LineEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 		}
+ 		text_changed_dirty = true;
+ 	}
+@@ -2831,7 +2831,7 @@ void LineEdit::menu_option(int p_option) {
+ 	// Mirror paste/drag behavior, emit text_changed signal if a control character was inserted.
+ 	if (inserted_control_char && !text_changed_dirty) {
+ 		if (is_inside_tree() && text.length() != prev_len) {
+-			callable_mp(this, &LineEdit::_text_changed).call_deferred();
++			callable_mp(this, &LineEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 		}
+ 		text_changed_dirty = true;
+ 	}
+@@ -3586,3 +3586,63 @@ LineEdit::LineEdit(const String &p_placeholder) {
+ LineEdit::~LineEdit() {
+ 	TS->free_rid(text_rid);
+ }
++
++void LineEdit::_emit_pending_text_changed(uint64_t p_revision) {
++	if (p_revision == edit_state_revision && text_changed_dirty) {
++		_text_changed();
++	}
++}
++
++std::shared_ptr<const LineEdit::EditState> LineEdit::capture_edit_state() const {
++	auto state = std::make_shared<EditState>();
++	state->owner = get_instance_id();
++	state->text = text;
++	state->undo_text = undo_text;
++	state->ime_text = ime_text;
++	state->ime_selection = ime_selection;
++	state->selection = selection;
++	state->caret_column = caret_column;
++	state->scroll_offset = scroll_offset;
++	state->undo_stack = undo_stack;
++	int index = 0;
++	for (const auto *entry = undo_stack.front(); entry; entry = entry->next(), ++index) {
++		if (entry == undo_stack_pos) {
++			state->undo_position = index;
++		}
++	}
++	state->text_changed_dirty = text_changed_dirty;
++	state->editing = editing;
++	return state;
++}
++
++void LineEdit::restore_edit_state(const std::shared_ptr<const EditState> &p_state) {
++	ERR_FAIL_COND(!p_state || p_state->owner != get_instance_id());
++	++edit_state_revision;
++	text = p_state->text;
++	undo_text = p_state->undo_text;
++	ime_text = p_state->ime_text;
++	ime_selection = p_state->ime_selection;
++	selection = p_state->selection;
++	caret_column = p_state->caret_column;
++	scroll_offset = p_state->scroll_offset;
++	undo_stack = p_state->undo_stack;
++	undo_stack_pos = nullptr;
++	int undo_index = 0;
++	for (auto *entry = undo_stack.front(); entry; entry = entry->next(), ++undo_index) {
++		if (undo_index == p_state->undo_position) {
++			undo_stack_pos = entry;
++		}
++	}
++	text_changed_dirty = p_state->text_changed_dirty;
++	editing = p_state->editing;
++	_shape();
++	queue_redraw();
++	if (text_changed_dirty && is_inside_tree()) {
++		callable_mp(this, &LineEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
++	}
++}
++
++void LineEdit::discard_pending_edit_notifications() {
++	++edit_state_revision;
++	text_changed_dirty = false;
++}
+diff --git a/scene/gui/line_edit.h b/scene/gui/line_edit.h
+index f1e8477eed..97060071f9 100644
+--- a/scene/gui/line_edit.h
++++ b/scene/gui/line_edit.h
+@@ -33,6 +33,8 @@
+ #include "scene/gui/control.h"
+ #include "scene/gui/popup_menu.h"
+ 
++#include <memory>
++
+ class LineEdit : public Control {
+ 	GDCLASS(LineEdit, Control);
+ 
+@@ -98,6 +100,8 @@ private:
+ 	bool editable = false;
+ 	bool pass = false;
+ 	bool text_changed_dirty = false;
++	uint64_t edit_state_revision = 0;
++	void _emit_pending_text_changed(uint64_t p_revision);
+ 	ExpandMode icon_expand_mode = EXPAND_MODE_ORIGINAL_SIZE;
+ 
+ 	enum AltInputMode {
+@@ -300,6 +304,25 @@ protected:
+ 	virtual String _get_accessibility_name() const override;
+ 
+ public:
++	class EditState {
++		friend class LineEdit;
++		ObjectID owner;
++		String text;
++		String undo_text;
++		String ime_text;
++		Point2 ime_selection;
++		Selection selection;
++		int caret_column = 0;
++		float scroll_offset = 0;
++		List<TextOperation> undo_stack;
++		int undo_position = -1;
++		bool text_changed_dirty = false;
++		bool editing = false;
++	};
++	std::shared_ptr<const EditState> capture_edit_state() const;
++	void discard_pending_edit_notifications();
++	void restore_edit_state(const std::shared_ptr<const EditState> &p_state);
++
+ 	void edit(bool p_hide_focus = false);
+ 	void unedit();
+ 	bool is_editing() const;
+diff --git a/scene/gui/rich_text_label.cpp b/scene/gui/rich_text_label.cpp
+index c60934be26..8e86f2a7d6 100644
+--- a/scene/gui/rich_text_label.cpp
++++ b/scene/gui/rich_text_label.cpp
+@@ -532,6 +532,17 @@ float RichTextLabel::_resize_line(ItemFrame *p_frame, int p_line, const Ref<Font
+ 	l.indent = _find_margin(l.from, p_base_font, p_base_font_size) + l.prefix_width;
+ 	l.offset.x = l.indent;
+ 	l.text_buf->set_width(p_width - l.offset.x);
++	l.text_buf->set_line_height_override(line_height_override);
++	int remaining_lines = visible_line_limit;
++	if (remaining_lines >= 0 && p_frame == main) {
++		for (int i = 0; i < p_line; ++i) {
++			remaining_lines -= main->lines[i].text_buf->get_visible_line_count();
++		}
++		l.text_buf->set_max_lines_visible(MAX(0, remaining_lines));
++		l.text_buf->set_text_overrun_behavior(TextServer::OVERRUN_TRIM_ELLIPSIS);
++	} else {
++		l.text_buf->set_max_lines_visible(-1);
++	}
+ 
+ 	PackedFloat32Array tab_stops = _find_tab_stops(l.from);
+ 	if (!tab_stops.is_empty()) {
+@@ -699,6 +710,17 @@ float RichTextLabel::_shape_line(ItemFrame *p_frame, int p_line, const Ref<Font>
+ 	l.indent = _find_margin(l.from, p_base_font, p_base_font_size) + l.prefix_width;
+ 	l.offset.x = l.indent;
+ 	l.text_buf->set_width(p_width - l.offset.x);
++	l.text_buf->set_line_height_override(line_height_override);
++	int remaining_lines = visible_line_limit;
++	if (remaining_lines >= 0 && p_frame == main) {
++		for (int i = 0; i < p_line; ++i) {
++			remaining_lines -= main->lines[i].text_buf->get_visible_line_count();
++		}
++		l.text_buf->set_max_lines_visible(MAX(0, remaining_lines));
++		l.text_buf->set_text_overrun_behavior(TextServer::OVERRUN_TRIM_ELLIPSIS);
++	} else {
++		l.text_buf->set_max_lines_visible(-1);
++	}
+ 	l.text_buf->set_alignment(_find_alignment(l.from));
+ 	l.text_buf->set_direction(_find_direction(l.from));
+ 
+@@ -1042,7 +1064,7 @@ void RichTextLabel::_update_table_size(ItemTable *p_table) {
+ 			line.text_buf->set_width(p_table->columns[column].width - Math::ceil(frame_padding_space + line.indent));
+ 			line.offset.y = prev_h;
+ 
+-			float h = line.text_buf->get_size().y + (line.text_buf->get_line_count() - 1) * theme_cache.line_separation;
++			float h = line.text_buf->get_size().y + (line.text_buf->get_visible_line_count() - 1) * theme_cache.line_separation;
+ 			if (i > 0) {
+ 				h += theme_cache.paragraph_separation + theme_cache.line_separation;
+ 			}
+@@ -1053,10 +1075,10 @@ void RichTextLabel::_update_table_size(ItemTable *p_table) {
+ 				h = MIN(h, frame->max_size_over.y);
+ 			}
+ 			yofs += h;
+-			prev_h = line.offset.y + line.text_buf->get_size().y + line.text_buf->get_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
++			prev_h = line.offset.y + line.text_buf->get_size().y + line.text_buf->get_visible_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
+ 
+ 			line.offset += offset;
+-			row_baseline = MAX(row_baseline, line.text_buf->get_line_ascent(line.text_buf->get_line_count() - 1));
++			row_baseline = MAX(row_baseline, line.text_buf->get_line_ascent(line.text_buf->get_visible_line_count() - 1));
+ 		}
+ 
+ 		offset -= frame->padding.position;
+@@ -1122,7 +1144,7 @@ int RichTextLabel::_draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_o
+ 	float v_limit = theme_cache.normal_style->get_margin(SIDE_BOTTOM);
+ 	Size2 ctrl_size = get_size();
+ 	// Draw text.
+-	for (int line = 0; line < text_buf->get_line_count(); line++) {
++	for (int line = 0; line < text_buf->get_visible_line_count(); line++) {
+ 		if (line > 0) {
+ 			off.y += (theme_cache.line_separation + p_vsep);
+ 		}
+@@ -1803,9 +1825,9 @@ void RichTextLabel::_find_click(ItemFrame *p_frame, const Point2i &p_click, Item
+ 		MutexLock lock(main->lines[to_line - 1].text_buf->get_mutex());
+ 		if (theme_cache.line_separation < 0) {
+ 			// Do not apply to the last line to avoid cutting text.
+-			total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + (main->lines[to_line - 1].text_buf->get_line_count() - 1) * theme_cache.line_separation;
++			total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + (main->lines[to_line - 1].text_buf->get_visible_line_count() - 1) * theme_cache.line_separation;
+ 		} else {
+-			total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + main->lines[to_line - 1].text_buf->get_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
++			total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + main->lines[to_line - 1].text_buf->get_visible_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
+ 		}
+ 	}
+ 	float vbegin = 0, vsep = 0;
+@@ -1824,7 +1846,7 @@ void RichTextLabel::_find_click(ItemFrame *p_frame, const Point2i &p_click, Item
+ 				int lines = 0;
+ 				for (int l = from_line; l < to_line; l++) {
+ 					MutexLock lock(main->lines[l].text_buf->get_mutex());
+-					lines += main->lines[l].text_buf->get_line_count();
++					lines += main->lines[l].text_buf->get_visible_line_count();
+ 				}
+ 				if (lines > 1) {
+ 					vsep = (text_rect.size.y - total_height) / (lines - 1);
+@@ -1837,7 +1859,7 @@ void RichTextLabel::_find_click(ItemFrame *p_frame, const Point2i &p_click, Item
+ 	while (ofs.y < size.height && from_line < to_line) {
+ 		MutexLock lock(main->lines[from_line].text_buf->get_mutex());
+ 		_find_click_in_line(p_frame, from_line, ofs, text_rect.size.x, vsep, p_click, r_click_frame, r_click_line, r_click_item, r_click_char, false, p_meta);
+-		ofs.y += main->lines[from_line].text_buf->get_size().y + main->lines[from_line].text_buf->get_line_count() * (theme_cache.line_separation + vsep) + (theme_cache.paragraph_separation);
++		ofs.y += main->lines[from_line].text_buf->get_size().y + main->lines[from_line].text_buf->get_visible_line_count() * (theme_cache.line_separation + vsep) + (theme_cache.paragraph_separation);
+ 		if (((r_click_item != nullptr) && ((*r_click_item) != nullptr)) || ((r_click_frame != nullptr) && ((*r_click_frame) != nullptr))) {
+ 			if (r_outside != nullptr) {
+ 				*r_outside = false;
+@@ -1872,7 +1894,7 @@ float RichTextLabel::_find_click_in_line(ItemFrame *p_frame, int p_line, const V
+ 
+ 	const Ref<TextParagraph> &text_buf = l.text_buf_disp.is_valid() ? l.text_buf_disp : l.text_buf;
+ 
+-	for (int line = 0; line < text_buf->get_line_count(); line++) {
++	for (int line = 0; line < text_buf->get_visible_line_count(); line++) {
+ 		RID rid = text_buf->get_line_rid(line);
+ 
+ 		float width = text_buf->get_width();
+@@ -2069,7 +2091,7 @@ float RichTextLabel::_find_click_in_line(ItemFrame *p_frame, int p_line, const V
+ 			return table_offy;
+ 		}
+ 
+-		if (line == text_buf->get_line_count() - 1) {
++		if (line == text_buf->get_visible_line_count() - 1) {
+ 			off.y += TS->shaped_text_get_descent(rid) + theme_cache.paragraph_separation;
+ 		}
+ 
+@@ -2256,7 +2278,7 @@ void RichTextLabel::_accessibility_update_line(RID p_id, ItemFrame *p_frame, int
+ 
+ 	const RID &line_ae = l.accessibility_line_element;
+ 
+-	Rect2 ae_rect = Rect2(p_ofs, Size2(p_width, l.text_buf->get_size().y + l.text_buf->get_line_count() * theme_cache.line_separation));
++	Rect2 ae_rect = Rect2(p_ofs, Size2(p_width, l.text_buf->get_size().y + l.text_buf->get_visible_line_count() * theme_cache.line_separation));
+ 	AccessibilityServer::get_singleton()->update_set_bounds(line_ae, ae_rect);
+ 	ac_element_bounds_cache[line_ae] = ae_rect;
+ 
+@@ -2307,7 +2329,7 @@ void RichTextLabel::_accessibility_update_line(RID p_id, ItemFrame *p_frame, int
+ 	}
+ 
+ 	Vector2 off;
+-	for (int line = 0; line < text_buf->get_line_count(); line++) {
++	for (int line = 0; line < text_buf->get_visible_line_count(); line++) {
+ 		if (line > 0) {
+ 			off.y += (theme_cache.line_separation + p_vsep);
+ 		}
+@@ -2622,9 +2644,9 @@ void RichTextLabel::_notification(int p_what) {
+ 				MutexLock lock(main->lines[to_line - 1].text_buf->get_mutex());
+ 				if (theme_cache.line_separation < 0) {
+ 					// Do not apply to the last line to avoid cutting text.
+-					total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + (main->lines[to_line - 1].text_buf->get_line_count() - 1) * theme_cache.line_separation;
++					total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + (main->lines[to_line - 1].text_buf->get_visible_line_count() - 1) * theme_cache.line_separation;
+ 				} else {
+-					total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + main->lines[to_line - 1].text_buf->get_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
++					total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + main->lines[to_line - 1].text_buf->get_visible_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
+ 				}
+ 			}
+ 			float vbegin = 0, vsep = 0;
+@@ -2643,7 +2665,7 @@ void RichTextLabel::_notification(int p_what) {
+ 						int lines = 0;
+ 						for (int l = from_line; l < to_line; l++) {
+ 							MutexLock lock(main->lines[l].text_buf->get_mutex());
+-							lines += main->lines[l].text_buf->get_line_count();
++							lines += main->lines[l].text_buf->get_visible_line_count();
+ 						}
+ 						if (lines > 1) {
+ 							vsep = (text_rect.size.y - total_height) / (lines - 1);
+@@ -2658,7 +2680,7 @@ void RichTextLabel::_notification(int p_what) {
+ 				MutexLock lock(main->lines[from_line].text_buf->get_mutex());
+ 
+ 				_accessibility_update_line(accessibility_scroll_element, main, from_line, ofs, text_rect.size.x, vsep);
+-				ofs.y += main->lines[from_line].text_buf->get_size().y + main->lines[from_line].text_buf->get_line_count() * (theme_cache.line_separation + vsep);
++				ofs.y += main->lines[from_line].text_buf->get_size().y + main->lines[from_line].text_buf->get_visible_line_count() * (theme_cache.line_separation + vsep);
+ 				from_line++;
+ 			}
+ 		} break;
+@@ -2800,9 +2822,9 @@ void RichTextLabel::_notification(int p_what) {
+ 				MutexLock lock(main->lines[to_line - 1].text_buf->get_mutex());
+ 				if (theme_cache.line_separation < 0) {
+ 					// Do not apply to the last line to avoid cutting text.
+-					total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + (main->lines[to_line - 1].text_buf->get_line_count() - 1) * theme_cache.line_separation;
++					total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + (main->lines[to_line - 1].text_buf->get_visible_line_count() - 1) * theme_cache.line_separation;
+ 				} else {
+-					total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + main->lines[to_line - 1].text_buf->get_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
++					total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + main->lines[to_line - 1].text_buf->get_visible_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
+ 				}
+ 			}
+ 			float vbegin = 0, vsep = 0;
+@@ -2821,7 +2843,7 @@ void RichTextLabel::_notification(int p_what) {
+ 						int lines = 0;
+ 						for (int l = from_line; l < to_line; l++) {
+ 							MutexLock lock(main->lines[l].text_buf->get_mutex());
+-							lines += main->lines[l].text_buf->get_line_count();
++							lines += main->lines[l].text_buf->get_visible_line_count();
+ 						}
+ 						if (lines > 1) {
+ 							vsep = (text_rect.size.y - total_height) / (lines - 1);
+@@ -2847,7 +2869,7 @@ void RichTextLabel::_notification(int p_what) {
+ 				if (drawn_lines > 0) {
+ 					visible_paragraph_count++;
+ 				}
+-				ofs.y += main->lines[from_line].text_buf->get_size().y + main->lines[from_line].text_buf->get_line_count() * (theme_cache.line_separation + vsep) + (theme_cache.paragraph_separation);
++				ofs.y += main->lines[from_line].text_buf->get_size().y + main->lines[from_line].text_buf->get_visible_line_count() * (theme_cache.line_separation + vsep) + (theme_cache.paragraph_separation);
+ 				from_line++;
+ 			}
+ 			if (scroll_follow_visible_characters && scroll_active) {
+@@ -4177,7 +4199,7 @@ bool RichTextLabel::_validate_line_caches() {
+ 
+ void RichTextLabel::_process_line_caches() {
+ 	// Shape invalid lines.
+-	if (!is_inside_tree()) {
++	if (!is_inside_tree() && !detached_layout_validation) {
+ 		updating.store(false);
+ 		return;
+ 	}
+@@ -6814,7 +6836,7 @@ void RichTextLabel::scroll_to_line(int p_line) {
+ 	int to_line = main->first_invalid_line.load();
+ 	for (int i = 0; i < to_line; i++) {
+ 		MutexLock lock(main->lines[i].text_buf->get_mutex());
+-		if ((line_count <= p_line) && (line_count + main->lines[i].text_buf->get_line_count() >= p_line)) {
++		if ((line_count <= p_line) && (line_count + main->lines[i].text_buf->get_visible_line_count() >= p_line)) {
+ 			float line_offset = 0.f;
+ 			for (int j = 0; j < p_line - line_count; j++) {
+ 				line_offset += main->lines[i].text_buf->get_line_ascent(j) + main->lines[i].text_buf->get_line_descent(j) + theme_cache.line_separation;
+@@ -6823,7 +6845,7 @@ void RichTextLabel::scroll_to_line(int p_line) {
+ 			queue_accessibility_update();
+ 			return;
+ 		}
+-		line_count += main->lines[i].text_buf->get_line_count();
++		line_count += main->lines[i].text_buf->get_visible_line_count();
+ 	}
+ 	vscroll->set_value(vscroll->get_max());
+ 	queue_accessibility_update();
+@@ -6836,14 +6858,14 @@ float RichTextLabel::get_line_offset(int p_line) {
+ 	int to_line = main->first_invalid_line.load();
+ 	for (int i = 0; i < to_line; i++) {
+ 		MutexLock lock(main->lines[i].text_buf->get_mutex());
+-		if ((line_count <= p_line) && (p_line <= line_count + main->lines[i].text_buf->get_line_count())) {
++		if ((line_count <= p_line) && (p_line <= line_count + main->lines[i].text_buf->get_visible_line_count())) {
+ 			float line_offset = 0.f;
+ 			for (int j = 0; j < p_line - line_count; j++) {
+ 				line_offset += main->lines[i].text_buf->get_line_ascent(j) + main->lines[i].text_buf->get_line_descent(j) + theme_cache.line_separation;
+ 			}
+ 			return main->lines[i].offset.y + line_offset;
+ 		}
+-		line_count += main->lines[i].text_buf->get_line_count();
++		line_count += main->lines[i].text_buf->get_visible_line_count();
+ 	}
+ 	return 0;
+ }
+@@ -6865,7 +6887,7 @@ int RichTextLabel::get_line_count() const {
+ 	int to_line = main->first_invalid_line.load();
+ 	for (int i = 0; i < to_line; i++) {
+ 		MutexLock lock(main->lines[i].text_buf->get_mutex());
+-		line_count += main->lines[i].text_buf->get_line_count();
++		line_count += main->lines[i].text_buf->get_visible_line_count();
+ 	}
+ 	return line_count;
+ }
+@@ -6877,7 +6899,7 @@ Vector2i RichTextLabel::get_line_range(int p_line) {
+ 	int to_line = main->first_invalid_line.load();
+ 	for (int i = 0; i < to_line; i++) {
+ 		MutexLock lock(main->lines[i].text_buf->get_mutex());
+-		int lc = main->lines[i].text_buf->get_line_count();
++		int lc = main->lines[i].text_buf->get_visible_line_count();
+ 
+ 		if (p_line < line_count + lc) {
+ 			Vector2i char_offset = Vector2i(main->lines[i].char_offset, main->lines[i].char_offset);
+@@ -7339,6 +7361,124 @@ bool RichTextLabel::is_drag_and_drop_selection_enabled() const {
+ 	return drag_and_drop_selection_enabled;
+ }
+ 
++void RichTextLabel::set_selection_range(int p_from, int p_to) {
++	ERR_MAIN_THREAD_GUARD;
++	_validate_line_caches();
++	if (!selection.enabled || p_from < 0 || p_to <= p_from) {
++		deselect();
++		return;
++	}
++	deselect();
++	p_from = MIN(p_from, get_total_character_count());
++	p_to = MIN(p_to, get_total_character_count());
++	for (int i = 0; i < (int)main->lines.size(); ++i) {
++		const Line &line = main->lines[i];
++		Item *to = i + 1 < (int)main->lines.size() ? main->lines[i + 1].from : nullptr;
++		if (p_from >= line.char_offset && p_from < line.char_offset + line.char_count) {
++			selection.from_frame = main;
++			selection.from_line = i;
++			selection.from_char = p_from - line.char_offset;
++			selection.from_item = _get_item_at_pos(line.from, to, selection.from_char);
++		}
++		if (p_to > line.char_offset && p_to <= line.char_offset + line.char_count) {
++			selection.to_frame = main;
++			selection.to_line = i;
++			selection.to_char = p_to - line.char_offset;
++			selection.to_item = _get_item_at_pos(line.from, to, selection.to_char);
++		}
++	}
++	selection.active = p_to > p_from && selection.from_frame && selection.to_frame;
++	queue_redraw();
++	queue_accessibility_update();
++}
++
++bool RichTextLabel::validate_detached_layout() {
++	ERR_MAIN_THREAD_GUARD_V(false);
++	if (is_inside_tree() || threaded) {
++		return false;
++	}
++	_update_theme_item_cache();
++	detached_layout_validation = true;
++	const bool valid = _validate_line_caches();
++	detached_layout_validation = false;
++	return valid;
++}
++
++void RichTextLabel::set_line_height_override(float p_height) {
++	ERR_FAIL_COND(!Math::is_finite(p_height) || p_height < 0);
++	if (line_height_override == p_height) {
++		return;
++	}
++	line_height_override = p_height;
++	main->first_invalid_line.store(0);
++	queue_redraw();
++}
++
++void RichTextLabel::set_visible_line_limit(int p_lines) {
++	ERR_FAIL_COND(p_lines < -1);
++	if (visible_line_limit == p_lines) {
++		return;
++	}
++	visible_line_limit = p_lines;
++	main->first_invalid_line.store(0);
++	queue_redraw();
++}
++
++Dictionary RichTextLabel::get_text_layout_snapshot(const Array &p_ranges) {
++	ERR_MAIN_THREAD_GUARD_V(Dictionary());
++	if (!is_inside_tree()) {
++		validate_detached_layout();
++	} else {
++		_validate_line_caches();
++	}
++	Dictionary snapshot;
++	Array lines;
++	Array ranges;
++	for (int i = 0; i < p_ranges.size(); ++i) {
++		ranges.push_back(Array());
++	}
++	const Rect2 rect = _get_text_rect();
++	for (int paragraph = 0; paragraph < (int)main->lines.size(); ++paragraph) {
++		const Line &line = main->lines[paragraph];
++		const Ref<TextParagraph> &buffer = line.text_buf_disp.is_valid() ? line.text_buf_disp : line.text_buf;
++		float y = rect.position.y + line.offset.y;
++		for (int row = 0; row < buffer->get_visible_line_count(); ++row) {
++			const Vector2i range = buffer->get_line_range(row);
++			const float ascent = buffer->get_line_ascent(row);
++			const float height = ascent + buffer->get_line_descent(row);
++			const float width = buffer->get_line_width(row);
++			float x = rect.position.x + line.offset.x;
++			if (buffer->get_alignment() == HORIZONTAL_ALIGNMENT_CENTER) {
++				x += Math::floor((buffer->get_width() - width) / 2);
++			} else if ((buffer->get_alignment() == HORIZONTAL_ALIGNMENT_RIGHT && !is_layout_rtl()) || (buffer->get_alignment() == HORIZONTAL_ALIGNMENT_LEFT && is_layout_rtl())) {
++				x += buffer->get_width() - width;
++			}
++			Dictionary record;
++			record["from"] = line.char_offset + range.x;
++			record["to"] = line.char_offset + range.y;
++			record["bounds"] = Rect2(x, y, width, height);
++			record["baseline"] = y + ascent;
++			lines.push_back(record);
++			for (int i = 0; i < p_ranges.size(); ++i) {
++				const Vector2i requested = p_ranges[i];
++				const int start = MAX(range.x, requested.x - line.char_offset);
++				const int end = MIN(range.y, requested.y - line.char_offset);
++				if (end <= start) {
++					continue;
++				}
++				Array bounds = ranges[i];
++				for (const Vector2 &segment : TS->shaped_text_get_selection(buffer->get_line_rid(row), start, end)) {
++					bounds.push_back(Rect2(x + segment.x, y, segment.y - segment.x, height));
++				}
++			}
++			y += height + theme_cache.line_separation;
++		}
++	}
++	snapshot["lines"] = lines;
++	snapshot["ranges"] = ranges;
++	return snapshot;
++}
++
+ int RichTextLabel::get_selection_from() const {
+ 	if (!selection.active || !selection.enabled) {
+ 		return -1;
+@@ -7361,7 +7501,7 @@ float RichTextLabel::get_selection_line_offset() const {
+ 		float line_offset = selection.from_frame->lines[selection.from_line].offset.y;
+ 
+ 		// Add wrapped line offset.
+-		for (int i = 0; i < selection.from_frame->lines[selection.from_line].text_buf->get_line_count(); i++) {
++		for (int i = 0; i < selection.from_frame->lines[selection.from_line].text_buf->get_visible_line_count(); i++) {
+ 			Vector2i range = selection.from_frame->lines[selection.from_line].text_buf->get_line_range(i);
+ 			if (range.x <= selection.from_char && range.y >= selection.from_char) {
+ 				break;
+@@ -7739,9 +7879,9 @@ int RichTextLabel::get_content_height() const {
+ 		MutexLock lock(main->lines[to_line - 1].text_buf->get_mutex());
+ 		if (theme_cache.line_separation < 0) {
+ 			// Do not apply to the last line to avoid cutting text.
+-			total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + (main->lines[to_line - 1].text_buf->get_line_count() - 1) * theme_cache.line_separation;
++			total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + (main->lines[to_line - 1].text_buf->get_visible_line_count() - 1) * theme_cache.line_separation;
+ 		} else {
+-			total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + main->lines[to_line - 1].text_buf->get_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
++			total_height = main->lines[to_line - 1].offset.y + main->lines[to_line - 1].text_buf->get_size().y + main->lines[to_line - 1].text_buf->get_visible_line_count() * theme_cache.line_separation + theme_cache.paragraph_separation;
+ 		}
+ 	}
+ 	return total_height;
+@@ -7770,7 +7910,7 @@ int RichTextLabel::get_line_height(int p_line) const {
+ 	int to_line = main->first_invalid_line.load();
+ 	for (int i = 0; i < to_line; i++) {
+ 		MutexLock lock(main->lines[i].text_buf->get_mutex());
+-		int lc = main->lines[i].text_buf->get_line_count();
++		int lc = main->lines[i].text_buf->get_visible_line_count();
+ 
+ 		if (p_line < line_count + lc) {
+ 			const Ref<TextParagraph> text_buf = main->lines[i].text_buf;
+@@ -7788,7 +7928,7 @@ int RichTextLabel::get_line_width(int p_line) const {
+ 	int to_line = main->first_invalid_line.load();
+ 	for (int i = 0; i < to_line; i++) {
+ 		MutexLock lock(main->lines[i].text_buf->get_mutex());
+-		int lc = main->lines[i].text_buf->get_line_count();
++		int lc = main->lines[i].text_buf->get_visible_line_count();
+ 
+ 		if (p_line < line_count + lc) {
+ 			return main->lines[i].text_buf->get_line_width(p_line - line_count);
+@@ -7936,6 +8076,11 @@ void RichTextLabel::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("set_drag_and_drop_selection_enabled", "enable"), &RichTextLabel::set_drag_and_drop_selection_enabled);
+ 	ClassDB::bind_method(D_METHOD("is_drag_and_drop_selection_enabled"), &RichTextLabel::is_drag_and_drop_selection_enabled);
+ 
++	ClassDB::bind_method(D_METHOD("set_selection_range", "from", "to"), &RichTextLabel::set_selection_range);
++	ClassDB::bind_method(D_METHOD("get_text_layout_snapshot", "ranges"), &RichTextLabel::get_text_layout_snapshot, DEFVAL(Array()));
++	ClassDB::bind_method(D_METHOD("validate_detached_layout"), &RichTextLabel::validate_detached_layout);
++	ClassDB::bind_method(D_METHOD("set_line_height_override", "height"), &RichTextLabel::set_line_height_override);
++	ClassDB::bind_method(D_METHOD("set_visible_line_limit", "lines"), &RichTextLabel::set_visible_line_limit);
+ 	ClassDB::bind_method(D_METHOD("get_selection_from"), &RichTextLabel::get_selection_from);
+ 	ClassDB::bind_method(D_METHOD("get_selection_to"), &RichTextLabel::get_selection_to);
+ 	ClassDB::bind_method(D_METHOD("get_selection_line_offset"), &RichTextLabel::get_selection_line_offset);
+@@ -8220,7 +8365,7 @@ int RichTextLabel::get_character_line(int p_char) {
+ 		int char_offset = main->lines[i].char_offset;
+ 		int char_count = main->lines[i].char_count;
+ 		if (char_offset <= p_char && p_char < char_offset + char_count) {
+-			int lc = main->lines[i].text_buf->get_line_count();
++			int lc = main->lines[i].text_buf->get_visible_line_count();
+ 			for (int j = 0; j < lc; j++) {
+ 				Vector2i range = main->lines[i].text_buf->get_line_range(j);
+ 				if (char_offset + range.x <= p_char && p_char < char_offset + range.y) {
+@@ -8236,7 +8381,7 @@ int RichTextLabel::get_character_line(int p_char) {
+ 			}
+ 			return line_count;
+ 		} else {
+-			line_count += main->lines[i].text_buf->get_line_count();
++			line_count += main->lines[i].text_buf->get_visible_line_count();
+ 		}
+ 	}
+ 	return -1;
+diff --git a/scene/gui/rich_text_label.h b/scene/gui/rich_text_label.h
+index 0c1fb8a05d..e00b56296a 100644
+--- a/scene/gui/rich_text_label.h
++++ b/scene/gui/rich_text_label.h
+@@ -764,6 +764,9 @@ private:
+ 	RID accessibility_scroll_element;
+ 
+ 	bool fit_content = false;
++	bool detached_layout_validation = false;
++	float line_height_override = 0;
++	int visible_line_limit = -1;
+ 
+ 	struct ThemeCache {
+ 		Ref<StyleBox> normal_style;
+@@ -932,6 +935,11 @@ public:
+ 
+ 	void set_selection_enabled(bool p_enabled);
+ 	bool is_selection_enabled() const;
++	void set_selection_range(int p_from, int p_to);
++	Dictionary get_text_layout_snapshot(const Array &p_ranges = Array());
++	bool validate_detached_layout();
++	void set_line_height_override(float p_height);
++	void set_visible_line_limit(int p_lines);
+ 	int get_selection_from() const;
+ 	int get_selection_to() const;
+ 	float get_selection_line_offset() const;
+diff --git a/scene/gui/scroll_container.h b/scene/gui/scroll_container.h
+index b7c0b356d7..2afce47ecc 100644
+--- a/scene/gui/scroll_container.h
++++ b/scene/gui/scroll_container.h
+@@ -40,6 +40,8 @@ class ScrollContainer : public Container {
+ 	GDCLASS(ScrollContainer, Container);
+ 
+ public:
++	bool is_drag_scrolling() const { return drag_touching && beyond_deadzone && !drag_touching_deaccel; }
++	bool is_momentum_scrolling() const { return drag_touching && drag_touching_deaccel; }
+ 	enum ScrollMode {
+ 		SCROLL_MODE_DISABLED = 0,
+ 		SCROLL_MODE_AUTO,
+diff --git a/scene/gui/text_edit.cpp b/scene/gui/text_edit.cpp
+index cd092bd4ff..bb12d6b1bb 100644
+--- a/scene/gui/text_edit.cpp
++++ b/scene/gui/text_edit.cpp
+@@ -851,7 +851,7 @@ void TextEdit::_notification(int p_what) {
+ 				callable_mp(this, &TextEdit::_set_caret_pos_dirty).call_deferred(false);
+ 			}
+ 			if (text_changed_dirty) {
+-				callable_mp(this, &TextEdit::_emit_text_changed).call_deferred();
++				callable_mp(this, &TextEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 			}
+ 			_update_wrap_at_column(true);
+ 		} break;
+@@ -8314,7 +8314,7 @@ void TextEdit::_caret_changed(int p_caret) {
+ 	}
+ 
+ 	if (is_inside_tree()) {
+-		callable_mp(this, &TextEdit::_emit_caret_changed).call_deferred();
++		callable_mp(this, &TextEdit::_emit_pending_caret_changed).call_deferred(edit_state_revision);
+ 	}
+ 	caret_pos_dirty = true;
+ }
+@@ -9150,7 +9150,7 @@ void TextEdit::_text_changed() {
+ 	}
+ 
+ 	if (is_inside_tree()) {
+-		callable_mp(this, &TextEdit::_emit_text_changed).call_deferred();
++		callable_mp(this, &TextEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
+ 	}
+ 	text_changed_dirty = true;
+ }
+@@ -9414,3 +9414,118 @@ TextEdit::TextEdit(const String &p_placeholder) {
+ TextEdit::~TextEdit() {
+ 	RS::get_singleton()->free_rid(text_ci);
+ }
++
++TextEdit::Text TextEdit::Text::snapshot_copy() const {
++	Text copy = *this;
++	for (int i = 0; i < copy.text.size(); ++i) {
++		copy.text.write[i].data_buf = text[i].data_buf->duplicate();
++		copy.text.write[i].accessibility_text_root_element.clear();
++	}
++	return copy;
++}
++
++void TextEdit::_emit_pending_text_changed(uint64_t p_revision) {
++	if (p_revision == edit_state_revision && text_changed_dirty) {
++		_emit_text_changed();
++	}
++}
++void TextEdit::_emit_pending_caret_changed(uint64_t p_revision) {
++	if (p_revision == edit_state_revision && caret_pos_dirty) {
++		_emit_caret_changed();
++	}
++}
++
++std::shared_ptr<const TextEdit::EditState> TextEdit::capture_edit_state() const {
++	auto state = std::make_shared<EditState>();
++	state->owner = get_instance_id();
++	state->text = text.snapshot_copy();
++	state->carets = carets;
++	state->ime_text = ime_text;
++	state->ime_selection = ime_selection;
++	state->undo_stack = undo_stack;
++	int index = 0;
++	for (const auto *entry = undo_stack.front(); entry; entry = entry->next(), ++index) {
++		if (entry == undo_stack_pos) {
++			state->undo_position = index;
++		}
++	}
++	state->current_op = current_op;
++	state->current_action = current_action;
++	state->pending_action_end = pending_action_end;
++	state->in_action = in_action;
++	state->complex_operation_count = complex_operation_count;
++	state->next_operation_is_complex = next_operation_is_complex;
++	state->multicaret_edit_count = multicaret_edit_count;
++	state->multicaret_edit_merge_queued = multicaret_edit_merge_queued;
++	state->multicaret_edit_ignore_carets = multicaret_edit_ignore_carets;
++	state->version = version;
++	state->saved_version = saved_version;
++	state->text_changed_dirty = text_changed_dirty;
++	state->caret_pos_dirty = caret_pos_dirty;
++	state->first_visible_line = first_visible_line;
++	state->first_visible_line_wrap_ofs = first_visible_line_wrap_ofs;
++	state->first_visible_col = first_visible_col;
++	state->h_scroll = h_scroll->get_value();
++	state->v_scroll = v_scroll->get_value();
++	state->idle_time = idle_detect->get_time_left();
++	state->scrolling = scrolling;
++	state->target_v_scroll = target_v_scroll;
++	return state;
++}
++
++void TextEdit::restore_edit_state(const std::shared_ptr<const EditState> &p_state) {
++	ERR_FAIL_COND(!p_state || p_state->owner != get_instance_id());
++	++edit_state_revision;
++	text = p_state->text.snapshot_copy();
++	carets = p_state->carets;
++	ime_text = p_state->ime_text;
++	ime_selection = p_state->ime_selection;
++	undo_stack = p_state->undo_stack;
++	undo_stack_pos = nullptr;
++	int undo_index = 0;
++	for (auto *entry = undo_stack.front(); entry; entry = entry->next(), ++undo_index) {
++		if (undo_index == p_state->undo_position) {
++			undo_stack_pos = entry;
++		}
++	}
++	current_op = p_state->current_op;
++	current_action = p_state->current_action;
++	pending_action_end = p_state->pending_action_end;
++	in_action = p_state->in_action;
++	complex_operation_count = p_state->complex_operation_count;
++	next_operation_is_complex = p_state->next_operation_is_complex;
++	multicaret_edit_count = p_state->multicaret_edit_count;
++	multicaret_edit_merge_queued = p_state->multicaret_edit_merge_queued;
++	multicaret_edit_ignore_carets = p_state->multicaret_edit_ignore_carets;
++	version = p_state->version;
++	saved_version = p_state->saved_version;
++	text_changed_dirty = p_state->text_changed_dirty;
++	caret_pos_dirty = p_state->caret_pos_dirty;
++	first_visible_line = p_state->first_visible_line;
++	first_visible_line_wrap_ofs = p_state->first_visible_line_wrap_ofs;
++	first_visible_col = p_state->first_visible_col;
++	_update_scrollbars();
++	h_scroll->set_value(p_state->h_scroll);
++	v_scroll->set_value(p_state->v_scroll);
++	scrolling = p_state->scrolling;
++	target_v_scroll = p_state->target_v_scroll;
++	idle_detect->stop();
++	if (p_state->idle_time > 0 && idle_detect->is_inside_tree()) {
++		idle_detect->start(p_state->idle_time);
++	}
++	queue_redraw();
++	if (is_inside_tree()) {
++		if (text_changed_dirty) {
++			callable_mp(this, &TextEdit::_emit_pending_text_changed).call_deferred(edit_state_revision);
++		}
++		if (caret_pos_dirty) {
++			callable_mp(this, &TextEdit::_emit_pending_caret_changed).call_deferred(edit_state_revision);
++		}
++	}
++}
++
++void TextEdit::discard_pending_edit_notifications() {
++	++edit_state_revision;
++	text_changed_dirty = false;
++	caret_pos_dirty = false;
++}
+diff --git a/scene/gui/text_edit.h b/scene/gui/text_edit.h
+index 8470cccd39..178b1b7325 100644
+--- a/scene/gui/text_edit.h
++++ b/scene/gui/text_edit.h
+@@ -37,6 +37,8 @@
+ #include "scene/resources/syntax_highlighter.h"
+ #include "scene/resources/text_paragraph.h"
+ 
++#include <memory>
++
+ class TextEdit : public Control {
+ 	GDCLASS(TextEdit, Control);
+ 
+@@ -197,6 +199,7 @@ private:
+ 		bool indent_wrapped_lines = false;
+ 
+ 	public:
++		Text snapshot_copy() const;
+ 		void set_tab_size(int p_tab_size);
+ 		int get_tab_size() const;
+ 		void set_indent_wrapped_lines(bool p_enabled);
+@@ -667,6 +670,9 @@ private:
+ 
+ 	/*** Super internal Core API. Everything builds on it. ***/
+ 	bool text_changed_dirty = false;
++	uint64_t edit_state_revision = 0;
++	void _emit_pending_text_changed(uint64_t p_revision);
++	void _emit_pending_caret_changed(uint64_t p_revision);
+ 	void _text_changed();
+ 	void _emit_text_changed();
+ 
+@@ -784,6 +790,41 @@ public:
+ 	bool alt_input(const Ref<InputEvent> &p_gui_input);
+ 	virtual Size2 get_minimum_size() const override;
+ 	virtual bool is_text_field() const override;
++	class EditState {
++		friend class TextEdit;
++		ObjectID owner;
++		Text text;
++		Vector<Caret> carets;
++		String ime_text;
++		Point2 ime_selection;
++		List<TextOperation> undo_stack;
++		int undo_position = -1;
++		TextOperation current_op;
++		EditAction current_action;
++		bool pending_action_end = false;
++		bool in_action = false;
++		int complex_operation_count = 0;
++		bool next_operation_is_complex = false;
++		int multicaret_edit_count = 0;
++		bool multicaret_edit_merge_queued = false;
++		HashSet<int> multicaret_edit_ignore_carets;
++		uint32_t version = 0;
++		uint32_t saved_version = 0;
++		bool text_changed_dirty = false;
++		bool caret_pos_dirty = false;
++		int first_visible_line = 0;
++		int first_visible_line_wrap_ofs = 0;
++		int first_visible_col = 0;
++		double h_scroll = 0;
++		double v_scroll = 0;
++		double idle_time = 0;
++		bool scrolling = false;
++		float target_v_scroll = 0;
++	};
++	std::shared_ptr<const EditState> capture_edit_state() const;
++	void discard_pending_edit_notifications();
++	void restore_edit_state(const std::shared_ptr<const EditState> &p_state);
++
+ 	virtual CursorShape get_cursor_shape(const Point2 &p_pos = Point2i()) const override;
+ 	virtual Variant get_drag_data(const Point2 &p_point) override;
+ 	virtual bool can_drop_data(const Point2 &p_point, const Variant &p_data) const override;
+diff --git a/scene/main/viewport.cpp b/scene/main/viewport.cpp
+index 54f9f2c446..339a73a3ab 100644
+--- a/scene/main/viewport.cpp
++++ b/scene/main/viewport.cpp
+@@ -1738,6 +1738,8 @@ void Viewport::_gui_show_tooltip_at(const Point2i &p_pos) {
+ }
+ 
+ void Viewport::_gui_call_input(Control *p_control, const Ref<InputEvent> &p_input) {
++	const ObjectID selected_id = p_control->get_instance_id();
++	const Ref<InputEvent> viewport_event = p_input->xformed_by(p_control->get_global_transform_with_canvas());
+ 	Ref<InputEvent> ev = p_input;
+ 
+ 	// Returns true if an event should be impacted by a control's mouse filter.
+@@ -1780,6 +1782,7 @@ void Viewport::_gui_call_input(Control *p_control, const Ref<InputEvent> &p_inpu
+ 		ev = ev->xformed_by(ci->get_transform()); // Transform event upwards.
+ 		ci = ci->get_parent_item();
+ 	}
++	emit_signal("gui_input_dispatched", viewport_event, uint64_t(selected_id), uint64_t(p_input->get_instance_id()));
+ }
+ 
+ void Viewport::_gui_call_notification(Control *p_control, int p_what) {
+@@ -2312,7 +2315,9 @@ void Viewport::_gui_input_event(Ref<InputEvent> p_event) {
+ 
+ 		if (gui.key_focus) {
+ 			if (gui.key_focus->can_process()) {
++				const ObjectID selected_id = gui.key_focus->get_instance_id();
+ 				gui.key_focus->_call_gui_input(p_event);
++				emit_signal("gui_input_dispatched", p_event, uint64_t(selected_id), uint64_t(p_event->get_instance_id()));
+ 			}
+ 
+ 			if (is_input_handled()) {
+@@ -5415,6 +5420,7 @@ void Viewport::_bind_methods() {
+ 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "oversampling"), "set_use_oversampling", "is_using_oversampling");
+ 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "oversampling_override", PROPERTY_HINT_RANGE, "0,16,0.0001,or_greater"), "set_oversampling_override", "get_oversampling_override");
+ 
++	ADD_SIGNAL(MethodInfo("gui_input_dispatched", PropertyInfo(Variant::OBJECT, "event", PROPERTY_HINT_RESOURCE_TYPE, "InputEvent"), PropertyInfo(Variant::INT, "control_id"), PropertyInfo(Variant::INT, "event_id")));
+ 	ADD_SIGNAL(MethodInfo("size_changed"));
+ 	ADD_SIGNAL(MethodInfo("gui_focus_changed", PropertyInfo(Variant::OBJECT, "node", PROPERTY_HINT_RESOURCE_TYPE, Control::get_class_static())));
+ 
+diff --git a/scene/resources/compressed_texture.cpp b/scene/resources/compressed_texture.cpp
+index 22d12c2f56..70b1e69fe5 100644
+--- a/scene/resources/compressed_texture.cpp
++++ b/scene/resources/compressed_texture.cpp
+@@ -57,6 +57,9 @@ Error CompressedTexture2D::_load_data(const String &p_path, int &r_width, int &r
+ 	}
+ 	r_width = f->get_32();
+ 	r_height = f->get_32();
++	if (Image::get_load_limits().max_allocation_bytes && !Image::is_load_size_allowed(r_width, r_height, 16, true)) {
++		return ERR_OUT_OF_MEMORY;
++	}
+ 	uint32_t df = f->get_32(); //data format
+ 
+ 	//skip reserved
+@@ -303,6 +306,14 @@ Ref<Image> CompressedTexture2D::load_image_from_file(Ref<FileAccess> f, int p_si
+ 	uint32_t h = f->get_16();
+ 	uint32_t mipmaps = f->get_32();
+ 	Image::Format format = Image::Format(f->get_32());
++	if (Image::get_load_limits().max_allocation_bytes) {
++		if (format < 0 || format >= Image::FORMAT_MAX || !Image::is_load_buffer_allowed(f->get_length()) || !Image::is_load_size_allowed(w, h, 16, mipmaps != 0) || mipmaps > uint32_t(Image::get_image_required_mipmaps(w, h, format))) {
++			return Ref<Image>();
++		}
++		if (data_format != DATA_FORMAT_PNG && data_format != DATA_FORMAT_WEBP && data_format != DATA_FORMAT_IMAGE) {
++			return Ref<Image>();
++		}
++	}
+ 
+ 	if (data_format == DATA_FORMAT_PNG || data_format == DATA_FORMAT_WEBP) {
+ 		//look for a PNG or WebP file inside
+@@ -316,6 +327,9 @@ Ref<Image> CompressedTexture2D::load_image_from_file(Ref<FileAccess> f, int p_si
+ 
+ 		for (uint32_t i = 0; i < mipmaps + 1; i++) {
+ 			uint32_t size = f->get_32();
++			if (!Image::is_load_buffer_allowed(size) || (Image::get_load_limits().max_allocation_bytes && size > f->get_length() - MIN(f->get_position(), f->get_length()))) {
++				return Ref<Image>();
++			}
+ 
+ 			if (p_size_limit > 0 && i < (mipmaps - 1) && (sw > p_size_limit || sh > p_size_limit)) {
+ 				//can't load this due to size limit
+@@ -332,6 +346,17 @@ Ref<Image> CompressedTexture2D::load_image_from_file(Ref<FileAccess> f, int p_si
+ 				f->get_buffer(wr, size);
+ 			}
+ 
++			if (Image::get_load_limits().max_allocation_bytes) {
++				if (data_format == DATA_FORMAT_PNG && pv.size() < 4) {
++					return Ref<Image>();
++				}
++				Size2i actual;
++				Image::BufferFormat kind;
++				if (Image::probe_buffer(pv.ptr() + (data_format == DATA_FORMAT_PNG ? 4 : 0), pv.size() - (data_format == DATA_FORMAT_PNG ? 4 : 0), actual, kind) != OK || actual != Size2i(sw, sh)) {
++					return Ref<Image>();
++				}
++			}
++
+ 			Ref<Image> img;
+ 			if (data_format == DATA_FORMAT_PNG && Image::png_unpacker) {
+ 				img = Image::png_unpacker(pv);
+@@ -376,6 +401,9 @@ Ref<Image> CompressedTexture2D::load_image_from_file(Ref<FileAccess> f, int p_si
+ 		} else {
+ 			//rarer use case, but needs to be supported
+ 			Vector<uint8_t> img_data;
++			if (Image::get_load_limits().max_allocation_bytes && total_size > Image::get_load_limits().max_allocation_bytes) {
++				return Ref<Image>();
++			}
+ 			img_data.resize(total_size);
+ 
+ 			{
+@@ -436,11 +464,12 @@ Ref<Image> CompressedTexture2D::load_image_from_file(Ref<FileAccess> f, int p_si
+ 			}
+ 
+ 			Vector<uint8_t> data;
++			ERR_FAIL_COND_V(size < ofs || uint64_t(size - ofs) > f->get_length() - f->get_position(), Ref<Image>());
+ 			data.resize(size - ofs);
+ 
+ 			{
+ 				uint8_t *wr = data.ptrw();
+-				f->get_buffer(wr, data.size());
++				ERR_FAIL_COND_V(f->get_buffer(wr, data.size()) != uint64_t(data.size()), Ref<Image>());
+ 			}
+ 
+ 			Ref<Image> image = Image::create_from_data(tw, th, mipmaps - i ? true : false, format, data);
+diff --git a/scene/resources/text_paragraph.cpp b/scene/resources/text_paragraph.cpp
+index d18928d4cd..0cd5e3336f 100644
+--- a/scene/resources/text_paragraph.cpp
++++ b/scene/resources/text_paragraph.cpp
+@@ -341,6 +341,7 @@ Ref<TextParagraph> TextParagraph::duplicate() const {
+ 	}
+ 	copy->lines_dirty = true;
+ 	copy->line_spacing = line_spacing;
++	copy->line_height_override = line_height_override;
+ 	copy->width = width;
+ 	copy->max_lines_visible = max_lines_visible;
+ 	copy->brk_flags = brk_flags;
+@@ -609,7 +610,7 @@ Size2 TextParagraph::get_size() const {
+ 				lsize.x += h_offset;
+ 			}
+ 			size.x = MAX(size.x, lsize.x);
+-			size.y += lsize.y;
++			size.y += line_height_override > 0 ? line_height_override : lsize.y;
+ 			if (i != visible_lines - 1) {
+ 				size.y += line_spacing;
+ 			}
+@@ -660,6 +661,26 @@ int TextParagraph::get_max_lines_visible() const {
+ 	return max_lines_visible;
+ }
+ 
++void TextParagraph::set_line_height_override(float p_height) {
++	_THREAD_SAFE_METHOD_
++	ERR_FAIL_COND(!Math::is_finite(p_height) || p_height < 0);
++	if (line_height_override == p_height) {
++		return;
++	}
++	line_height_override = p_height;
++	lines_dirty = true;
++}
++
++float TextParagraph::get_line_height_override() const {
++	return line_height_override;
++}
++
++int TextParagraph::get_visible_line_count() const {
++	_THREAD_SAFE_METHOD_
++	_shape_lines();
++	return max_lines_visible < 0 ? (int)lines_rid.size() : MIN(max_lines_visible, (int)lines_rid.size());
++}
++
+ void TextParagraph::set_line_spacing(float p_spacing) {
+ 	_THREAD_SAFE_METHOD_
+ 
+@@ -700,7 +721,7 @@ Rect2 TextParagraph::get_line_object_rect(int p_line, Variant p_key) const {
+ 		float l_width = width > 0 ? width : get_size().x;
+ 		if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
+ 			ofs.x = 0.f;
+-			ofs.y += TS->shaped_text_get_ascent(lines_rid[i]);
++			ofs.y += get_line_ascent(i);
+ 			if (i <= dropcap_lines) {
+ 				if (TS->shaped_text_get_inferred_direction(dropcap_rid) == TextServer::DIRECTION_LTR) {
+ 					ofs.x -= h_offset;
+@@ -709,7 +730,7 @@ Rect2 TextParagraph::get_line_object_rect(int p_line, Variant p_key) const {
+ 			}
+ 		} else {
+ 			ofs.y = 0.f;
+-			ofs.x += TS->shaped_text_get_ascent(lines_rid[i]);
++			ofs.x += get_line_ascent(i);
+ 			if (i <= dropcap_lines) {
+ 				if (TS->shaped_text_get_inferred_direction(dropcap_rid) == TextServer::DIRECTION_LTR) {
+ 					ofs.y -= h_offset;
+@@ -758,10 +779,10 @@ Rect2 TextParagraph::get_line_object_rect(int p_line, Variant p_key) const {
+ 		if (i != p_line) {
+ 			if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
+ 				ofs.x = 0.f;
+-				ofs.y += TS->shaped_text_get_descent(lines_rid[i]) + line_spacing;
++				ofs.y += get_line_descent(i) + line_spacing;
+ 			} else {
+ 				ofs.y = 0.f;
+-				ofs.x += TS->shaped_text_get_descent(lines_rid[i]) + line_spacing;
++				ofs.x += get_line_descent(i) + line_spacing;
+ 			}
+ 		}
+ 	}
+@@ -793,7 +814,9 @@ float TextParagraph::get_line_ascent(int p_line) const {
+ 
+ 	_shape_lines();
+ 	ERR_FAIL_COND_V(p_line < 0 || p_line >= (int)lines_rid.size(), 0.f);
+-	return TS->shaped_text_get_ascent(lines_rid[p_line]);
++	const float ascent = TS->shaped_text_get_ascent(lines_rid[p_line]);
++	const float descent = TS->shaped_text_get_descent(lines_rid[p_line]);
++	return line_height_override > 0 ? ascent + (line_height_override - ascent - descent) / 2 : ascent;
+ }
+ 
+ float TextParagraph::get_line_descent(int p_line) const {
+@@ -801,7 +824,9 @@ float TextParagraph::get_line_descent(int p_line) const {
+ 
+ 	_shape_lines();
+ 	ERR_FAIL_COND_V(p_line < 0 || p_line >= (int)lines_rid.size(), 0.f);
+-	return TS->shaped_text_get_descent(lines_rid[p_line]);
++	const float ascent = TS->shaped_text_get_ascent(lines_rid[p_line]);
++	const float descent = TS->shaped_text_get_descent(lines_rid[p_line]);
++	return line_height_override > 0 ? descent + (line_height_override - ascent - descent) / 2 : descent;
+ }
+ 
+ float TextParagraph::get_line_width(int p_line) const {
+@@ -870,7 +895,7 @@ void TextParagraph::draw(RID p_canvas, const Vector2 &p_pos, const Color &p_colo
+ 		float l_width = width > 0 ? width : get_size().x;
+ 		if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
+ 			ofs.x = p_pos.x;
+-			ofs.y += TS->shaped_text_get_ascent(lines_rid[i]);
++			ofs.y += get_line_ascent(i);
+ 			if (i <= dropcap_lines) {
+ 				if (TS->shaped_text_get_inferred_direction(dropcap_rid) == TextServer::DIRECTION_LTR) {
+ 					ofs.x -= h_offset;
+@@ -879,7 +904,7 @@ void TextParagraph::draw(RID p_canvas, const Vector2 &p_pos, const Color &p_colo
+ 			}
+ 		} else {
+ 			ofs.y = p_pos.y;
+-			ofs.x += TS->shaped_text_get_ascent(lines_rid[i]);
++			ofs.x += get_line_ascent(i);
+ 			if (i <= dropcap_lines) {
+ 				if (TS->shaped_text_get_inferred_direction(dropcap_rid) == TextServer::DIRECTION_LTR) {
+ 					ofs.y -= h_offset;
+@@ -934,10 +959,10 @@ void TextParagraph::draw(RID p_canvas, const Vector2 &p_pos, const Color &p_colo
+ 		TS->shaped_text_draw(lines_rid[i], p_canvas, ofs, clip_l, clip_l + l_width, p_color, p_oversampling);
+ 		if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
+ 			ofs.x = p_pos.x;
+-			ofs.y += TS->shaped_text_get_descent(lines_rid[i]) + line_spacing;
++			ofs.y += get_line_descent(i) + line_spacing;
+ 		} else {
+ 			ofs.y = p_pos.y;
+-			ofs.x += TS->shaped_text_get_descent(lines_rid[i]) + line_spacing;
++			ofs.x += get_line_descent(i) + line_spacing;
+ 		}
+ 	}
+ }
+@@ -973,7 +998,7 @@ void TextParagraph::draw_outline(RID p_canvas, const Vector2 &p_pos, int p_outli
+ 		float l_width = width > 0 ? width : get_size().x;
+ 		if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
+ 			ofs.x = p_pos.x;
+-			ofs.y += TS->shaped_text_get_ascent(lines_rid[i]);
++			ofs.y += get_line_ascent(i);
+ 			if (i <= dropcap_lines) {
+ 				if (TS->shaped_text_get_inferred_direction(dropcap_rid) == TextServer::DIRECTION_LTR) {
+ 					ofs.x -= h_offset;
+@@ -982,7 +1007,7 @@ void TextParagraph::draw_outline(RID p_canvas, const Vector2 &p_pos, int p_outli
+ 			}
+ 		} else {
+ 			ofs.y = p_pos.y;
+-			ofs.x += TS->shaped_text_get_ascent(lines_rid[i]);
++			ofs.x += get_line_ascent(i);
+ 			if (i <= dropcap_lines) {
+ 				if (TS->shaped_text_get_inferred_direction(dropcap_rid) == TextServer::DIRECTION_LTR) {
+ 					ofs.y -= h_offset;
+@@ -1037,10 +1062,10 @@ void TextParagraph::draw_outline(RID p_canvas, const Vector2 &p_pos, int p_outli
+ 		TS->shaped_text_draw_outline(lines_rid[i], p_canvas, ofs, clip_l, clip_l + l_width, p_outline_size, p_color, p_oversampling);
+ 		if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
+ 			ofs.x = p_pos.x;
+-			ofs.y += TS->shaped_text_get_descent(lines_rid[i]) + line_spacing;
++			ofs.y += get_line_descent(i) + line_spacing;
+ 		} else {
+ 			ofs.y = p_pos.y;
+-			ofs.x += TS->shaped_text_get_descent(lines_rid[i]) + line_spacing;
++			ofs.x += get_line_descent(i) + line_spacing;
+ 		}
+ 	}
+ }
+diff --git a/scene/resources/text_paragraph.h b/scene/resources/text_paragraph.h
+index 21561dcb78..56f4b37821 100644
+--- a/scene/resources/text_paragraph.h
++++ b/scene/resources/text_paragraph.h
+@@ -52,6 +52,7 @@ private:
+ 	mutable bool lines_dirty = true;
+ 
+ 	float line_spacing = 0.0;
++	float line_height_override = 0.f;
+ 	float width = -1.0;
+ 	int max_lines_visible = -1;
+ 
+@@ -137,6 +138,9 @@ public:
+ 	void set_max_lines_visible(int p_lines);
+ 	int get_max_lines_visible() const;
+ 
++	void set_line_height_override(float p_height);
++	float get_line_height_override() const;
++	int get_visible_line_count() const;
+ 	void set_line_spacing(float p_spacing);
+ 	float get_line_spacing() const;
+ 
+diff --git a/tests/display_server_mock.h b/tests/display_server_mock.h
+index 1026ce3928..52f3396db3 100644
+--- a/tests/display_server_mock.h
++++ b/tests/display_server_mock.h
+@@ -45,6 +45,8 @@ private:
+ 	bool window_over = false;
+ 	Callable event_callback;
+ 
++	String ime_text;
++	Vector2i ime_selection;
+ 	String clipboard_text;
+ 	String primary_clipboard_text;
+ 
+@@ -57,6 +59,12 @@ private:
+ 
+ public:
+ 	bool has_feature(DisplayServerEnums::Feature p_feature) const override;
++	String ime_get_text() const override { return ime_text; }
++	Vector2i ime_get_selection() const override { return ime_selection; }
++	void simulate_ime(const String &p_text, const Vector2i &p_selection) {
++		ime_text = p_text;
++		ime_selection = p_selection;
++	}
+ 
+ 	String get_name() const override { return "mock"; }
+ 
+diff --git a/thirdparty/libwebp/src/utils/utils.c b/thirdparty/libwebp/src/utils/utils.c
+index b80bae0125..0d0034d571 100644
+--- a/thirdparty/libwebp/src/utils/utils.c
++++ b/thirdparty/libwebp/src/utils/utils.c
+@@ -193,12 +193,30 @@ static int CheckSizeArgumentsOverflow(uint64_t nmemb, size_t size) {
+   return 1;
+ }
+ 
++#if defined(_MSC_VER)
++#define WEBP_THREAD_LOCAL __declspec(thread)
++#else
++#define WEBP_THREAD_LOCAL __thread
++#endif
++static WEBP_THREAD_LOCAL WebPScopedAlloc scoped_allocate = NULL;
++static WEBP_THREAD_LOCAL WebPScopedFree scoped_release = NULL;
++
++void WebPSetScopedAllocationHooks(WebPScopedAlloc allocate, WebPScopedFree release) {
++  scoped_allocate = allocate;
++  scoped_release = release;
++}
++
++void WebPGetScopedAllocationHooks(WebPScopedAlloc* allocate, WebPScopedFree* release) {
++  *allocate = scoped_allocate;
++  *release = scoped_release;
++}
++
+ void* WebPSafeMalloc(uint64_t nmemb, size_t size) {
+   void* ptr;
+   Increment(&num_malloc_calls);
+   if (!CheckSizeArgumentsOverflow(nmemb, size)) return NULL;
+   assert(nmemb * size > 0);
+-  ptr = malloc((size_t)(nmemb * size));
++  ptr = scoped_allocate != NULL ? scoped_allocate((size_t)(nmemb * size), 0) : malloc((size_t)(nmemb * size));
+   AddMem(ptr, (size_t)(nmemb * size));
+   return ptr;
+ }
+@@ -208,7 +226,7 @@ void* WebPSafeCalloc(uint64_t nmemb, size_t size) {
+   Increment(&num_calloc_calls);
+   if (!CheckSizeArgumentsOverflow(nmemb, size)) return NULL;
+   assert(nmemb * size > 0);
+-  ptr = calloc((size_t)nmemb, size);
++  ptr = scoped_allocate != NULL ? scoped_allocate((size_t)(nmemb * size), 1) : calloc((size_t)nmemb, size);
+   AddMem(ptr, (size_t)(nmemb * size));
+   return ptr;
+ }
+@@ -218,7 +236,11 @@ void WebPSafeFree(void* const ptr) {
+     Increment(&num_free_calls);
+     SubMem(ptr);
+   }
+-  free(ptr);
++  if (scoped_release != NULL) {
++    scoped_release(ptr);
++  } else {
++    free(ptr);
++  }
+ }
+ 
+ // Public API functions.
+diff --git a/thirdparty/libwebp/src/utils/utils.h b/thirdparty/libwebp/src/utils/utils.h
+index b2241fbf9b..bcd8f25048 100644
+--- a/thirdparty/libwebp/src/utils/utils.h
++++ b/thirdparty/libwebp/src/utils/utils.h
+@@ -50,6 +50,10 @@ static WEBP_INLINE int CheckSizeOverflow(uint64_t size) {
+ // somewhere (like: malloc(num_pixels * sizeof(*something))). That's why this
+ // safe malloc() borrows the signature from calloc(), pointing at the dangerous
+ // underlying multiply involved.
++typedef void* (*WebPScopedAlloc)(size_t size, int clear);
++typedef void (*WebPScopedFree)(void* ptr);
++WEBP_EXTERN void WebPSetScopedAllocationHooks(WebPScopedAlloc allocate, WebPScopedFree release);
++WEBP_EXTERN void WebPGetScopedAllocationHooks(WebPScopedAlloc* allocate, WebPScopedFree* release);
+ WEBP_EXTERN void* WebPSafeMalloc(uint64_t nmemb, size_t size);
+ // Note that WebPSafeCalloc() expects the second argument type to be 'size_t'
+ // in order to favor the "calloc(num_foo, sizeof(foo))" pattern.

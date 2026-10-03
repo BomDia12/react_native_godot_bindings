@@ -13,7 +13,7 @@ Rect2 clipped(const Rect2 &p_left, const Rect2 &p_right) {
 }
 
 Rect2 hit_rect(const RNMountedNodeSnapshot &p_node) {
-	Rect2 result = p_node.root_rect;
+	Rect2 result = p_node.has_visual_geometry ? Rect2(Point2(), p_node.local_rect.size) : p_node.root_rect;
 	const Variant hit_slop_value = p_node.hit_slop;
 	if (hit_slop_value.get_type() == Variant::INT || hit_slop_value.get_type() == Variant::FLOAT) {
 		const float amount = float(hit_slop_value);
@@ -79,28 +79,53 @@ RNNativeEvent RNInputRouter::event(int p_tag, const String &p_name, int p_priori
 	return result;
 }
 
-RNHitTestResult RNInputRouter::hit_test_node(const RNSurfaceSnapshot &p_snapshot, int p_tag, const Point2 &p_point, const Rect2 &p_clip) {
+RNHitTestResult RNInputRouter::hit_test_node(const RNSurfaceSnapshot &p_snapshot, int p_tag, const Point2 &p_point, const Rect2 &p_clip, bool p_include_children) {
 	const RNMountedNodeSnapshot *node = p_snapshot.nodes.getptr(p_tag);
-	if (!node || !node->visible || !p_clip.has_point(p_point) || node->pointer_events == "none") {
+	if (!node || !node->visible || !p_clip.has_point(p_point) || node->pointer_events == "none" || (node->has_visual_geometry && !node->transform_invertible)) {
 		return RNHitTestResult();
 	}
 	Control *control = Object::cast_to<Control>(ObjectDB::get_instance(node->object_id));
 	if (control && !control->is_visible_in_tree()) {
 		return RNHitTestResult();
 	}
+	const Point2 local_point = node->has_visual_geometry ? node->inverse_visual_transform.xform(p_point) : p_point;
 	Rect2 child_clip = p_clip;
 	if (node->clips_contents) {
-		child_clip = clipped(child_clip, node->root_rect);
+		if (node->has_visual_geometry) {
+			if (!node->viewport_rect.has_point(local_point)) {
+				return RNHitTestResult();
+			}
+		} else {
+			child_clip = clipped(child_clip, node->root_rect);
+		}
 	}
-	if (node->pointer_events != "box-only") {
-		for (int i = node->child_tags.size() - 1; i >= 0; --i) {
-			RNHitTestResult child = hit_test_node(p_snapshot, node->child_tags[i], p_point, child_clip);
+	const Vector<int> &children = node->has_visual_geometry ? node->paint_child_tags : node->child_tags;
+	if (p_include_children && node->pointer_events != "box-only") {
+		for (int i = children.size() - 1; i >= 0; --i) {
+			RNHitTestResult child = hit_test_node(p_snapshot, children[i], p_point, child_clip);
 			if (child.tag != 0) {
 				return child;
 			}
 		}
 	}
-	if (node->self_targetable && hit_rect(*node).has_point(p_point)) {
+	if (node->self_targetable && hit_rect(*node).has_point(local_point)) {
+		const Rect2 own_rect = node->has_visual_geometry ? Rect2(Point2(), node->local_rect.size) : node->root_rect;
+		const RNMountedNodeSnapshot *parent = p_snapshot.nodes.getptr(node->parent_tag);
+		if (!own_rect.has_point(local_point) && parent) {
+			const Point2 parent_point = parent->has_visual_geometry ? parent->inverse_visual_transform.xform(p_point) : p_point;
+			if (!(parent->has_visual_geometry ? Rect2(Point2(), parent->local_rect.size) : parent->root_rect).has_point(parent_point)) {
+				return RNHitTestResult();
+			}
+		}
+		if (!node->span_rects.is_empty()) {
+			bool inside_span = false;
+			for (const Rect2 &rect : node->span_rects) {
+				inside_span = inside_span || rect.has_point(local_point);
+			}
+			if (!inside_span) {
+				return RNHitTestResult();
+			}
+		}
 		return RNHitTestResult{ node->tag, node->root_rect.position };
 	}
 	return RNHitTestResult();
@@ -111,8 +136,9 @@ RNHitTestResult RNInputRouter::hit_test(const RNSurfaceSnapshot &p_snapshot, con
 	if (!root) {
 		return RNHitTestResult();
 	}
-	for (int i = root->child_tags.size() - 1; i >= 0; --i) {
-		RNHitTestResult result = hit_test_node(p_snapshot, root->child_tags[i], p_point, root->root_rect);
+	const Vector<int> &children = root->has_visual_geometry ? root->paint_child_tags : root->child_tags;
+	for (int i = children.size() - 1; i >= 0; --i) {
+		RNHitTestResult result = hit_test_node(p_snapshot, children[i], p_point, root->root_rect);
 		if (result.tag != 0) {
 			return result;
 		}
@@ -240,10 +266,49 @@ Array RNInputRouter::current_touches(const RNSurfaceSnapshot &p_snapshot, int p_
 	return touches;
 }
 
-RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p_event, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation, const Point2 &p_root_position, const Point2 &p_screen_position) {
+RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p_event, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation, const Point2 &p_root_position, const Point2 &p_screen_position, int p_native_tag) {
+	RouteResult result = route_pointer_impl(p_event, p_snapshot, p_root_tag, p_generation, p_root_position, p_screen_position, p_native_tag);
+	auto localize = [&](Dictionary &payload) {
+		const int tag = payload.get("target", 0);
+		const RNMountedNodeSnapshot *node = p_snapshot.nodes.getptr(tag);
+		if (!node || !node->has_visual_geometry || !node->transform_invertible || !payload.has("pageX")) {
+			return;
+		}
+		const Point2 point = node->inverse_visual_transform.xform(Point2(real_t(payload["pageX"]), real_t(payload["pageY"])));
+		if (payload.has("offsetX")) {
+			payload["offsetX"] = point.x;
+			payload["offsetY"] = point.y;
+		}
+		if (payload.has("locationX")) {
+			payload["locationX"] = point.x;
+			payload["locationY"] = point.y;
+		}
+	};
+	for (RNNativeEvent &event : result.events) {
+		localize(event.payload);
+		for (const char *field : { "touches", "changedTouches" }) {
+			if (!event.payload.has(field)) {
+				continue;
+			}
+			Array touches = event.payload[field];
+			for (int i = 0; i < touches.size(); ++i) {
+				Dictionary touch = touches[i];
+				localize(touch);
+			}
+		}
+	}
+	return result;
+}
+
+RNInputRouter::RouteResult RNInputRouter::route_pointer_impl(const Ref<InputEvent> &p_event, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation, const Point2 &p_root_position, const Point2 &p_screen_position, int p_native_tag) {
 	RouteResult result;
 	const uint64_t timestamp = timestamp_now();
-	const RNHitTestResult hit = hit_test(p_snapshot, p_root_position);
+	RNHitTestResult hit = p_native_tag < 0 ? hit_test(p_snapshot, p_root_position) : RNHitTestResult();
+	for (int native_tag = p_native_tag; native_tag > 0 && hit.tag == 0;) {
+		hit = hit_test_node(p_snapshot, native_tag, p_root_position, Rect2(Point2(-1e9, -1e9), Size2(2e9, 2e9)), native_tag == p_native_tag);
+		const auto *node = p_snapshot.nodes.getptr(native_tag);
+		native_tag = node ? node->parent_tag : 0;
+	}
 
 	if (Ref<InputEventMouseMotion> motion = p_event; motion.is_valid()) {
 		mouse_root_position = p_root_position;
@@ -296,6 +361,9 @@ RNInputRouter::RouteResult RNInputRouter::route_pointer(const Ref<InputEvent> &p
 		if (button_event->is_pressed()) {
 			const Dictionary payload = pointer_payload(sample);
 			result.events.push_back(event(target, "topPointerDown", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, payload));
+			if (button != 0) {
+				result.events.push_back(event(target, button == 1 ? "topMiddleClick" : "topRightClick", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, payload));
+			}
 			if (button == 0) {
 				mouse_active_tag = target;
 				result.focus_tag = target;
@@ -480,21 +548,69 @@ Vector<RNNativeEvent> RNInputRouter::cancel_all(const RNSurfaceSnapshot *p_snaps
 		result.push_back(event(contact.tag, "topTouchCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, touch_payload(touch, Array())));
 		result.push_back(event(contact.tag, "topPointerCancel", FabricUIManager::EVENT_PRIORITY_DISCRETE, p_generation, pointer_payload(sample)));
 	}
+	if (p_snapshot) {
+		auto localize = [&](Dictionary &payload) {
+			const RNMountedNodeSnapshot *node = p_snapshot->nodes.getptr(int(payload.get("target", 0)));
+			if (!node || !node->has_visual_geometry || !node->transform_invertible || !payload.has("pageX")) {
+				return;
+			}
+			const Point2 position = node->inverse_visual_transform.xform(Point2(payload["pageX"], payload["pageY"]));
+			if (payload.has("offsetX")) {
+				payload["offsetX"] = position.x;
+				payload["offsetY"] = position.y;
+			}
+			if (payload.has("locationX")) {
+				payload["locationX"] = position.x;
+				payload["locationY"] = position.y;
+			}
+		};
+		for (RNNativeEvent &event : result) {
+			localize(event.payload);
+			for (const char *key : { "touches", "changedTouches" }) {
+				const Array touches = event.payload.get(key, Array());
+				for (const Variant &value : touches) {
+					Dictionary touch = value;
+					localize(touch);
+				}
+			}
+		}
+	}
 	clear();
 	return result;
 }
 
 Vector<RNNativeEvent> RNInputRouter::reconcile_snapshot(const RNSurfaceSnapshot *p_old_snapshot, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation) {
-	bool missing = hover_tag != 0 && !p_snapshot.nodes.has(hover_tag);
-	missing = missing || (mouse_active_tag != 0 && !p_snapshot.nodes.has(mouse_active_tag));
+	auto eligible = [&](int tag) {
+		const RNMountedNodeSnapshot *target = p_snapshot.nodes.getptr(tag);
+		if (!target || !target->self_targetable) {
+			return false;
+		}
+		while (target) {
+			if (!target->visible || target->pointer_events == "none" || (target->has_visual_geometry && !target->transform_invertible)) {
+				return false;
+			}
+			const RNMountedNodeSnapshot *parent = p_snapshot.nodes.getptr(target->parent_tag);
+			if (parent && parent->pointer_events == "box-only") {
+				return false;
+			}
+			target = parent;
+		}
+		return true;
+	};
+	bool missing = hover_tag != 0 && !eligible(hover_tag);
+	missing = missing || (mouse_active_tag != 0 && !eligible(mouse_active_tag));
 	for (const KeyValue<int, TouchContact> &entry : touch_contacts) {
-		if (!p_snapshot.nodes.has(entry.value.tag)) {
+		if (!eligible(entry.value.tag)) {
 			missing = true;
 			break;
 		}
 	}
 	if (!missing) {
-		return Vector<RNNativeEvent>();
+		RouteResult hover;
+		if (hover_tag && hit_test_node(p_snapshot, hover_tag, mouse_root_position, Rect2(-1e8, -1e8, 2e8, 2e8)).tag != hover_tag) {
+			append_mouse_hover(hover, p_snapshot, RNHitTestResult(), mouse_root_position, mouse_screen_position, nullptr, p_generation, timestamp_now());
+		}
+		return hover.events;
 	}
 	Vector<RNNativeEvent> events = cancel_all(p_old_snapshot, p_root_tag, p_generation);
 	if (p_old_snapshot) {

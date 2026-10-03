@@ -1,0 +1,9 @@
+# Phase 6 replaces this feature-flag shim with a native API.
+^Could not access feature flag 'enableIntersectionObserverByDefault' because native module method was not available$
+# Phase 6 replaces this feature-flag shim with a native API.
+^Could not access feature flag 'enableNativeCSSParsing' because native module method was not available$
+
+# Xvfb has no XIM server; native composition is tested through DisplayServerMock.
+^WARNING: Failed to create wd\.xic as the input method or its xim server may not have started yet\.$
+# Xvfb software GL lacks the native GLX swap-interval extension.
+^WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver\.$

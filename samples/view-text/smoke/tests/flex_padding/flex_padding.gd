@@ -29,18 +29,18 @@ func validate_smoke() -> String:
 		return "flex View size does not fill the mounted root"
 	if flex_panel.size.x <= TOLERANCE or flex_panel.size.y <= TOLERANCE:
 		return "flex View has an empty layout"
-	if flex_panel.get_child_count() != 1 or not flex_panel.get_child(0) is Label:
+	if flex_panel.get_child_count() != 1 or not flex_panel.get_child(0) is RNTextControl:
 		var child_types: Array[String] = []
 		for child in flex_panel.get_children():
 			child_types.append(child.get_class())
-		return "expected the sentinel Label as the direct flex View child, got %s" % ", ".join(child_types)
+		return "expected the sentinel RNTextControl as the direct flex View child, got %s" % ", ".join(child_types)
 
-	var label := flex_panel.get_child(0) as Label
-	if label.text != SENTINEL:
-		return "direct Label does not contain the sentinel text"
+	var label := flex_panel.get_child(0) as RNTextControl
+	if label.get_parsed_text() != SENTINEL:
+		return "direct RNTextControl does not contain the sentinel text"
 	if label.position.distance_to(EXPECTED_OFFSET) > TOLERANCE:
-		return "padding did not place the sentinel Label at (16, 16)"
+		return "padding did not place the sentinel RNTextControl at (16, 16)"
 	if label.size.x <= TOLERANCE or label.size.y <= TOLERANCE:
-		return "sentinel Label has an empty layout"
+		return "sentinel RNTextControl has an empty layout"
 
 	return ""

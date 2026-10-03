@@ -1,11 +1,14 @@
 #include "rn_mounting_manager.h"
 
 #include "../components/rn_host_descriptor_registry.h"
+#include "../components/rn_visual_style.h"
 #include "../fabric/fabric_ui_manager.h"
 #include "../fabric/rn_view_style.h"
 #include "../root_view/react_native_root_view.h"
 
 #include "core/object/callable_mp.h"
+#include "scene/main/viewport.h"
+#include "scene/main/window.h"
 
 namespace {
 
@@ -14,9 +17,11 @@ float number_prop(const Dictionary &p_props, const String &p_name, float p_defau
 	return value.get_type() == Variant::INT || value.get_type() == Variant::FLOAT ? float(value) : p_default;
 }
 
-Vector4 border_widths(const Dictionary &p_props) {
+Vector4 border_widths(const Dictionary &p_props, bool p_rtl) {
 	const float all = number_prop(p_props, "borderWidth");
-	return Vector4(number_prop(p_props, "borderTopWidth", all), number_prop(p_props, "borderRightWidth", all), number_prop(p_props, "borderBottomWidth", all), number_prop(p_props, "borderLeftWidth", all));
+	const float left = number_prop(p_props, p_rtl ? "borderEndWidth" : "borderStartWidth", number_prop(p_props, "borderLeftWidth", all));
+	const float right = number_prop(p_props, p_rtl ? "borderStartWidth" : "borderEndWidth", number_prop(p_props, "borderRightWidth", all));
+	return Vector4(number_prop(p_props, "borderTopWidth", all), right, number_prop(p_props, "borderBottomWidth", all), left);
 }
 
 bool is_host(const Ref<RNShadowNode> &p_node) {
@@ -64,7 +69,22 @@ Control *RNMountingManager::host_for_tag(int p_tag) const {
 }
 
 Control *RNMountingManager::native_parent(int p_tag) const {
-	return p_tag == root_tag ? mount_container() : host_for_tag(p_tag);
+	if (p_tag == root_tag) {
+		return mount_container();
+	}
+	Control *host = host_for_tag(p_tag);
+	Ref<RNShadowNode> shadow = registry.get_shadow_node(p_tag);
+	return host && shadow.is_valid() && shadow->descriptor ? shadow->descriptor->get_child_container(host, host_context(p_tag, published_revision)) : nullptr;
+}
+
+int RNMountingManager::native_child_position(Control *p_parent, int p_index) const {
+	int index = 0;
+	for (int i = 0; i < p_parent->get_child_count(); ++i) {
+		if (registry.get_tag(p_parent->get_child(i)->get_instance_id()) != 0 && index++ == p_index) {
+			return i;
+		}
+	}
+	return MAX(0, p_parent->get_child_count() - 1);
 }
 
 void RNMountingManager::ensure_mount_container() {
@@ -133,6 +153,7 @@ void RNMountingManager::clear(bool p_keep_container) {
 		mount_container_id = ObjectID();
 	}
 	transaction_in_flight = false;
+	publication_pending = false;
 }
 
 Ref<RNShadowNode> RNMountingManager::build_effective_tree(const Ref<RNShadowNode> &p_node, const HashMap<int, Dictionary> &p_overrides) const {
@@ -187,11 +208,48 @@ void RNMountingManager::reconcile_overrides(const Ref<RNShadowNode> &p_node, Has
 RNHostContext RNMountingManager::host_context(int p_tag, uint64_t p_revision) const {
 	RNHostContext context;
 	context.owner = owner;
+	context.host_id = host_for_tag(p_tag) ? host_for_tag(p_tag)->get_instance_id() : ObjectID();
 	context.generation = runtime_generation;
 	context.root_tag = root_tag;
 	context.surface_epoch = surface_epoch;
 	context.revision = p_revision;
 	context.tag = p_tag;
+	if (owner) {
+		const ObjectID owner_id = owner->get_instance_id();
+		const ObjectID host_id = host_for_tag(p_tag) ? host_for_tag(p_tag)->get_instance_id() : ObjectID();
+		const uint64_t generation = runtime_generation;
+		const uint64_t epoch = surface_epoch;
+		auto sink = std::make_shared<RNHostEventSink>();
+		sink->emit = [owner_id, host_id, generation, epoch](int p_target, const StringName &p_name, const Dictionary &p_payload, uint64_t p_owner_revision) {
+			ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(owner_id));
+			if (root) {
+				root->_emit_host_event(generation, epoch, p_target, host_id, p_name, p_payload, p_owner_revision);
+			}
+		};
+		sink->invalidate_geometry = [owner_id, generation, epoch]() {
+			ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(owner_id));
+			if (root && root->runtime_generation == generation && root->surface_epoch == epoch) {
+				root->_invalidate_host_geometry();
+			}
+		};
+		sink->invalidate_layout = [owner_id, generation, epoch]() {
+			ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(owner_id));
+			if (root && root->runtime_generation == generation && root->surface_epoch == epoch) {
+				root->_invalidate_host_layout();
+			}
+		};
+		sink->cancel_input = [owner_id, generation, epoch]() {
+			ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(owner_id));
+			if (root && root->runtime_generation == generation && root->surface_epoch == epoch) {
+				root->_cancel_host_input();
+			}
+		};
+		sink->is_current = [owner_id, host_id, generation, epoch, p_tag, p_revision]() {
+			ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(owner_id));
+			return root && root->runtime_generation == generation && root->surface_epoch == epoch && root->mounting_manager->is_current_host(p_tag, host_id, p_revision);
+		};
+		context.event_sink = sink;
+	}
 	return context;
 }
 
@@ -204,6 +262,7 @@ bool RNMountingManager::apply_host_props(Control *p_host, const std::shared_ptr<
 		r_error = "host or descriptor is missing";
 		return false;
 	}
+	p_host->set_meta("react_native_test_id", p_state.props.get("testID", String()));
 	RNError error;
 	if (!p_descriptor->apply(p_host, p_state, p_context, error)) {
 		r_error = error.describe();
@@ -216,6 +275,7 @@ void RNMountingManager::apply_layout(Control *p_host, const Rect2 &p_layout) {
 	if (!p_host) {
 		return;
 	}
+	p_host->set_external_layout_enabled(true);
 	p_host->set_position(p_layout.position);
 	p_host->set_size(p_layout.size);
 	stats.layout_boxes_applied++;
@@ -242,6 +302,10 @@ bool RNMountingManager::prepare_transaction(RNMountingTransaction &r_transaction
 		r_error = "host descriptor registry is unavailable";
 		return false;
 	}
+	HashMap<int, Size2> presentations;
+	presentations[p_next_root->tag] = owner && owner->is_inside_tree() ? Size2(owner->get_window()->get_size()) : p_constraint;
+	HashMap<int, bool> directions;
+	directions[p_next_root->tag] = owner && owner->is_layout_rtl();
 	Vector<Ref<RNShadowNode>> pending;
 	pending.push_back(p_next_root);
 	while (!pending.is_empty()) {
@@ -259,12 +323,26 @@ bool RNMountingManager::prepare_transaction(RNMountingTransaction &r_transaction
 		}
 		RNPreparedHostState prepared;
 		RNError prepare_error;
+		const String direction = node->props.get("direction", "inherit");
+		RNHostContext context = host_context(node->tag, r_transaction.revision);
+		context.presentation_size = presentations[node->tag];
 		if (!node->descriptor->prepare(*node.ptr(), prepared, prepare_error)) {
 			r_error = prepare_error.describe();
 			return false;
 		}
+		prepared.layout_rtl = direction == "rtl" || (direction != "ltr" && directions[node->tag]);
+		if (!node->descriptor->resolve_resources(prepared, context, prepare_error)) {
+			r_error = prepare_error.describe();
+			return false;
+		}
+		prepared.dependency_revision ^= prepared.layout_rtl ? 0x9e3779b97f4a7c15ULL : 0;
 		r_transaction.prepared_states[node->tag] = prepared;
 		for (const Ref<RNShadowNode> &child : node->children) {
+			if (child.is_null()) {
+				continue;
+			}
+			directions[child->tag] = prepared.layout_rtl;
+			presentations[child->tag] = node->descriptor->presentation_size(prepared, presentations[node->tag]);
 			pending.push_back(child);
 		}
 	}
@@ -277,6 +355,13 @@ bool RNMountingManager::prepare_transaction(RNMountingTransaction &r_transaction
 	}
 	if (!layout_tree.prepare(p_next_root, p_constraint, r_transaction.prepared_layouts, r_error, &r_transaction.prepared_states)) {
 		return false;
+	}
+	for (const KeyValue<int, Rect2> &entry : r_transaction.prepared_layouts) {
+		const RNPreparedHostState *state = r_transaction.prepared_states.getptr(entry.key);
+		if (!entry.value.is_finite() || (state && !RNVisualStyle::transform(state->props, entry.value.size).is_finite())) {
+			r_error = "Resolved host geometry must be finite";
+			return false;
+		}
 	}
 	prepared_hosts.clear();
 	for (const RNMountingMutation &mutation : r_transaction.mutations) {
@@ -327,7 +412,8 @@ bool RNMountingManager::build_snapshot_node(const Ref<RNShadowNode> &p_node, int
 	const Rect2 layout = prepared_layout ? *prepared_layout : Rect2();
 	const String pointer_events = String(p_node->props.get("pointerEvents", "auto")).to_lower();
 	const bool branch_enabled = p_branch_targetable && pointer_events != "none";
-	const bool self_targetable = host && p_node->descriptor->get_traits().input_target && branch_enabled && pointer_events != "box-none";
+	const bool text_target = (p_node->view_name != "RCTText" && p_node->view_name != "RCTVirtualText") || bool(p_node->props.get("isPressable", false)) || bool(p_node->props.get("selectable", false));
+	const bool self_targetable = text_target && (host || p_node->view_name == "RCTVirtualText") && p_node->descriptor->get_traits().input_target && branch_enabled && pointer_events != "box-none";
 	const bool descendants_targetable = branch_enabled && pointer_events != "box-only";
 	RNMountedNode mounted;
 	mounted.logical_parent_tag = p_logical_parent;
@@ -356,7 +442,7 @@ bool RNMountingManager::build_snapshot_node(const Ref<RNShadowNode> &p_node, int
 	snapshot.local_rect = layout;
 	snapshot.root_rect = Rect2(p_parent_origin + layout.position, layout.size);
 	snapshot.window_rect = p_window_transform.xform(snapshot.root_rect);
-	snapshot.border_width = border_widths(p_node->props);
+	snapshot.border_width = border_widths(prepared_state->props, prepared_state->layout_rtl);
 	snapshot.inner_size = Size2(MAX(0.0f, snapshot.root_rect.size.x - snapshot.border_width.y - snapshot.border_width.w), MAX(0.0f, snapshot.root_rect.size.y - snapshot.border_width.x - snapshot.border_width.z));
 	snapshot.offset_parent_tag = p_logical_parent;
 	snapshot.offset = layout.position;
@@ -433,7 +519,14 @@ bool RNMountingManager::hierarchy_matches(const HashMap<int, RNMountedNode> &p_r
 		}
 		Control *host = Object::cast_to<Control>(ObjectDB::get_instance(mounted.object_id));
 		Control *parent = native_parent(mounted.native_parent_tag);
-		if (!host || !parent || registry.get_tag(mounted.object_id) != entry.key || mounted.shadow_node.is_null() || mounted.shadow_node->root_tag != root_tag || mounted.shadow_node->runtime_generation != runtime_generation || mounted.shadow_node->surface_epoch != surface_epoch || host->get_parent() != parent || host->get_index() != mounted.native_index) {
+		if (!host || !parent || registry.get_tag(mounted.object_id) != entry.key || mounted.shadow_node.is_null() || mounted.shadow_node->root_tag != root_tag || mounted.shadow_node->runtime_generation != runtime_generation || mounted.shadow_node->surface_epoch != surface_epoch || host->get_parent() != parent) {
+			return false;
+		}
+		int index = 0;
+		for (int i = 0; i < host->get_index(); ++i) {
+			index += registry.get_tag(parent->get_child(i)->get_instance_id()) != 0;
+		}
+		if (index != mounted.native_index) {
 			return false;
 		}
 	}
@@ -526,21 +619,27 @@ void RNMountingManager::restore_scene(const HashMap<int, RNMountedNode> &p_recor
 			parent->add_child(host);
 		}
 		if (host && parent) {
-			parent->move_child(host, MIN(mounted->native_index, parent->get_child_count() - 1));
+			parent->move_child(host, native_child_position(parent, mounted->native_index));
 			String ignored_apply_error;
 			apply_host_props(host, mounted->descriptor, mounted->prepared_state, host_context(mounted->snapshot.tag, mounted->last_changed_revision), ignored_apply_error);
 			apply_layout(host, mounted->snapshot.local_rect);
+			RNVisualStyle::apply(host, mounted->prepared_state.props);
+			host->set_layout_direction(mounted->prepared_state.layout_rtl ? Control::LAYOUT_DIRECTION_RTL : Control::LAYOUT_DIRECTION_LTR);
 			registry.register_node(mounted->snapshot.tag, host, mounted->shadow_node);
 		}
 	}
 	if (owner && owner->focused_tag != 0) {
 		Control *focused = Object::cast_to<Control>(registry.get_node(owner->focused_tag));
-		if (focused && focused->get_focus_mode() != Control::FOCUS_NONE) {
+		if (focused && (focused->get_focus_mode() == Control::FOCUS_CLICK || focused->get_focus_mode() == Control::FOCUS_ALL) && !focused->get_viewport()->gui_get_focus_owner()) {
 			focused->grab_focus();
 		}
 	}
 	String ignored;
-	layout_tree.rebuild(p_root, p_constraint, ignored);
+	HashMap<int, RNPreparedHostState> prepared_states;
+	for (const KeyValue<int, RNMountedNode> &entry : p_records) {
+		prepared_states[entry.key] = entry.value.prepared_state;
+	}
+	layout_tree.rebuild(p_root, p_constraint, ignored, &prepared_states);
 }
 
 bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, const Ref<RNShadowNode> &p_declarative_root, const HashMap<int, Dictionary> &p_next_overrides, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error) {
@@ -548,6 +647,12 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 	const Ref<RNShadowNode> old_root = committed_root;
 	const std::shared_ptr<const RNSurfaceSnapshot> old_snapshot = published_snapshot;
 	transaction_in_flight = true;
+	for (const KeyValue<int, RNMountedNode> &entry : old_records) {
+		Control *host = Object::cast_to<Control>(ObjectDB::get_instance(entry.value.object_id));
+		if (host && entry.value.descriptor) {
+			p_transaction.captured_native_states[entry.key] = entry.value.descriptor->capture_state(host);
+		}
+	}
 	int applied_mutations = 0;
 	int failed_mutation = -1;
 	auto should_fail_before = [&]() {
@@ -643,7 +748,7 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 			return fail(mutation);
 		}
 		parent->add_child(host);
-		parent->move_child(host, mutation.index);
+		parent->move_child(host, native_child_position(parent, mutation.index));
 		stats.mutations[mutation_stat_index(mutation.type)]++;
 		if (finish_mutation()) {
 			return fail(mutation);
@@ -675,13 +780,16 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 			return fail(mutation);
 		}
 	}
-	for (const KeyValue<int, RNMountedNode> &entry : next_records) {
+	for (KeyValue<int, RNMountedNode> &entry : next_records) {
 		if (!entry.value.renderer_owned) {
 			continue;
 		}
 		Control *host = Object::cast_to<Control>(ObjectDB::get_instance(entry.value.object_id));
 		const RNMountedNode *old = old_records.getptr(entry.key);
-		if (changed_tags.has(entry.key)) {
+		if (old && !changed_tags.has(entry.key) && old->prepared_state.dependency_revision == entry.value.prepared_state.dependency_revision) {
+			entry.value.last_changed_revision = old->last_changed_revision;
+		}
+		if (changed_tags.has(entry.key) || (old && old->prepared_state.dependency_revision != entry.value.prepared_state.dependency_revision)) {
 			if (old && old->descriptor && !p_transaction.captured_native_states.has(entry.key)) {
 				p_transaction.captured_native_states[entry.key] = old->descriptor->capture_state(host);
 			}
@@ -696,8 +804,11 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 		if (!old || !old->snapshot.local_rect.is_equal_approx(entry.value.snapshot.local_rect)) {
 			apply_layout(host, entry.value.snapshot.local_rect);
 		}
+		RNVisualStyle::apply(host, entry.value.prepared_state.props);
+		host->set_layout_direction(entry.value.prepared_state.layout_rtl ? Control::LAYOUT_DIRECTION_RTL : Control::LAYOUT_DIRECTION_LTR);
 		registry.register_node(entry.key, host, entry.value.shadow_node);
 	}
+	sort_paint_order(next_records);
 	if (!hierarchy_matches(next_records)) {
 		RNMountingMutation mismatch;
 		mismatch.type = RNMutationType::UPDATE;
@@ -705,6 +816,8 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 	}
 
 	direct_prop_overrides = copy_overrides(p_next_overrides);
+	next_snapshot->native_visual_revision = old_snapshot ? old_snapshot->native_visual_revision + (p_transaction.revision == published_revision ? 1 : 0) : 0;
+	refresh_geometry(*next_snapshot, p_window_transform);
 	mounted_nodes = std::move(next_records);
 	committed_root = p_transaction.new_root;
 	published_revision = p_transaction.revision;
@@ -745,7 +858,32 @@ bool RNMountingManager::apply_transaction(RNMountingTransaction &p_transaction, 
 	p_transaction.prepared_host_descriptors.clear();
 	prepared_hosts.clear();
 	transaction_in_flight = false;
+	publication_pending = true;
 	return true;
+}
+
+void RNMountingManager::activate_published_hosts() {
+	if (!publication_pending || transaction_in_flight) {
+		return;
+	}
+	publication_pending = false;
+	Vector<Ref<RNShadowNode>> pending;
+	pending.push_back(committed_root);
+	while (!pending.is_empty()) {
+		Ref<RNShadowNode> node = pending[pending.size() - 1];
+		pending.remove_at(pending.size() - 1);
+		if (node.is_null()) {
+			continue;
+		}
+		const RNMountedNode *entry = mounted_nodes.getptr(node->tag);
+		Control *host = entry ? Object::cast_to<Control>(ObjectDB::get_instance(entry->object_id)) : nullptr;
+		if (host && entry->descriptor) {
+			entry->descriptor->after_publish(host, entry->prepared_state, host_context(node->tag, entry->last_changed_revision));
+		}
+		for (int i = node->children.size() - 1; i >= 0; --i) {
+			pending.push_back(node->children[i]);
+		}
+	}
 }
 
 bool RNMountingManager::commit(const RNPendingCommit &p_commit, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error) {
@@ -777,7 +915,11 @@ bool RNMountingManager::commit(const RNPendingCommit &p_commit, const Size2 &p_c
 	if (!prepare_transaction(transaction, effective, p_constraint, r_error)) {
 		destroy_detached_hosts(transaction);
 		String ignored;
-		layout_tree.rebuild(committed_root, p_constraint, ignored);
+		HashMap<int, RNPreparedHostState> retained;
+		for (const KeyValue<int, RNMountedNode> &entry : mounted_nodes) {
+			retained[entry.key] = entry.value.prepared_state;
+		}
+		layout_tree.rebuild(committed_root, p_constraint, ignored, &retained);
 		stats.rejected_transactions++;
 		return false;
 	}
@@ -798,12 +940,7 @@ bool RNMountingManager::resize(const Size2 &p_constraint, const Transform2D &p_w
 	transaction.root_tag = root_tag;
 	transaction.surface_epoch = surface_epoch;
 	transaction.revision = published_revision;
-	transaction.old_root = committed_root;
-	transaction.new_root = committed_root;
-	for (const KeyValue<int, RNMountedNode> &entry : mounted_nodes) {
-		transaction.prepared_states[entry.key] = entry.value.prepared_state;
-	}
-	if (!layout_tree.prepare(committed_root, p_constraint, transaction.prepared_layouts, r_error, &transaction.prepared_states)) {
+	if (!prepare_transaction(transaction, committed_root, p_constraint, r_error)) {
 		return false;
 	}
 	return apply_transaction(transaction, declarative_root, direct_prop_overrides, p_constraint, p_window_transform, r_events, r_error);
@@ -836,7 +973,11 @@ bool RNMountingManager::apply_direct_props(int p_tag, const Dictionary &p_patch,
 	if (!prepare_transaction(transaction, effective, p_constraint, r_error)) {
 		destroy_detached_hosts(transaction);
 		String ignored;
-		layout_tree.rebuild(committed_root, p_constraint, ignored);
+		HashMap<int, RNPreparedHostState> retained;
+		for (const KeyValue<int, RNMountedNode> &entry : mounted_nodes) {
+			retained[entry.key] = entry.value.prepared_state;
+		}
+		layout_tree.rebuild(committed_root, p_constraint, ignored, &retained);
 		return false;
 	}
 	return apply_transaction(transaction, declarative_root, next_overrides, p_constraint, p_window_transform, r_events, r_error);
@@ -857,13 +998,155 @@ bool RNMountingManager::dispatch_command(int p_tag, const StringName &p_command,
 	return true;
 }
 
+bool RNMountingManager::is_current_host(int p_tag, ObjectID p_id, uint64_t p_revision) const {
+	const RNMountedNode *mounted = mounted_nodes.getptr(p_tag);
+	return !transaction_in_flight && mounted && mounted->object_id == p_id && mounted->last_changed_revision == p_revision && ObjectDB::get_instance(p_id);
+}
+
 void RNMountingManager::publish_transform(const Transform2D &p_window_transform) {
 	if (!published_snapshot) {
 		return;
 	}
 	auto replacement = std::make_shared<RNSurfaceSnapshot>(*published_snapshot);
-	for (KeyValue<int, RNMountedNodeSnapshot> &entry : replacement->nodes) {
-		entry.value.window_rect = p_window_transform.xform(entry.value.root_rect);
-	}
+	refresh_geometry(*replacement, p_window_transform);
+	replacement->native_visual_revision++;
 	published_snapshot = replacement;
+}
+
+void RNMountingManager::refresh_geometry(RNSurfaceSnapshot &r_snapshot, const Transform2D &p_window_transform) const {
+	for (KeyValue<int, RNMountedNodeSnapshot> &entry : r_snapshot.nodes) {
+		RNMountedNodeSnapshot &node = entry.value;
+		node.span_rects.clear();
+		node.has_visual_geometry = true;
+		node.visual_transform = Transform2D(0, node.root_rect.position);
+		node.viewport_rect = Rect2(Point2(), node.local_rect.size);
+		node.content_size = node.local_rect.size;
+		Control *host = Object::cast_to<Control>(ObjectDB::get_instance(node.object_id));
+		if (host && host->is_inside_tree() && node.shadow_node->descriptor) {
+			const RNHostGeometry geometry = node.shadow_node->descriptor->read_geometry(host, host_context(node.tag, r_snapshot.revision));
+			const Transform2D root_screen = owner->get_screen_transform();
+			node.visual_transform = !Math::is_zero_approx(root_screen.determinant()) ? root_screen.affine_inverse() * geometry.screen_transform : Transform2D(0, 0, 0, 0, 0, 0);
+			node.viewport_id = geometry.viewport_id;
+			node.viewport_rect = geometry.viewport;
+			node.scroll_offset = geometry.scroll_offset;
+			node.content_size = geometry.content_size;
+			node.span_bounds = geometry.span_bounds;
+			node.clips_contents = geometry.clips_contents;
+			node.window_rect = geometry.transform.xform(geometry.bounds);
+		}
+		node.transform_invertible = !Math::is_zero_approx(node.visual_transform.determinant());
+		if (node.transform_invertible) {
+			node.inverse_visual_transform = node.visual_transform.affine_inverse();
+		}
+		if (!host || !host->is_inside_tree()) {
+			node.window_rect = (p_window_transform * node.visual_transform).xform(Rect2(Point2(), node.local_rect.size));
+		}
+		node.paint_child_tags = node.child_tags;
+		Control *container = native_parent(node.tag);
+		if (container) {
+			Vector<int> native_tags;
+			for (int i = 0; i < container->get_child_count(); ++i) {
+				const int tag = registry.get_tag(container->get_child(i)->get_instance_id());
+				if (node.child_tags.has(tag)) {
+					native_tags.push_back(tag);
+				}
+			}
+			if (native_tags.size() == node.child_tags.size()) {
+				node.paint_child_tags = native_tags;
+			}
+		}
+	}
+	for (const KeyValue<int, RNMountedNodeSnapshot> &entry : r_snapshot.nodes) {
+		const RNMountedNodeSnapshot &paragraph = entry.value;
+		for (const KeyValue<int, Vector<Rect2>> &span : paragraph.span_bounds) {
+			RNMountedNodeSnapshot *node = r_snapshot.nodes.getptr(span.key);
+			if (!node || span.value.is_empty()) {
+				continue;
+			}
+			Rect2 bounds = span.value[0];
+			for (const Rect2 &rect : span.value) {
+				bounds = bounds.merge(rect);
+			}
+			node->has_visual_geometry = true;
+			node->visual_transform = paragraph.visual_transform * Transform2D(0, bounds.position);
+			node->transform_invertible = paragraph.transform_invertible;
+			if (node->transform_invertible) {
+				node->inverse_visual_transform = node->visual_transform.affine_inverse();
+			}
+			node->local_rect = bounds;
+			node->root_rect = paragraph.visual_transform.xform(bounds);
+			node->window_rect = p_window_transform.xform(node->root_rect);
+			node->viewport_id = paragraph.viewport_id;
+			node->viewport_rect = Rect2(Point2(), bounds.size);
+			for (const Rect2 &rect : span.value) {
+				node->span_rects.push_back(Rect2(rect.position - bounds.position, rect.size));
+			}
+		}
+	}
+}
+
+void RNMountingManager::sort_paint_order(HashMap<int, RNMountedNode> &r_records) {
+	HashSet<int> parents;
+	for (const KeyValue<int, RNMountedNode> &entry : r_records) {
+		if (entry.value.renderer_owned) {
+			parents.insert(entry.value.native_parent_tag);
+		}
+	}
+	for (int parent_tag : parents) {
+		Control *parent = native_parent(parent_tag);
+		if (!parent) {
+			continue;
+		}
+		Vector<int> slots;
+		Vector<int> tags;
+		for (int i = 0; i < parent->get_child_count(); ++i) {
+			const int tag = registry.get_tag(parent->get_child(i)->get_instance_id());
+			if (r_records.has(tag)) {
+				slots.push_back(i);
+				tags.push_back(tag);
+			}
+		}
+		for (int i = 1; i < tags.size(); ++i) {
+			for (int j = i; j > 0; --j) {
+				const int current = int(r_records[tags[j]].prepared_state.props.get("zIndex", 0));
+				const int previous = int(r_records[tags[j - 1]].prepared_state.props.get("zIndex", 0));
+				if (current > previous || (current == previous && r_records[tags[j]].native_index >= r_records[tags[j - 1]].native_index)) {
+					break;
+				}
+				std::swap(tags.write[j], tags.write[j - 1]);
+			}
+		}
+		for (int i = 0; i < tags.size(); ++i) {
+			Node *desired = Object::cast_to<Node>(ObjectDB::get_instance(r_records[tags[i]].object_id));
+			const int previous_index = desired->get_index();
+			if (previous_index != slots[i]) {
+				Node *displaced = parent->get_child(slots[i]);
+				parent->move_child(desired, slots[i]);
+				parent->move_child(displaced, previous_index);
+			}
+		}
+		for (int i = 0; i < tags.size(); ++i) {
+			r_records[tags[i]].native_index = i;
+		}
+	}
+}
+
+int RNMountingManager::tag_for_input_control(Control *p_control) const {
+	for (Node *node = p_control; node; node = node->get_parent()) {
+		const int tag = registry.get_tag(node->get_instance_id());
+		if (tag) {
+			const RNMountedNode *record = mounted_nodes.getptr(tag);
+			return record && record->descriptor && record->descriptor->owns_input_control(Object::cast_to<Control>(node), p_control) ? tag : 0;
+		}
+	}
+	return 0;
+}
+Control *RNMountingManager::focus_control(int p_tag) const {
+	const RNMountedNode *record = mounted_nodes.getptr(p_tag);
+	Control *host = host_for_tag(p_tag);
+	return host && record && record->descriptor ? record->descriptor->focus_control(host) : nullptr;
+}
+bool RNMountingManager::owns_native_activation(int p_tag) const {
+	const RNMountedNode *record = mounted_nodes.getptr(p_tag);
+	return record && record->descriptor && record->descriptor->owns_native_activation(record->prepared_state);
 }

@@ -3,6 +3,8 @@
 #include "../fabric/fabric_ui_manager.h"
 #include "../mounting/rn_mounting_manager.h"
 
+#include "core/config/project_settings.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/main/viewport.h"
 
@@ -36,6 +38,8 @@ void ReactNativeRootView::_bind_methods() {
 void ReactNativeRootView::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
+			get_viewport()->connect("gui_input_dispatched", callable_mp(this, &ReactNativeRootView::_on_gui_input_dispatched));
+			ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &ReactNativeRootView::_invalidate_host_layout));
 			if (!registered) {
 				if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
 					registered = true;
@@ -61,7 +65,13 @@ void ReactNativeRootView::_notification(int p_what) {
 		case NOTIFICATION_TRANSFORM_CHANGED: {
 			_publish_transform_snapshot();
 		} break;
+		case NOTIFICATION_LAYOUT_DIRECTION_CHANGED:
+		case NOTIFICATION_THEME_CHANGED: {
+			_invalidate_host_layout();
+		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			get_viewport()->disconnect("gui_input_dispatched", callable_mp(this, &ReactNativeRootView::_on_gui_input_dispatched));
+			ProjectSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &ReactNativeRootView::_invalidate_host_layout));
 			if (registered) {
 				if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
 					coordinator->unregister_root(this);
@@ -213,22 +223,91 @@ void ReactNativeRootView::_publish_mounted_result(Vector<RNNativeEvent> p_events
 	}
 	_enqueue_events(p_events);
 	if (focused_tag != 0) {
-		Control *focused = Object::cast_to<Control>(mounting_manager->get_registry().get_node(focused_tag));
-		if (focused && focused->get_focus_mode() != Control::FOCUS_NONE) {
-			focused->grab_focus();
-		} else {
+		Control *focused = mounting_manager->focus_control(focused_tag);
+		if (!focused || (focused->get_focus_mode() != Control::FOCUS_CLICK && focused->get_focus_mode() != Control::FOCUS_ALL)) {
 			_set_focused_tag(0, p_old_snapshot.get());
+		} else if (!focused->get_viewport()->gui_get_focus_owner()) {
+			focused->grab_focus();
 		}
 	}
+	mounting_manager->activate_published_hosts();
 }
 
 void ReactNativeRootView::_publish_transform_snapshot() {
 	if (root_tag == 0 || mounting_manager->get_committed_root().is_null()) {
 		return;
 	}
+	const auto previous = mounting_manager->get_snapshot();
 	mounting_manager->publish_transform(get_global_transform_with_canvas());
 	if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
 		coordinator->publish_snapshot(mounting_manager->get_snapshot());
+	}
+	_enqueue_events(input_router.reconcile_snapshot(previous.get(), *mounting_manager->get_snapshot(), root_tag, runtime_generation));
+}
+
+void ReactNativeRootView::_invalidate_host_layout() {
+	++native_resource_revision;
+	if (!native_layout_pending) {
+		native_layout_pending = true;
+		callable_mp(this, &ReactNativeRootView::_refresh_native_dependencies).call_deferred();
+	}
+}
+
+void ReactNativeRootView::_refresh_native_dependencies() {
+	native_layout_pending = false;
+	if (!is_inside_tree() || mounting_manager->get_committed_root().is_null()) {
+		return;
+	}
+	if (transaction_in_flight || mounting_manager->is_transaction_in_flight()) {
+		_invalidate_host_layout();
+		return;
+	}
+	const auto previous = mounting_manager->get_snapshot();
+	Vector<RNNativeEvent> events;
+	String error;
+	transaction_in_flight = true;
+	const bool refreshed = mounting_manager->resize(get_size(), get_global_transform_with_canvas(), events, error);
+	transaction_in_flight = false;
+	if (refreshed) {
+		_publish_mounted_result(events, previous);
+	} else {
+		ERR_PRINT(error);
+	}
+}
+
+void ReactNativeRootView::_emit_host_event(uint64_t p_generation, uint64_t p_epoch, int p_tag, ObjectID p_host, const StringName &p_name, const Dictionary &p_payload, uint64_t p_revision) {
+	if (p_generation != runtime_generation || p_epoch != surface_epoch || !mounting_manager->is_current_host(p_tag, p_host, p_revision)) {
+		return;
+	}
+	Ref<RNShadowNode> node = mounting_manager->get_registry().get_shadow_node(p_tag);
+	if (node.is_null() || !node->descriptor) {
+		return;
+	}
+	const Dictionary config = node->descriptor->get_view_config();
+	const Dictionary direct = config.get("directEventTypes", Dictionary());
+	const Dictionary bubbling = config.get("bubblingEventTypes", Dictionary());
+	if (!direct.has(p_name) && !bubbling.has(p_name)) {
+		ERR_PRINT(vformat("E_UNDECLARED_EVENT: %s.%s", node->view_name, p_name));
+		return;
+	}
+	RNNativeEvent event;
+	event.tag = p_tag;
+	event.name = p_name;
+	event.payload = p_payload.duplicate(true);
+	event.payload["target"] = p_tag;
+	event.retained_target = node->event_target;
+	if (p_name == "topFocus") {
+		focused_tag = p_tag;
+	} else if (p_name == "topBlur" && focused_tag == p_tag) {
+		focused_tag = 0;
+	}
+	event.priority = FabricUIManager::EVENT_PRIORITY_DEFAULT;
+	_enqueue_events({ event });
+}
+
+void ReactNativeRootView::_invalidate_host_geometry() {
+	if (!transaction_in_flight && !mounting_manager->is_transaction_in_flight()) {
+		_publish_transform_snapshot();
 	}
 }
 
@@ -353,11 +432,18 @@ void ReactNativeRootView::_set_focused_tag(int p_tag, const RNSurfaceSnapshot *p
 	_enqueue_events(events);
 }
 
-void ReactNativeRootView::input(const Ref<InputEvent> &p_event) {
-	_route_input(p_event);
+void ReactNativeRootView::input(const Ref<InputEvent> &) {}
+
+void ReactNativeRootView::_on_gui_input_dispatched(const Ref<InputEvent> &p_event, uint64_t p_control_id, uint64_t p_event_id) {
+	(void)p_event_id;
+	Control *selected = Object::cast_to<Control>(ObjectDB::get_instance(ObjectID(p_control_id)));
+	const int tag = mounting_manager->tag_for_input_control(selected);
+	if (tag != 0 || Ref<InputEventMouseMotion>(p_event).is_valid()) {
+		_route_input(p_event, tag, selected ? selected->get_viewport() : get_viewport());
+	}
 }
 
-void ReactNativeRootView::_route_input(const Ref<InputEvent> &p_event) {
+void ReactNativeRootView::_route_input(const Ref<InputEvent> &p_event, int p_native_tag, Viewport *p_viewport) {
 	std::shared_ptr<const RNSurfaceSnapshot> snapshot = mounting_manager->get_snapshot();
 	if (root_tag == 0 || !snapshot) {
 		return;
@@ -365,11 +451,14 @@ void ReactNativeRootView::_route_input(const Ref<InputEvent> &p_event) {
 	RNInputRouter::RouteResult result;
 	if (Ref<InputEventKey> key = p_event; key.is_valid()) {
 		Control *focus_owner = get_viewport() ? get_viewport()->gui_get_focus_owner() : nullptr;
-		result = input_router.route_key(key, focus_owner ? mounting_manager->get_registry().get_tag(focus_owner->get_instance_id()) : 0, runtime_generation);
+		if (!p_native_tag) {
+			p_native_tag = focus_owner ? mounting_manager->tag_for_input_control(focus_owner) : 0;
+		}
+		result = input_router.route_key(key, p_native_tag, runtime_generation);
 	} else {
 		Point2 screen_position;
 		if (Ref<InputEventMouse> mouse = p_event; mouse.is_valid()) {
-			screen_position = mouse->get_global_position();
+			screen_position = mouse->get_position();
 		} else if (Ref<InputEventScreenTouch> touch = p_event; touch.is_valid()) {
 			screen_position = touch->get_position();
 		} else if (Ref<InputEventScreenDrag> drag = p_event; drag.is_valid()) {
@@ -377,19 +466,39 @@ void ReactNativeRootView::_route_input(const Ref<InputEvent> &p_event) {
 		} else {
 			return;
 		}
-		const Point2 root_position = get_global_transform_with_canvas().affine_inverse().xform(screen_position);
-		result = input_router.route_pointer(p_event, *snapshot, root_tag, runtime_generation, root_position, screen_position);
+		screen_position = (p_viewport ? p_viewport : get_viewport())->get_screen_transform().xform(screen_position);
+		const Transform2D transform = get_screen_transform();
+		if (Math::is_zero_approx(transform.determinant())) {
+			return;
+		}
+		const Point2 root_position = transform.affine_inverse().xform(screen_position);
+		result = input_router.route_pointer(p_event, *snapshot, root_tag, runtime_generation, root_position, screen_position, p_native_tag);
+	}
+	if (mounting_manager->owns_native_activation(p_native_tag)) {
+		Vector<RNNativeEvent> observed;
+		for (const RNNativeEvent &event : result.events) {
+			if (!String(event.name).begins_with("topTouch") && event.name != "topClick") {
+				observed.push_back(event);
+			}
+		}
+		result.events = observed;
+		result.focus_tag = 0;
 	}
 	_enqueue_events(result.events);
 	if (result.focus_tag != 0) {
-		Control *control = Object::cast_to<Control>(mounting_manager->get_registry().get_node(result.focus_tag));
-		if (control && control->get_focus_mode() != Control::FOCUS_NONE) {
+		Control *control = mounting_manager->focus_control(result.focus_tag);
+		if (control && (control->get_focus_mode() == Control::FOCUS_CLICK || control->get_focus_mode() == Control::FOCUS_ALL)) {
 			control->grab_focus();
-		} else if (Control *focused = Object::cast_to<Control>(mounting_manager->get_registry().get_node(focused_tag))) {
+		} else if (Control *focused = mounting_manager->focus_control(focused_tag)) {
 			focused->release_focus();
 		}
 	}
-	if (result.accepted) {
-		accept_event();
+}
+
+void ReactNativeRootView::_cancel_host_input() {
+	const auto snapshot = mounting_manager->get_snapshot();
+	_enqueue_events(input_router.cancel_all(snapshot.get(), root_tag, runtime_generation));
+	if (auto *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+		_enqueue_events(coordinator->get_state()->pointer_capture.clear_surface(root_tag, surface_epoch, runtime_generation));
 	}
 }

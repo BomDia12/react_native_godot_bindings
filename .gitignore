@@ -3,6 +3,7 @@ __pycache__/
 /bin/
 /.scons-cache/
 /.ccache/
+/.phase6a/
 /artifacts/
 /modules/react_native_bindings/engines/build*/
 /samples/view-text/node_modules/
@@ -11,3 +12,8 @@ __pycache__/
 /samples/view-text/smoke/**/*.uid
 *.import
 *.log
+
+/samples/game-ui/node_modules/
+/samples/game-ui/dist/
+/samples/game-ui/.godot/
+/samples/game-ui/**/*.uid

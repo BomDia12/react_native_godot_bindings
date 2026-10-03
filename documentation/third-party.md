@@ -30,3 +30,21 @@
 Godot, React Native, React, Metro, Node.js, and the compiler toolchain are pinned build or
 runtime inputs rather than vendored module source. Their versions are recorded in
 `baseline.env` and `documentation/supported-versions.md`.
+
+## Godot native contracts and sample font
+
+Godot remains pinned to `ed1daf0bf001b61586d9930840f2f1394092c079`.
+`patches/godot/manifest.json` records the exact SHA-256 patch set. The patches extend
+native controls/text/editor checkpoints, add image bounds/probes and optional
+scoped allocator hooks to bundled libwebp. Default APIs retain native behavior.
+Godot's MIT license and the existing libwebp BSD license remain in the pinned
+checkout. The WebP allocation hook is enabled only for the bundled codec.
+
+`samples/game-ui/assets/OpenSans.woff2` copies the pinned Godot
+`thirdparty/fonts/OpenSans_SemiBold.woff2` unchanged. Its SIL Open Font License 1.1 is
+included as `assets/LICENSE.OpenSans.txt`. This is a deterministic sample font;
+applications inherit their Godot theme by default.
+
+React Native files are not vendored or modified in references. Narrow Metro source
+adaptations are guarded by SHA-256 of the installed 0.87.1 source bytes in
+`js/godot/source-adaptations.json`, under the upstream React Native MIT license.

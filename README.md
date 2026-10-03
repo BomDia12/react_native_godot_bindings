@@ -1,12 +1,15 @@
 # React Native bindings for Godot
 
-This repository builds the current React Native 0.87.1 `View`/`Text` baseline as an
+This repository builds the React Native 0.87.1 component layer as an
 external Godot module. Godot is cloned into the ignored `godot/` working directory; the
 tracked module remains under `modules/react_native_bindings/`.
 
 The tested Linux path includes the Godot Metro platform, explicit RGBA colors, staged
 local assets, C++ host descriptors and native modules, `Pressable` interaction,
-independent React surfaces, public host refs, and retained transactional mounting. See
+independent React surfaces, public host refs, retained transactional mounting, native
+images, scrolling, editing, Modal, Switch and GodotWindow presentation. The
+[component gallery](samples/game-ui/) exercises upstream FlatList and SectionList.
+Real network, scheduler, Keyboard, Alert and scene-binding integration awaits Phase 6B. See
 the [Godot platform](documentation/godot-platform.md),
 [extension](documentation/extensions.md), [interop](documentation/interop.md),
 [compatibility matrices](documentation/compatibility/), and
@@ -27,6 +30,7 @@ scripts/build_godot.sh
 npm --prefix samples/view-text ci
 npm --prefix samples/view-text run test:godot
 scripts/run_baseline.sh
+scripts/run_component_display.sh
 ```
 
 `bootstrap.sh` creates or verifies the pinned `godot/` checkout. `build_hermes.sh` builds

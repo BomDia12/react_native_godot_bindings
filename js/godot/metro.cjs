@@ -19,6 +19,7 @@ function createGodotMetroConfig(projectRoot) {
     projectRoot: resolvedProjectRoot,
     watchFolders: [resolvedProjectRoot, godotRoot],
     resolver: {
+      assetExts: Array.from(new Set([...(defaults.resolver.assetExts ?? []), 'woff', 'woff2'])),
       platforms: Array.from(
         new Set(['godot', ...(defaults.resolver.platforms ?? [])]),
       ),
@@ -37,6 +38,7 @@ function createGodotMetroConfig(projectRoot) {
     },
     transformer: {
       assetPlugins: [path.join(godotRoot, 'assets.cjs')],
+      babelTransformerPath: path.join(godotRoot, 'transformer.cjs'),
     },
   });
 }

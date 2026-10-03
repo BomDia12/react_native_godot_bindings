@@ -1,0 +1,9 @@
+{
+  "base_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
+  "patches": [
+    {
+      "file": "0001-native-control-contracts.patch",
+      "sha256": "72620ae72d31bb8f9c2786fb092bf7326b4a3cc8a7699eb6cf67aa98d346c3cd"
+    }
+  ]
+}

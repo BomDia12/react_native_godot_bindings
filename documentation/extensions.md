@@ -1,6 +1,6 @@
 # C++ extension contracts
 
-Phase 5 extensions are registered in C++ before the first bundle starts. Definitions
+Extensions are registered in C++ before the first bundle starts. Definitions
 contain no JSI values and are frozen at scene initialization. Implementations belong in
 `components/`, `native_modules/`, or `examples/`; each source directory must appear in
 `module_source_dirs` in `modules/react_native_bindings/SCsub`.
@@ -134,3 +134,32 @@ project descriptors, freezes that registry, registers built-in and project modul
 freezes module definitions, and then exposes scene classes. Registration rejects empty,
 duplicate, invalid, or reserved names before a bundle evaluates. Core initialization
 creates the runtime/coordinator only and performs no scene-dependent registration.
+
+## Stateful host publication
+
+Resource resolution runs on the main thread before Yoga and produces immutable
+component data and a dependency revision. Measured leaves and independent scroll
+or presentation child layouts use descriptor policies. Internal controls are owned
+by the descriptor's child container; renderer ordering touches only React children.
+The external-layout native opt-in lets Yoga constrain controls without changing
+ordinary Godot minimum-size behavior.
+
+Capture native state before mutation. Editor checkpoints include native undo/redo,
+preedit and pending notification state; string setters are not a rollback mechanism.
+`after_publish` runs parent first only after publication and owns asynchronous work,
+subscriptions and presentation activation. The copied event sink checks generation,
+surface epoch, tag, native object identity and revision. Completion code must also
+check `is_current` before applying native state. Visual snapshots use actual native
+transforms, viewport clips, scroll positions and TextServer span bounds.
+
+`RNImageTransport` is the 6B handoff. Start/completion/cancel run on the main thread.
+Transport must enforce the encoded ceiling before growing response buffers, honor
+headers and include/omit credentials, and mark no-store/no-cache responses
+uncacheable. `cancel` returns true only when transport allocations are released;
+otherwise completion must still occur so the held reservation can be released.
+Credentialed requests, including explicit Authorization/Cookie, bypass shared cache
+and deduplication. Only explicitly credential-free requests share results. Image
+limits under `react_native/images/` are snapshotted per runtime generation; cache
+zero disables cache ownership, while other ceilings must be positive. Mounted
+textures retain their budget reservation after cache eviction. Static PNG/JPEG/WebP
+codecs and imported native textures are bounded before decoding or allocation.

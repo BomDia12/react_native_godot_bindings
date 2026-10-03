@@ -204,6 +204,13 @@ ReactNativeRuntimeCoordinator::ReactNativeRuntimeCoordinator() {
 	}
 }
 
+void ReactNativeRuntimeCoordinator::shutdown_scene() {
+	state->shutting_down = true;
+	disconnect_frame_signal();
+	native_module_registry->begin_generation(0);
+	clear_generation_state();
+}
+
 ReactNativeRuntimeCoordinator::~ReactNativeRuntimeCoordinator() {
 	state->shutting_down = true;
 	disconnect_frame_signal();

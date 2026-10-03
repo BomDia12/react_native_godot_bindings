@@ -1,0 +1,31 @@
+{
+  "id": "game-component-contracts",
+  "project_dir": "samples/game-ui",
+  "scene": "res://smoke/tests/component_contracts/SmokeMain.tscn",
+  "timeout_seconds": 90,
+  "allowlist": "documentation/expected-warnings.txt",
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/game-ui",
+    "script": "build:godot",
+    "output": "samples/game-ui/dist/godot.bundle.js"
+  },
+  "inputs": [
+    "documentation/expected-warnings.txt",
+    "samples/game-ui/Main.tscn",
+    "samples/game-ui/assets/LICENSE.OpenSans.txt",
+    "samples/game-ui/assets/OpenSans.woff2",
+    "samples/game-ui/assets/item.png",
+    "samples/game-ui/assets/item@2x.png",
+    "samples/game-ui/assets/item@3x.png",
+    "samples/game-ui/babel.config.js",
+    "samples/game-ui/gallery.gd",
+    "samples/game-ui/godot.entry.js",
+    "samples/game-ui/metro.config.godot.js",
+    "samples/game-ui/package-lock.json",
+    "samples/game-ui/package.json",
+    "samples/game-ui/project.godot",
+    "samples/game-ui/smoke/tests/component_contracts/SmokeMain.tscn",
+    "samples/game-ui/smoke/tests/component_contracts/component_contracts.gd"
+  ]
+}

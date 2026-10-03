@@ -354,9 +354,13 @@ facebook::jsi::Value NativeDOM::get(facebook::jsi::Runtime &rt, const facebook::
 		});
 	}
 	if (name == "getScrollPosition" || name == "getScrollSize") {
-		return host_fn(1, [name](facebook::jsi::Runtime &inner, const facebook::jsi::Value *, size_t) {
-			WARN_PRINT_ONCE(String("NativeDOM.") + from_utf8(name) + "() is unsupported until ScrollView state is implemented.");
-			return number_array(inner, { 0, 0 });
+		return host_fn(1, [this, name](facebook::jsi::Runtime &inner, const facebook::jsi::Value *args, size_t argc) {
+			ResolvedNode node = argc ? resolve(state.lock(), inner, args[0]) : ResolvedNode();
+			Point2 value;
+			if (node.node) {
+				value = name == "getScrollPosition" ? node.node->scroll_offset : node.node->content_size;
+			}
+			return number_array(inner, { value.x, value.y });
 		});
 	}
 	return facebook::jsi::Value::undefined();

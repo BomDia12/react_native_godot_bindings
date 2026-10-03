@@ -60,8 +60,9 @@ paths or timestamps. At runtime the resolver chooses the smallest scale at least
 large as `assetScale`, or the largest available, and returns React Native's local asset
 shape.
 
-Explicit `res://` and `user://` objects are supported for local operations. Remote/data
-Image loading, prefetch, and image sizing remain pending. Paths must use the exact
+Explicit `res://` and `user://` objects are supported for local operations. PNG/JPEG/static WebP and base64 images use the bounded native image service;
+getSize, prefetch and queryCache share its source and credential policy. HTTP images
+require an installed RNImageTransport; the real Phase 6B transport is deferred. Paths must use the exact
 scheme, forward slashes, a nonempty relative path, and no `..` segment or embedded NUL.
 Percent characters remain literal. Missing staged files should be fixed by rebuilding
 the bundle.
@@ -69,7 +70,51 @@ the bundle.
 ## Pending APIs
 
 Imports of pending adapters are safe, but attempted operations report `E_UNSUPPORTED`.
-Image rendering, network requests, alerts, BackHandler listeners, legacy accessibility
+Network requests, alerts, BackHandler listeners, legacy accessibility
 dispatch, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid are not claimed as
 supported services or components. Bootstrap shims exist only for React Native startup
 dependencies and are not compatibility claims.
+
+## Native components and upstream source adaptations
+
+`source-adaptations.cjs` changes only exact installed RN 0.87.1 paths and rejects a
+source digest mismatch. It preserves upstream TextInput state synchronization and
+ref methods, selects the unified Godot host for both editor modes, retains Modal
+until its native dismiss event, and feeds sticky-header Animated values from native
+scroll events. The Animated props hook skips the unavailable native queue on Godot.
+Button opacity feedback explicitly uses the upstream JS animation driver on Godot.
+General NativeAnimated support is absent. Lists currently use the existing bootstrap
+queue; real scheduler integration is deferred.
+
+Text inherits the root's Godot RichTextLabel theme font, size and color. Register
+Font resources or res:// font paths under `react_native/text/font_aliases`; an alias
+record may contain `font`, `weight` and `style`. Metro fonts use
+`fontFamily(require('./font.woff2'))` from `react-native-godot/fonts`. TTF, OTF,
+WOFF and WOFF2 are staged and imported by Godot. FontVariation instances isolate
+per-run weight, style and spacing. Native font sizes and spacing round to integers.
+
+Use controlled TextInput `value` with `onChangeText`; updates require the current
+native event count. Use `defaultValue` for uncontrolled editor state. Native
+LineEdit/TextEdit own Unicode input, selection, undo, clipboard and IME; controlled
+replacement waits while composing. Switching multiline retains the wrapper and
+value/selection while starting a new native editor history. OS candidate-window
+behavior is not covered by the automated replay test. Keyboard service integration
+is deferred. Unsupported secure multiline input fails validation.
+
+ScrollView owns a native ScrollContainer and a separate React content host. The
+scroll axis measures independently, indicator reservations use native theme metrics,
+and offsets are integral and clamp when content shrinks. Native drag/deceleration
+supplies phase events; native Tweens implement animated commands and selected
+snap/paging behavior. A new user gesture cancels the programmatic Tween. Visible
+content anchoring uses retained row identities; a changed contentOffset wins.
+
+Modal uses an overlay in its nearest presentation window. Publication pushes a
+hidden-to-visible modal onto its root/window stack; rerenders retain stack order.
+Escape requests closure through onRequestClose. GodotWindow is imported from
+`react-native-godot/GodotWindow`, accepts width/height/title/visible and
+onShow/onDismiss/onRequestClose/onResize, and owns an actual native Window.
+Window sizes are native integer pixels. User resizing survives unrelated renders.
+
+ActivityIndicator maps to Godot's indeterminate ProgressBar; it is a linear native
+indicator. Switch maps to CheckButton with controlled native state; platform track
+appearance is not reproduced. Full compatibility classifications remain partial.
