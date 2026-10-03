@@ -33,6 +33,9 @@ export async function runHTTPChecks(base, https) {
   check(await fetchText('/cookies', {credentials: 'omit'}) === '', 'credential omission');
   const redirected = await fetch(base + '/redirect', {credentials: 'include'});
   check(redirected.url === base + '/cookies' && (await redirected.text()).includes('redirect=seen'), 'redirect final URL and cookie hop');
+  const queryRedirect = await fetch(base + '/nested/query-redirect?old=1');
+  check(queryRedirect.url === base + '/nested/query-redirect?page=2' && await queryRedirect.text() === 'query redirect passed', 'query-only redirect preserves current path');
+  check(await fetchText('/relative-redirect') === 'A\0B\ufffd', 'root relative redirect has one leading slash');
   await new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const states = [];

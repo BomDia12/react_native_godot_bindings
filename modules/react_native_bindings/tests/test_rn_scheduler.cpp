@@ -113,6 +113,20 @@ TEST_CASE("[ReactNativeBindings][Scheduler] native callbacks timers and idle sha
 	f.runtime->dispatch_scheduler(f.scheduler, true, false);
 	CHECK(f.events() == "[\"timer\",\"idle\"]");
 }
+TEST_CASE("[ReactNativeBindings][Scheduler] recurring callbacks rotate behind waiting timers and frames") {
+	Fixture f;
+	f.scheduler->configure(2, 2);
+	f.runtime->evaluate("s.setInterval(()=>events.push('first'),1);s.setInterval(()=>events.push('second'),1);s.setTimeout(()=>events.push('timeout'),0);s.requestAnimationFrame(()=>events.push('frame'));undefined;");
+	f.clock += 10;
+	f.frame();
+	CHECK(f.events() == "[\"first\",\"second\"]");
+	f.clock += 10;
+	f.frame();
+	CHECK(f.events() == "[\"first\",\"second\",\"timeout\",\"frame\"]");
+	f.clock += 10;
+	f.frame();
+	CHECK(f.events() == "[\"first\",\"second\",\"timeout\",\"frame\",\"first\",\"second\"]");
+}
 } //namespace TestRNScheduler
 
 void rn_force_link_scheduler_tests() {}

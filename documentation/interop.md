@@ -133,7 +133,8 @@ the coordinator defers runtime lifecycle work until the current Hermes call retu
 Timers use a generation-owned monotonic clock. Due callback IDs are snapshotted;
 nested registration waits for the next turn, cancellation applies immediately, missed
 intervals skip catch-up bursts, thrown callbacks do not stop later work, and Hermes owns
-microtasks. rAF runs only with a visible eligible root. Timer/native delivery drains are
+microtasks. Recurring timers rotate behind waiting due callbacks to prevent starvation.
+rAF runs only with a visible eligible root. Timer/native delivery drains are
 bounded; idle deadlines cap configured work by remaining frame time (configured frame
 rate, or a 60 Hz budget when uncapped). Game physics pause does not stop service time.
 Root-origin scopes are retained for timers and listener registrations; microtasks begin
@@ -154,18 +155,21 @@ old native completion/deferred drain barrier. Queue timeout includes waiting tim
 zero means no caller deadline. Image cancellation reports immediate release only for
 queued work; active cancellation still completes its reservation. Credentials isolate
 image cache/deduplication; no-store/no-cache stays uncacheable. Redirect hops apply cookies
-and final URLs; cross-origin sensitive headers are removed. Cookies are bounded and
+and final URLs; query-only/fragment/relative references retain the current URL context
+and normalize literal dot segments. Cross-origin sensitive headers are removed. Cookies are bounded and
 in-memory, without a complete browser persistence/public-suffix policy.
 
 WebSocketPeer owns protocol framing/TLS. Polling continues through CLOSING, with limits
 on peers, messages, queues, retained bytes and packets delivered per frame. A message can
 overshoot the per-frame byte target once so a legal packet cannot starve. Normal close,
 failure, cancellation and generation reset release native peers once.
+Open notifications retry when the native event queue is full, before messages are delivered.
 
 ## Editor service limits
 
 Limits below live under `react_native/`, expose editor ranges and are immutable per
-generation. Invalid types/ranges or HTTP idle > active fail startup. A zero HTTP wait
+generation. Invalid types/ranges, HTTP idle > active, or HTTP body > aggregate buffer
+limits fail startup. A zero HTTP wait
 queue permits immediate leases only; zero idle retires every completed node. Zero cookie
 limits disable storage and zero scheduler idle budget runs only expired idle timeouts.
 

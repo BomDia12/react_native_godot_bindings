@@ -326,14 +326,9 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 		} else {
 			RNParsedURL old_url;
 			RNParsedURL::parse(request.spec.url, old_url);
-			String next = location;
-			if (location.begins_with("//")) {
-				next = old_url.scheme + ":" + location;
-			} else if (!location.contains("://")) {
-				next = old_url.origin() + (location.begins_with("/") ? location : old_url.path.get_slice("?", 0).get_base_dir() + "/" + location);
-			}
+			String next;
 			RNParsedURL new_url;
-			if (!RNParsedURL::parse(next, new_url) || (new_url.scheme != "http" && new_url.scheme != "https")) {
+			if (!RNParsedURL::resolve(request.spec.url, location, next) || !RNParsedURL::parse(next, new_url) || (new_url.scheme != "http" && new_url.scheme != "https")) {
 				response.error = http_error("Invalid redirect URL");
 			} else {
 				PackedStringArray headers;

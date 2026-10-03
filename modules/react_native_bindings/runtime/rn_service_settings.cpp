@@ -72,6 +72,10 @@ bool RNServiceSettings::snapshot(RNServiceSettings &r_settings, RNError &r_error
 		r_error = RNError::make(RNErrorCode::VALIDATION, "HTTP idle limit exceeds active limit", "settings.snapshot");
 		return false;
 	}
+	if (snapshot.limit("network/http/max_body_bytes") > snapshot.limit("network/http/max_buffered_bytes")) {
+		r_error = RNError::make(RNErrorCode::VALIDATION, "HTTP body limit exceeds aggregate buffer limit", "settings.snapshot", "react_native/network/http/max_body_bytes");
+		return false;
+	}
 	r_settings = snapshot;
 	return true;
 }

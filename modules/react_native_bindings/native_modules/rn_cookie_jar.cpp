@@ -6,8 +6,16 @@
 #include <sstream>
 
 bool RNParsedURL::parse(const String &p_url, RNParsedURL &r_url) {
+	String source = p_url;
+	const int authority_start = source.find("://") + 3;
+	const int query = source.find("?", authority_start);
+	const int slash = source.find("/", authority_start);
+	const int hash = source.find("#", authority_start);
+	if (query >= 0 && (slash < 0 || query < slash) && (hash < 0 || query < hash)) {
+		source = source.insert(query, "/");
+	}
 	String fragment;
-	if (p_url.parse_url(r_url.scheme, r_url.host, r_url.port, r_url.path, fragment) != OK) {
+	if (source.parse_url(r_url.scheme, r_url.host, r_url.port, r_url.path, fragment) != OK) {
 		return false;
 	}
 	r_url.scheme = r_url.scheme.trim_suffix("://").to_lower();
@@ -21,7 +29,67 @@ bool RNParsedURL::parse(const String &p_url, RNParsedURL &r_url) {
 	return !r_url.host.is_empty() && !r_url.host.contains("@");
 }
 String RNParsedURL::origin() const {
-	return scheme + "://" + host + ":" + itos(port);
+	return scheme + "://" + (host.contains(":") ? "[" + host + "]" : host) + ":" + itos(port);
+}
+bool RNParsedURL::resolve(const String &p_base, const String &p_reference, String &r_url) {
+	RNParsedURL base;
+	if (!parse(p_base, base)) {
+		return false;
+	}
+	String reference = p_reference;
+	String fragment;
+	const int hash = reference.find("#");
+	if (hash >= 0) {
+		fragment = reference.substr(hash);
+		reference = reference.substr(0, hash);
+	}
+	const int colon = reference.find(":");
+	const int slash = reference.find("/");
+	const int question = reference.find("?");
+	String path;
+	String authority = base.origin();
+	if (reference.begins_with("//") || (colon >= 0 && (slash < 0 || colon < slash) && (question < 0 || colon < question))) {
+		RNParsedURL absolute;
+		if (!parse(reference.begins_with("//") ? base.scheme + ":" + reference : reference, absolute) || (absolute.scheme != "http" && absolute.scheme != "https")) {
+			return false;
+		}
+		authority = absolute.origin();
+		path = absolute.path;
+	} else if (reference.is_empty()) {
+		path = base.path;
+	} else if (reference.begins_with("?")) {
+		path = base.path.get_slice("?", 0) + reference;
+	} else if (reference.begins_with("/")) {
+		path = reference;
+	} else {
+		const String base_path = base.path.get_slice("?", 0);
+		path = base_path.substr(0, base_path.rfind("/") + 1) + reference;
+	}
+	String query;
+	const int query_start = path.find("?");
+	if (query_start >= 0) {
+		query = path.substr(query_start);
+		path = path.substr(0, query_start);
+	}
+	String output;
+	while (!path.is_empty()) {
+		if (path.begins_with("../") || path.begins_with("./")) {
+			path = path.substr(path.begins_with("../") ? 3 : 2);
+		} else if (path.begins_with("/./") || path == "/.") {
+			path = path == "/." ? String("/") : "/" + path.substr(3);
+		} else if (path.begins_with("/../") || path == "/..") {
+			path = path == "/.." ? String("/") : "/" + path.substr(4);
+			output = output.substr(0, std::max(0, output.rfind("/")));
+		} else if (path == "." || path == "..") {
+			path = "";
+		} else {
+			const int end = path.find("/", path.begins_with("/") ? 1 : 0);
+			output += end < 0 ? path : path.substr(0, end);
+			path = end < 0 ? String() : path.substr(end);
+		}
+	}
+	r_url = authority + (output.is_empty() ? String("/") : output) + query + fragment;
+	return true;
 }
 uint64_t RNCookieJar::bytes() const {
 	uint64_t total = 0;

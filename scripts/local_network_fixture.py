@@ -84,6 +84,15 @@ async def run(config, repo_root, records):
             elif parsed.path == "/redirect":
                 status = 302
                 headers.extend([("Location", "/cookies"), ("Set-Cookie", "redirect=seen; Path=/; HttpOnly")])
+            elif parsed.path == "/nested/query-redirect":
+                if parsed.query == "page=2":
+                    content = b"query redirect passed"
+                else:
+                    status = 302
+                    headers.append(("Location", "?page=2"))
+            elif parsed.path == "/relative-redirect":
+                status = 302
+                headers.append(("Location", "binary"))
             elif parsed.path == "/set-cookies":
                 headers.extend([("Set-Cookie", "a=one; Path=/"), ("Set-Cookie", "b=two; Path=/; Max-Age=60")])
             elif parsed.path == "/cookies":

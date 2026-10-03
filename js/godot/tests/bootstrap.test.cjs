@@ -27,3 +27,38 @@ test('bootstrap requires native scheduling and installs native timer functions',
   assert.equal(context.nativePerformanceNow, scheduler.now);
   assert.equal(context.__turboModuleProxy('NativeIdleCallbacksCxx'), scheduler);
 });
+
+test('Keyboard-only consumers instantiate native services before subscribing', () => {
+  const {createRequire} = require('node:module');
+  const projectRequire = createRequire(path.resolve(__dirname, '../../../samples/view-text/package.json'));
+  const filename = path.resolve(__dirname, '../native-facades.js');
+  const transformed = projectRequire('@babel/core').transformSync(fs.readFileSync(filename, 'utf8'), {
+    filename,
+    presets: [[projectRequire.resolve('@react-native/babel-preset'), {enableBabelRuntime: false}]],
+    babelrc: false, configFile: false,
+  }).code;
+  let initialized = false;
+  let subscription;
+  const events = [];
+  const services = {
+    getState() {initialized = true; return {};},
+    onEvent(callback) {assert.equal(initialized, true); subscription = callback; return {remove() {}};},
+  };
+  const context = {module: {exports: {}}, exports: {},
+    __godotNativeModules: {get(name) {assert.equal(name, 'GodotServices'); return services;}},
+    __godotScheduler: {withoutOrigin(callback) {return callback();}},
+    require(name) {
+      if (name === './websocket-facade' || name === './binary') {return {};}
+      if (name === 'react-native/Libraries/EventEmitter/RCTDeviceEventEmitter') {
+        return {default: {emit(name, payload) {events.push([name, payload]);}}};
+      }
+      return projectRequire(name);
+    },
+  };
+  context.exports = context.module.exports; context.global = context;
+  vm.runInNewContext(transformed, context);
+  const observer = context.module.exports.nativeFacade('KeyboardObserver');
+  assert.equal(typeof observer.addListener, 'function');
+  subscription({name: 'keyboardDidShow', payload: {height: 100}});
+  assert.deepEqual(events, [['keyboardDidShow', {height: 100}]]);
+});

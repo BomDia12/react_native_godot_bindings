@@ -5,6 +5,7 @@
 #include "../interop/rn_scene_binding.h"
 #include "../native_modules/rn_blob_service.h"
 #include "../native_modules/rn_cookie_jar.h"
+#include "../native_modules/rn_websocket_module.h"
 #include "../runtime/rn_service_settings.h"
 #include "../singletons/hermes_runtime_singleton.h"
 
@@ -12,7 +13,57 @@
 #include "scene/2d/node_2d.h"
 #include "tests/test_macros.h"
 
+#include "modules/websocket/websocket_peer.h"
+
 namespace TestRNServices {
+class SocketFixturePeer : public WebSocketPeer {
+	State state = STATE_CONNECTING;
+	bool packet_available = true;
+
+public:
+	using Factory = WebSocketPeer *(*)(bool);
+	static Factory exchange_factory(Factory p_factory) {
+		const Factory previous = _create;
+		_create = p_factory;
+		return previous;
+	}
+	static WebSocketPeer *create_fixture(bool p_notify) {
+		return static_cast<WebSocketPeer *>(ClassDB::creator<SocketFixturePeer>(p_notify));
+	}
+	Error connect_to_url(const String &, const Ref<TLSOptions> &) override { return OK; }
+	Error accept_stream(const Ref<StreamPeer> &) override { return ERR_UNAVAILABLE; }
+	Error send(const uint8_t *, int, WriteMode) override { return OK; }
+	void close(int = 1000, const String & = "") override { state = STATE_CLOSED; }
+	IPAddress get_connected_host() const override { return IPAddress(); }
+	uint16_t get_connected_port() const override { return 0; }
+	bool was_string_packet() const override { return true; }
+	void set_no_delay(bool) override {}
+	int get_current_outbound_buffered_amount() const override { return 0; }
+	String get_selected_protocol() const override { return "fixture"; }
+	String get_requested_url() const override { return "ws://localhost/test"; }
+	void poll() override {
+		if (state == STATE_CONNECTING) {
+			state = STATE_OPEN;
+		}
+	}
+	State get_ready_state() const override { return state; }
+	int get_close_code() const override { return 1000; }
+	String get_close_reason() const override { return String(); }
+	Error get_packet(const uint8_t **r_buffer, int &r_size) override {
+		static const uint8_t packet[] = { 'h', 'i' };
+		*r_buffer = packet;
+		r_size = 2;
+		packet_available = false;
+		return OK;
+	}
+	Error put_packet(const uint8_t *, int) override { return OK; }
+	int get_available_packet_count() const override { return packet_available ? 1 : 0; }
+	int get_max_packet_size() const override { return 2; }
+};
+struct SocketFactoryGuard {
+	SocketFixturePeer::Factory previous = SocketFixturePeer::exchange_factory(SocketFixturePeer::create_fixture);
+	~SocketFactoryGuard() { SocketFixturePeer::exchange_factory(previous); }
+};
 Dictionary schema(const String &p_name) {
 	Dictionary result;
 	result["type"] = p_name;
@@ -233,6 +284,84 @@ TEST_CASE("[ReactNativeBindings][FontScale][SceneTree] inherited capped disabled
 	CHECK(native->get_content_height() == measured.y);
 	CHECK(native->get_line_height(0) == 36);
 	memdelete(native);
+}
+TEST_CASE("[ReactNativeBindings][HTTP] redirects resolve query fragment relative paths and dot segments") {
+	const String base = "https://example.test/foo/bar?old=1";
+	const std::pair<const char *, const char *> cases[] = {
+		{ "?page=2", "/foo/bar?page=2" },
+		{ "#section", "/foo/bar?old=1#section" },
+		{ "", "/foo/bar?old=1" },
+		{ "next", "/foo/next" },
+		{ "../next", "/next" },
+		{ "./next?query=/../value", "/foo/next?query=/../value" },
+		{ "/a/../b//c", "/b//c" },
+		{ "/.", "/" },
+		{ "/..", "/" },
+		{ "%2e%2e/next", "/foo/%2e%2e/next" },
+	};
+	String resolved;
+	for (const auto &entry : cases) {
+		REQUIRE(RNParsedURL::resolve(base, entry.first, resolved));
+		CHECK(resolved == "https://example.test:443" + String(entry.second));
+	}
+	REQUIRE(RNParsedURL::resolve("https://example.test/", "next", resolved));
+	CHECK(resolved == "https://example.test:443/next");
+	REQUIRE(RNParsedURL::resolve(base, "//other.test/a", resolved));
+	CHECK(resolved == "https://other.test:443/a");
+	REQUIRE(RNParsedURL::resolve(base, "http://other.test?x=1", resolved));
+	CHECK(resolved == "http://other.test:80/?x=1");
+	REQUIRE(RNParsedURL::resolve("http://[::1]/a", "b", resolved));
+	CHECK(resolved == "http://[::1]:80/b");
+	CHECK_FALSE(RNParsedURL::resolve(base, "mailto:other.test", resolved));
+}
+TEST_CASE("[ReactNativeBindings][Settings] HTTP response reservations fit the aggregate buffer ceiling") {
+	auto project = ProjectSettings::get_singleton();
+	const String key = "react_native/network/http/max_buffered_bytes";
+	const Variant previous = project->get_setting(key, 32 * 1024 * 1024);
+	const int64_t body_limit = project->get_setting("react_native/network/http/max_body_bytes", 8 * 1024 * 1024);
+	RNServiceSettings settings;
+	RNError error;
+	project->set_setting(key, body_limit - 1);
+	CHECK_FALSE(RNServiceSettings::snapshot(settings, error));
+	CHECK(error.code == RNErrorCode::VALIDATION);
+	CHECK(error.path == "react_native/network/http/max_body_bytes");
+	project->set_setting(key, body_limit);
+	CHECK(RNServiceSettings::snapshot(settings, error));
+	project->set_setting(key, previous);
+}
+TEST_CASE("[ReactNativeBindings][WebSocket] a full native queue retries open before delivering messages") {
+	SocketFactoryGuard guard;
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	runtime->reset();
+	const uint64_t generation = runtime->get_runtime_generation();
+	auto registry = std::make_shared<RNNativeModuleRegistry>(std::shared_ptr<RNRuntimeCoordinatorState>());
+	registry->begin_generation(generation);
+	RNServiceSettings settings;
+	RNError error;
+	REQUIRE(RNServiceSettings::snapshot(settings, error));
+	REQUIRE(rn_register_websocket_module(*registry, [settings] { return settings; }, [] { return std::shared_ptr<RNBlobService>(); }, error));
+	runtime->install_host_object("__testSockets", registry);
+	runtime->evaluate("globalThis.socketEvents=[];const ws=__testSockets.get('GodotWebSocket');ws.onEvent(event=>{if(event.name!=='blocked')socketEvents.push(event.name);});ws.connect('ws://localhost/test',[],{},123);undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	Dictionary payload;
+	payload["name"] = "blocked";
+	payload["payload"] = Dictionary();
+	for (int i = 0; i < 1024; ++i) {
+		REQUIRE(registry->queue_event("GodotWebSocket", "event", "", generation, payload));
+	}
+	registry->process_frame(0);
+	CHECK(runtime->evaluate("JSON.stringify(socketEvents)") == Variant("[]"));
+	for (int i = 0; i < 4; ++i) {
+		runtime->dispatch_native_module_deliveries(registry);
+	}
+	registry->process_frame(1);
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(runtime->evaluate("JSON.stringify(socketEvents)") == Variant("[\"websocketOpen\",\"websocketMessage\"]"));
+	registry->process_frame(2);
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(runtime->evaluate("socketEvents.length") == Variant(2));
+	runtime->reset();
+	runtime->uninstall_host_object("__testSockets");
 }
 } //namespace TestRNServices
 void rn_force_link_service_tests() {}

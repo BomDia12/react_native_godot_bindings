@@ -9,6 +9,7 @@ const facades = new Map();
 function applicationServices() {
   services ??= global.__godotNativeModules.get('GodotServices');
   if (emitterSubscription == null) {
+    services.getState();
     emitterSubscription = global.__godotScheduler.withoutOrigin(() => services.onEvent(({name, payload}) => {
       require('react-native/Libraries/EventEmitter/RCTDeviceEventEmitter').default.emit(name, payload);
     }));

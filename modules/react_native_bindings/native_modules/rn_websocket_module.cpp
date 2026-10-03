@@ -175,10 +175,12 @@ public:
 			socket.peer->poll();
 			auto state = socket.peer->get_ready_state();
 			if (state == WebSocketPeer::STATE_OPEN && !socket.opened && !socket.closing) {
-				socket.opened = true;
 				Dictionary payload;
 				payload["protocol"] = socket.peer->get_selected_protocol();
-				emit(socket, "websocketOpen", entry.first, payload);
+				if (!emit(socket, "websocketOpen", entry.first, payload)) {
+					continue;
+				}
+				socket.opened = true;
 			}
 			int packets = 0;
 			uint64_t bytes = 0;

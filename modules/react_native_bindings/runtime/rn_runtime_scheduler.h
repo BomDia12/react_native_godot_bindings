@@ -20,6 +20,7 @@ public:
 
 private:
 	struct Task {
+		uint64_t order = 0;
 		RNExecutionOrigin origin;
 		Kind kind = Kind::TIMEOUT;
 		double due = 0;
@@ -30,6 +31,7 @@ private:
 	Clock clock;
 	double time_origin = 0;
 	uint64_t next_id = 1;
+	uint64_t next_order = 1;
 	std::map<uint64_t, Task> tasks;
 	size_t max_tasks = 256;
 	size_t frame_remaining = 256;

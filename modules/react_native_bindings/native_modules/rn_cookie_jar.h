@@ -12,6 +12,7 @@ struct RNParsedURL {
 	int port = 0;
 	String path;
 	static bool parse(const String &p_url, RNParsedURL &r_url);
+	static bool resolve(const String &p_base, const String &p_reference, String &r_url);
 	String origin() const;
 };
 class RNCookieJar {

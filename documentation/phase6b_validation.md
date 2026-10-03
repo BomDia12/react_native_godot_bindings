@@ -27,10 +27,10 @@ production HTTP and sockets use Godot's native transports.
 | Gate | Result |
 |---|---|
 | Pinned dev editor/module build, tests and warnings as errors | Passed |
-| Module contracts | 96 cases, 5,091 assertions passed |
+| Module contracts | 100 cases, 6,157 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
-| JavaScript contracts, after `npm ci` in both packages | 18 tests passed per package |
+| JavaScript contracts, after `npm ci` in both packages | 19 tests passed per package |
 | Complete headless suite | All 19 discovered manifests passed |
 | Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
 | Formatting, tracked smoke inputs and engine provenance | Passed |
@@ -49,6 +49,13 @@ typed Dictionary schemas/defaults and unrelated script capabilities; session and
 surface isolation; native inherited/capped/disabled font scaling; settings bounds;
 Blob chunks exceeding the codec ceiling, collector reclamation and URL/native
 pins; and cookie scope/expiry/bounds.
+
+Review regressions additionally verify that continuously due intervals rotate
+behind waiting timers/rAF, relative redirects preserve paths/queries/fragments,
+HTTP body limits fit the aggregate buffer budget, full event queues retry socket
+open before messages, and Keyboard-only consumers instantiate the native service.
+The HTTP fixture also exercises query-only and root-relative redirects through
+the actual HTTPRequest/fetch path.
 
 The application suite checks root removal/re-entry/reload and generation cleanup,
 direct inventory commands, lists/editors/assets, application metrics and locale

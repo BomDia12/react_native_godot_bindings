@@ -54,6 +54,7 @@ jsi::Value RNRuntimeScheduler::schedule(jsi::Runtime &p_runtime, Kind p_kind, co
 		}
 	}
 	Task task;
+	task.order = next_order++;
 	task.origin = RNExecutionScope::current();
 	task.kind = p_kind;
 	task.due = p_kind == Kind::IDLE && delay <= 0 ? std::numeric_limits<double>::infinity() : now() + delay;
@@ -96,6 +97,7 @@ void RNRuntimeScheduler::drain(jsi::Runtime &p_runtime, bool p_idle, bool p_visu
 			due.push_back(entry.first);
 		}
 	}
+	std::sort(due.begin(), due.end(), [&](uint64_t left, uint64_t right) { return tasks.at(left).order < tasks.at(right).order; });
 	for (uint64_t id : due) {
 		auto found = tasks.find(id);
 		if (found == tasks.end() || frame_remaining == 0) {
@@ -127,6 +129,7 @@ void RNRuntimeScheduler::drain(jsi::Runtime &p_runtime, bool p_idle, bool p_visu
 			arguments.emplace_back(std::move(value));
 		}
 		if (task.kind == Kind::INTERVAL) {
+			task.order = next_order++;
 			tasks.emplace(id, std::move(task));
 		}
 		--frame_remaining;
@@ -216,5 +219,6 @@ jsi::Value RNRuntimeScheduler::get(jsi::Runtime &p_runtime, const jsi::PropNameI
 void RNRuntimeScheduler::before_runtime_reset_locked(jsi::Runtime &, uint64_t) {
 	tasks.clear();
 	next_id = 1;
+	next_order = 1;
 	time_origin = clock();
 }
