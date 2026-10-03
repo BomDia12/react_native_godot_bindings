@@ -60,7 +60,8 @@ Dictionary input_config() {
 }
 class RNTextInputDescriptor : public RNHostDescriptor {
 public:
-	RNTextInputDescriptor() : RNHostDescriptor("GodotTextInput", RNHostTraits{ true, true, false, true, false, false, true, true, false, true, true }, input_config()) {}
+	RNTextInputDescriptor() :
+			RNHostDescriptor("GodotTextInput", RNHostTraits{ true, true, false, true, false, false, true, true, false, true, true }, input_config()) {}
 	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
 		if (!RNHostDescriptor::prepare(p_node, r_state, r_error)) {
 			return false;

@@ -64,6 +64,18 @@ func pointer(position: Vector2, button: MouseButton, pressed: bool) -> void:
 	event.pressed = pressed
 	get_viewport().push_input(event)
 
+func tap(position: Vector2) -> void:
+	var press := InputEventScreenTouch.new()
+	press.index = 0
+	press.position = position
+	press.pressed = true
+	get_viewport().push_input(press)
+	var release := InputEventScreenTouch.new()
+	release.index = 0
+	release.position = position
+	release.pressed = false
+	get_viewport().push_input(release)
+
 func next_stage() -> void:
 	stage += 1
 	stage_frame = frames
@@ -105,6 +117,7 @@ func _process(_delta: float) -> void:
 			require_condition(list != null, "FlatList ScrollView host is missing")
 			list.scroll_vertical = 100
 			retained_offset = list.scroll_vertical
+			action("switch-pointer-events", "none")
 			action("rerender")
 			action("image-size")
 			next_stage()
@@ -117,7 +130,13 @@ func _process(_delta: float) -> void:
 			action("scroll", 50)
 			(target("section-list") as ScrollContainer).scroll_vertical = 100
 			var toggle := target("settings-switch") as CheckButton
-			toggle.button_pressed = true
+			var switch_point := toggle.get_global_rect().get_center()
+			pointer(switch_point, MOUSE_BUTTON_LEFT, true)
+			pointer(switch_point, MOUSE_BUTTON_LEFT, false)
+			tap(switch_point)
+			require_condition(not toggle.button_pressed and not toggle.disabled, "Pointer-disabled Switch toggled or changed its enabled visuals")
+			require_condition(not ("switch-true" in fixture().get("events", [])), "Pointer-disabled Switch published a native change")
+			action("switch-pointer-events", "auto")
 			action("controlled", "Changed controlled value")
 			next_stage()
 		2:
@@ -126,11 +145,14 @@ func _process(_delta: float) -> void:
 			require_condition(fixture().get("viewable", []).has("50"), "FlatList viewability did not follow native offsets")
 			var section_header := target("section-header-Equipment")
 			require_condition(absf(section_header.get_global_position().y - target("section-list").get_global_position().y) < 4.0, "SectionList header did not stick to its native viewport")
-			require_condition("switch-true" in fixture().get("events", []), "Controlled Switch did not publish one change")
+			require_condition(not ("switch-true" in fixture().get("events", [])), "Pointer-disabled Switch published a delayed change")
+			var switch_point := target("settings-switch").get_global_rect().get_center()
+			tap(switch_point)
 			require_condition(target("controlled-editor").get_child(0).text == "Changed controlled value", "Controlled TextInput did not reconcile")
 			action("mode", true)
 			next_stage()
 		3:
+			require_condition(fixture().get("events", []).count("switch-true") == 1, "Pointer-enabled Switch did not publish exactly one native change")
 			require_condition(target("inventory-editor").get_instance_id() == editor_id, "Multiline change remounted the outer input")
 			require_condition(native_editor() is TextEdit and native_editor().text == retained_text, "Multiline replacement lost uncontrolled text")
 			action("clear")

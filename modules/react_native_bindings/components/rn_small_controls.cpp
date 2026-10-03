@@ -17,13 +17,17 @@ Dictionary switch_config() {
 
 class RNSwitchDescriptor : public RNHostDescriptor {
 public:
-	RNSwitchDescriptor() : RNHostDescriptor("RCTSwitch", RNHostTraits{ true, true, false, true, false, false, true, true, false, true, true }, switch_config()) {}
+	RNSwitchDescriptor() :
+			RNHostDescriptor("RCTSwitch", RNHostTraits{ true, true, false, true, false, false, true, true, false, true, true }, switch_config()) {}
 	Control *create_host(const RNHostContext &) const override { return memnew(RNSwitchControl); }
 	bool owns_native_activation(const RNPreparedHostState &) const override { return true; }
 	bool apply(Control *p_host, const RNPreparedHostState &p_state, const RNHostContext &, RNError &) const override {
 		auto *control = Object::cast_to<RNSwitchControl>(p_host);
 		control->set_pressed_no_signal(p_state.props.get("value", false));
 		control->set_disabled(p_state.props.get("disabled", false));
+		const String pointer_events = p_state.props.get("pointerEvents", "auto");
+		const bool targetable = p_state.branch_targetable && pointer_events != "none" && pointer_events != "box-none";
+		control->set_mouse_filter(targetable ? Control::MOUSE_FILTER_STOP : Control::MOUSE_FILTER_IGNORE);
 		control->set_visible(String(p_state.props.get("display", "flex")) != "none");
 		control->set_modulate(Color(1, 1, 1, RNViewStyle::opacity_of(p_state.props)));
 		Color tint;
@@ -36,6 +40,7 @@ public:
 		Dictionary state;
 		state["value"] = control->is_pressed();
 		state["disabled"] = control->is_disabled();
+		state["mouse_filter"] = int(control->get_mouse_filter());
 		state["visible"] = control->is_visible();
 		state["modulate"] = control->get_modulate();
 		state["tint"] = control->get_self_modulate();
@@ -46,6 +51,7 @@ public:
 		Dictionary state = p_state;
 		control->set_pressed_no_signal(state["value"]);
 		control->set_disabled(state["disabled"]);
+		control->set_mouse_filter(Control::MouseFilter(int(state["mouse_filter"])));
 		control->set_visible(state["visible"]);
 		control->set_modulate(state["modulate"]);
 		control->set_self_modulate(state["tint"]);
@@ -63,7 +69,8 @@ public:
 
 class RNActivityDescriptor : public RNHostDescriptor {
 public:
-	RNActivityDescriptor() : RNHostDescriptor("RCTActivityIndicatorView", RNHostTraits{ true, true, false, true, false, false, false, false, false, true, true }) {}
+	RNActivityDescriptor() :
+			RNHostDescriptor("RCTActivityIndicatorView", RNHostTraits{ true, true, false, true, false, false, false, false, false, true, true }) {}
 	Control *create_host(const RNHostContext &) const override { return memnew(RNActivityIndicatorControl); }
 	bool apply(Control *p_host, const RNPreparedHostState &p_state, const RNHostContext &, RNError &) const override {
 		auto *control = Object::cast_to<RNActivityIndicatorControl>(p_host);

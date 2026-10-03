@@ -41,7 +41,8 @@ class RNScrollDescriptor : public RNHostDescriptor {
 	bool horizontal_default;
 
 public:
-	RNScrollDescriptor(const StringName &p_name, bool p_horizontal) : RNHostDescriptor(p_name, RNHostTraits{ true, true, true, false, false, false, true, true, true, true, true }, scroll_config()), horizontal_default(p_horizontal) {}
+	RNScrollDescriptor(const StringName &p_name, bool p_horizontal) :
+			RNHostDescriptor(p_name, RNHostTraits{ true, true, true, false, false, false, true, true, true, true, true }, scroll_config()), horizontal_default(p_horizontal) {}
 	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
 		if (!RNHostDescriptor::prepare(p_node, r_state, r_error)) {
 			return false;
@@ -137,7 +138,8 @@ public:
 };
 class RNScrollContentDescriptor : public RNHostDescriptor {
 public:
-	RNScrollContentDescriptor(const StringName &p_name) : RNHostDescriptor(p_name, RNHostTraits{ true, true, true, false, false, false, false, false, true, true, true }) {}
+	RNScrollContentDescriptor(const StringName &p_name) :
+			RNHostDescriptor(p_name, RNHostTraits{ true, true, true, false, false, false, false, false, true, true, true }) {}
 	Control *create_host(const RNHostContext &) const override {
 		auto *control = memnew(Panel);
 		control->set_mouse_filter(Control::MOUSE_FILTER_PASS);

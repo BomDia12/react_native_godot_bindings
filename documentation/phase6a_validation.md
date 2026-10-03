@@ -26,7 +26,7 @@ and includes the patch set in compiler cache identity.
 | Gate | Result |
 |---|---|
 | Pinned dev editor, tests enabled, warnings treated as errors | Passed |
-| Module unit tests | 72 cases, 773 assertions passed |
+| Module unit tests | 73 cases, 805 assertions passed |
 | Godot TextEdit/RichTextLabel default-behavior regression tests | 15 cases, 4,232 assertions passed |
 | Python script contracts | 22 tests passed |
 | JavaScript contracts, each sample package | 15 tests passed, including real Metro development/production resolution |
@@ -36,7 +36,7 @@ and includes the patch set in compiler cache identity.
 
 The component scenario asserts imported/base64 image rendering and getSize, stable
 native editing across rerenders and multiline replacement, controlled input, native
-list offsets/virtualization/viewability, sticky section headers, Switch updates,
+list offsets/virtualization/viewability, sticky section headers, Switch updates and inherited pointer blocking,
 nested Modal dismissal, stable context-menu IDs, secondary-button isolation,
 Button/Pressable activation, authored CanvasLayer and overlapping-root input blocking, native Window
 editing and a Modal using that window's viewport. Three bare enemy roots retain

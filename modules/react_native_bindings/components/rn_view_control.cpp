@@ -23,7 +23,8 @@ Dictionary native_view_config() {
 
 class RNViewDescriptor : public RNHostDescriptor {
 public:
-	RNViewDescriptor() : RNHostDescriptor("RCTView", RNHostTraits{ true, true, true, false, false, false, true, true, true, true, true }, native_view_config()) {}
+	RNViewDescriptor() :
+			RNHostDescriptor("RCTView", RNHostTraits{ true, true, true, false, false, false, true, true, true, true, true }, native_view_config()) {}
 
 	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
 		if (!RNHostDescriptor::prepare(p_node, r_state, r_error)) {

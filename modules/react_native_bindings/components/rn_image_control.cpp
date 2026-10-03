@@ -18,7 +18,8 @@ Dictionary image_config() {
 }
 class RNImageDescriptor : public RNHostDescriptor {
 public:
-	RNImageDescriptor() : RNHostDescriptor("RCTImageView", RNHostTraits{ true, true, false, true, false, false, false, true, false, true, true }, image_config()) {}
+	RNImageDescriptor() :
+			RNHostDescriptor("RCTImageView", RNHostTraits{ true, true, false, true, false, false, false, true, false, true, true }, image_config()) {}
 	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
 		if (!RNHostDescriptor::prepare(p_node, r_state, r_error)) {
 			return false;

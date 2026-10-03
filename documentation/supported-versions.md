@@ -17,6 +17,7 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 | CMake | CI `3.28` | Workflow |
 | Ninja | CI `1.11` | Workflow |
 | Compiler | CI GCC 13 with C++20 | Workflow and Godot build |
+| C++ formatter | Clang Format 18 | `check_format.sh`, Ubuntu CI toolchain |
 
 Only the Linux editor and headless runtime path are currently tested. The Godot Metro
 adapter map is pinned to the React Native 0.87.1 public module layout and must be reviewed

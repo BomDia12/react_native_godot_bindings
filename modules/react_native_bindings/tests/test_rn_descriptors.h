@@ -217,7 +217,8 @@ public:
 	mutable int published = 0;
 	mutable uint64_t dependency = 1;
 
-	StatefulDescriptor() : RNHostDescriptor("RCTStatefulContainer", RNHostTraits()) {}
+	StatefulDescriptor() :
+			RNHostDescriptor("RCTStatefulContainer", RNHostTraits()) {}
 
 	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
 		if (!RNHostDescriptor::prepare(p_node, r_state, r_error)) {
@@ -315,7 +316,8 @@ TEST_CASE("[ReactNativeBindings][Descriptors][SceneTree] internal containers pre
 class DependencyDescriptor : public RNHostDescriptor {
 public:
 	mutable uint64_t dependency = 1;
-	DependencyDescriptor() : RNHostDescriptor("RCTDependency", lifecycle_traits()) {}
+	DependencyDescriptor() :
+			RNHostDescriptor("RCTDependency", lifecycle_traits()) {}
 
 	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
 		RNHostDescriptor::prepare(p_node, r_state, r_error);

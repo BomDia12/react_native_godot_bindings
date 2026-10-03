@@ -21,6 +21,7 @@ function EnemyPanel({rootTag}) {
 }
 function Inventory() {
   const [enabled, setEnabled] = useState(false);
+  const [switchPointerEvents, setSwitchPointerEvents] = useState('auto');
   const [modal, setModal] = useState(false);
   const [nested, setNested] = useState(false);
   const [windowVisible, setWindowVisible] = useState(false);
@@ -40,6 +41,7 @@ function Inventory() {
   fixture.rerender = () => setVersion(value => value + 1);
   fixture.scrollList = index => list.current?.scrollToIndex({index, animated: false});
   fixture.setControlled = setControlled;
+  fixture.setSwitchPointerEvents = setSwitchPointerEvents;
   state.controlled = controlled;
   const renderItem = ({item}) => {
     state.renderedItems.push(item.id);
@@ -50,7 +52,7 @@ function Inventory() {
     <View style={{flexDirection: 'row', height: 44, alignItems: 'center'}}>
       <Image testID="asset-image" source={itemIcon} style={{width: 32, height: 32}} onLoad={() => record('asset-load')} />
       <Image testID="data-image" source={dataIcon} style={{width: 32, height: 32}} onLoad={() => record('data-load')} onError={() => record('data-error')} />
-      <Switch testID="settings-switch" value={enabled} onValueChange={value => {setEnabled(value); record('switch-' + value);}} />
+      <View pointerEvents={switchPointerEvents}><Switch testID="settings-switch" value={enabled} onValueChange={value => {setEnabled(value); record('switch-' + value);}} /></View>
       <ActivityIndicator animating={enabled} hidesWhenStopped={false} />
       <Button title="Dialog" onPress={() => setModal(true)} />
       <Button title="Window" onPress={() => setWindowVisible(true)} />
@@ -95,7 +97,8 @@ global.__godotRunApplication = (key, rootTag) => AppRegistry.runApplication(key,
 global.__godotStopApplication = rootTag => global.RN$stopSurface(rootTag);
 
 global.__phase6aAction = (action, value) => {
-  if (action === 'rerender') { fixture.rerender(); }
+  if (action === 'switch-pointer-events') { fixture.setSwitchPointerEvents(value); }
+  else if (action === 'rerender') { fixture.rerender(); }
   else if (action === 'scroll') { fixture.scrollList(value); }
   else if (action === 'modal') { fixture.showModal(value); }
   else if (action === 'nested') { fixture.showNested(value); }

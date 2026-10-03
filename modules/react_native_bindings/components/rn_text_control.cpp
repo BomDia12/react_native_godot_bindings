@@ -57,7 +57,8 @@ bool collect(const RNShadowNode &p_node, const Dictionary &p_inherited, RNTextDo
 class RNTextDescriptor : public RNHostDescriptor {
 public:
 	bool owns_native_activation(const RNPreparedHostState &p_state) const override { return p_state.props.get("selectable", false); }
-	RNTextDescriptor() : RNHostDescriptor("RCTText", RNHostTraits{ true, true, false, true, false, true, false, true, false, true, true }, text_config()) {}
+	RNTextDescriptor() :
+			RNHostDescriptor("RCTText", RNHostTraits{ true, true, false, true, false, true, false, true, false, true, true }, text_config()) {}
 
 	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
 		if (!RNHostDescriptor::prepare(p_node, r_state, r_error)) {
@@ -210,7 +211,8 @@ public:
 
 class RNVirtualTextDescriptor : public RNHostDescriptor {
 public:
-	RNVirtualTextDescriptor() : RNHostDescriptor("RCTVirtualText", RNHostTraits{ false, false, false, false, false, true, false, true, false, false, true }) {}
+	RNVirtualTextDescriptor() :
+			RNHostDescriptor("RCTVirtualText", RNHostTraits{ false, false, false, false, false, true, false, true, false, false, true }) {}
 };
 
 } // namespace

@@ -31,7 +31,8 @@ class RNPresentationDescriptor : public RNHostDescriptor {
 	bool native_window;
 
 public:
-	RNPresentationDescriptor(bool p_window) : RNHostDescriptor(p_window ? "GodotWindow" : "RCTModalHostView", RNHostTraits{ true, true, true, false, false, false, false, true, true, true, true }, presentation_config(p_window)), native_window(p_window) {}
+	RNPresentationDescriptor(bool p_window) :
+			RNHostDescriptor(p_window ? "GodotWindow" : "RCTModalHostView", RNHostTraits{ true, true, true, false, false, false, false, true, true, true, true }, presentation_config(p_window)), native_window(p_window) {}
 	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
 		if (!RNHostDescriptor::prepare(p_node, r_state, r_error)) {
 			return false;

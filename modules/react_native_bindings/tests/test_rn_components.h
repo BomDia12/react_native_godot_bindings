@@ -272,6 +272,29 @@ TEST_CASE("[ReactNativeBindings][SmallControls][SceneTree] controlled switch res
 	CHECK(events == 1);
 	memdelete(control);
 }
+TEST_CASE("[ReactNativeBindings][SmallControls][SceneTree] native switch pointer eligibility preserves enabled visuals and restores on rollback") {
+	Dictionary props;
+	auto state = prepare("RCTSwitch", props);
+	auto host = descriptor("RCTSwitch");
+	auto *control = Object::cast_to<RNSwitchControl>(host->create_host(RNHostContext()));
+	RNError error;
+	REQUIRE(host->apply(control, state, RNHostContext(), error));
+	const Variant original = host->capture_state(control);
+	state.branch_targetable = false;
+	REQUIRE(host->apply(control, state, RNHostContext(), error));
+	CHECK(control->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE);
+	CHECK_FALSE(control->is_disabled());
+	host->restore_state(control, original);
+	CHECK(control->get_mouse_filter() == Control::MOUSE_FILTER_STOP);
+	for (const char *mode : { "none", "box-none", "box-only", "auto" }) {
+		props["pointerEvents"] = mode;
+		REQUIRE(host->apply(control, prepare("RCTSwitch", props), RNHostContext(), error));
+		CHECK((control->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE) == (String(mode) == "none" || String(mode) == "box-none"));
+		CHECK_FALSE(control->is_disabled());
+	}
+	memdelete(control);
+}
+
 TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native preedit defers the latest acknowledged replacement and rollback retains composition") {
 	Dictionary props;
 	props["text"] = "start";

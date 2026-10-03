@@ -54,7 +54,8 @@ bool RNImageReservation::resize(uint64_t p_bytes) {
 	bytes = p_bytes;
 	return true;
 }
-RNImageService::RNImageService(const RNImageLimits &p_limits) : limits(p_limits), budget(std::make_shared<RNImageBudget>()) {
+RNImageService::RNImageService(const RNImageLimits &p_limits) :
+		limits(p_limits), budget(std::make_shared<RNImageBudget>()) {
 	budget->maximum = limits.valid() ? limits.total_bytes : 0;
 }
 RNImageService::~RNImageService() {

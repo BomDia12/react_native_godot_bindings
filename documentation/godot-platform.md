@@ -117,4 +117,6 @@ Window sizes are native integer pixels. User resizing survives unrelated renders
 
 ActivityIndicator maps to Godot's indeterminate ProgressBar; it is a linear native
 indicator. Switch maps to CheckButton with controlled native state; platform track
-appearance is not reproduced. Full compatibility classifications remain partial.
+appearance is not reproduced. Switch pointer handling honors its own and inherited
+pointerEvents without changing enabled visuals; native focus/keyboard behavior
+remains independent. Full compatibility classifications remain partial.
