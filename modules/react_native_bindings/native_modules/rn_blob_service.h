@@ -5,6 +5,11 @@
 #include <atomic>
 #include <map>
 
+struct RNBlobCollectorState {
+	std::atomic<uint32_t> references{ 0 };
+	std::atomic<bool> collected{ false };
+};
+
 class RNBlobService : public std::enable_shared_from_this<RNBlobService> {
 	struct Entry {
 		PackedByteArray bytes;
@@ -12,7 +17,7 @@ class RNBlobService : public std::enable_shared_from_this<RNBlobService> {
 		bool complete = false;
 		bool owner = true;
 		uint32_t pins = 0;
-		std::shared_ptr<std::atomic<bool>> collected = std::make_shared<std::atomic<bool>>(false);
+		std::shared_ptr<RNBlobCollectorState> collectors = std::make_shared<RNBlobCollectorState>();
 	};
 	std::map<String, Entry> blobs;
 	std::map<String, Dictionary> urls;
@@ -33,7 +38,7 @@ public:
 	bool pin(const Dictionary &p_data, RNError &r_error);
 	void unpin(const String &p_id);
 	void release(const String &p_id);
-	std::weak_ptr<std::atomic<bool>> collector_flag(const String &p_id) const;
+	std::weak_ptr<RNBlobCollectorState> collector_state(const String &p_id) const;
 	void drain_releases();
 	bool has_pending_work() const;
 	String create_url(const Dictionary &p_data, RNError &r_error);

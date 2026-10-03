@@ -74,6 +74,7 @@ async def run(config, repo_root, records):
             elif parsed.path == "/echo":
                 content = body
             elif parsed.path == "/binary":
+                headers.append(("cOnTeNt-TyPe", "application/octet-stream"))
                 content = b"A\x00B\xff"
             elif parsed.path.startswith("/status/"):
                 status = int(parsed.path.rsplit("/", 1)[-1])

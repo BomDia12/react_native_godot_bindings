@@ -7,6 +7,14 @@ export async function runHTTPChecks(base, https) {
   const fetchText = async (path, options) => (await fetch(base + path, options)).text();
   const binary = await fetchText('/binary');
   check(binary === 'A\0B\ufffd', 'binary UTF-8 preserves NUL and replacement');
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest(); xhr.open('GET', base + '/binary'); xhr.responseType = 'blob';
+    xhr.onload = () => {
+      try {check(xhr.response.type === 'application/octet-stream', 'XHR Blob preserves response MIME type'); xhr.response.close(); resolve();}
+      catch (error) {reject(error);}
+    };
+    xhr.onerror = reject; xhr.send();
+  });
   const failureStatus = await fetch(base + '/status/404');
   check(failureStatus.status === 404 && !failureStatus.ok, 'HTTP status remains a response');
   check(await fetchText('/compressed') === 'compressed\0payload', 'engine gzip decompression');

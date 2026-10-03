@@ -27,10 +27,10 @@ production HTTP and sockets use Godot's native transports.
 | Gate | Result |
 |---|---|
 | Pinned dev editor/module build, tests and warnings as errors | Passed |
-| Module contracts | 105 cases, 13,384 assertions passed |
+| Module contracts | 106 cases, 13,398 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
-| JavaScript contracts, after `npm ci` in both packages | 22 tests passed per package |
+| JavaScript contracts, after `npm ci` in both packages | 23 tests passed per package |
 | Complete headless suite | All 19 discovered manifests passed |
 | Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
 | Formatting, tracked smoke inputs and engine provenance | Passed |
@@ -102,6 +102,10 @@ Blob/HTTP/WebSocket strings, a 2 MiB HTTP download within a 1.5-second deadline 
 5 FPS, and noncancelable native alert recovery after window close. Native services
 retain bounded resynchronization/state notifications or reject unavailable custom
 presentation explicitly. Cookies are host-only; Domain attributes are rejected.
+Collector regressions retain a live sibling, attach a replacement before draining a
+release, and retain backing until the last native pin drops. XHR Blob responses preserve
+MIME metadata from mixed-case Content-Type headers. Alert/session types match the native
+dismissal result and opaque handle wrapper.
 
 ## Display and input-method boundary
 

@@ -229,3 +229,8 @@ notification. Producers must retain a bounded retry or fail/remove their pending
 when it returns false. Custom Alert presentation rejects with `E_LIMIT` and removes its
 request when the presentation notification cannot be queued. Native noncancelable
 alerts reopen after a window-close attempt and remain available for a button choice.
+
+Alert results are discriminated by `dismissed`: a button choice has a numeric
+`buttonId` and `dismissed: false`; dismissal has `buttonId: null` and `dismissed: true`.
+Session wrappers use `{$godot: 'Session', handle: string}`. The TypeScript declarations
+match the native result validation and session codec.

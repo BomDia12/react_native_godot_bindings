@@ -13,14 +13,20 @@ String blob_id(const Dictionary &p_data) {
 	return p_data.get("blobId", String());
 }
 class BlobCollector : public facebook::jsi::HostObject {
-	std::weak_ptr<std::atomic<bool>> collected;
+	std::weak_ptr<RNBlobCollectorState> state;
 
 public:
-	explicit BlobCollector(std::weak_ptr<std::atomic<bool>> p_collected) :
-			collected(std::move(p_collected)) {}
+	explicit BlobCollector(std::weak_ptr<RNBlobCollectorState> p_state) :
+			state(std::move(p_state)) {
+		if (auto owner = state.lock()) {
+			owner->references.fetch_add(1);
+		}
+	}
 	~BlobCollector() override {
-		if (auto flag = collected.lock()) {
-			flag->store(true);
+		if (auto owner = state.lock()) {
+			if (owner->references.fetch_sub(1) == 1) {
+				owner->collected.store(true);
+			}
 		}
 	}
 };
@@ -44,7 +50,7 @@ public:
 			if (!owner) {
 				throw facebook::jsi::JSError(rt, "Blob service is closed.");
 			}
-			auto flag = owner->collector_flag(id);
+			auto flag = owner->collector_state(id);
 			if (flag.expired()) {
 				throw facebook::jsi::JSError(rt, "Blob collector requires live backing storage.");
 			}
@@ -153,14 +159,14 @@ void RNBlobService::release(const String &p_id) {
 		reclaim(p_id);
 	}
 }
-std::weak_ptr<std::atomic<bool>> RNBlobService::collector_flag(const String &p_id) const {
+std::weak_ptr<RNBlobCollectorState> RNBlobService::collector_state(const String &p_id) const {
 	auto found = blobs.find(p_id);
-	return found != blobs.end() ? std::weak_ptr<std::atomic<bool>>(found->second.collected) : std::weak_ptr<std::atomic<bool>>();
+	return found != blobs.end() ? std::weak_ptr<RNBlobCollectorState>(found->second.collectors) : std::weak_ptr<RNBlobCollectorState>();
 }
 void RNBlobService::drain_releases() {
 	std::vector<String> collected;
 	for (const auto &entry : blobs) {
-		if (entry.second.collected->exchange(false)) {
+		if (entry.second.collectors->collected.exchange(false) && entry.second.collectors->references.load() == 0) {
 			collected.push_back(entry.first);
 		}
 	}
@@ -170,7 +176,7 @@ void RNBlobService::drain_releases() {
 }
 bool RNBlobService::has_pending_work() const {
 	for (const auto &entry : blobs) {
-		if (entry.second.collected->load()) {
+		if (entry.second.collectors->collected.load()) {
 			return true;
 		}
 	}

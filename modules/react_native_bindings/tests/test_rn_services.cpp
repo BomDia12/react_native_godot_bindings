@@ -590,5 +590,47 @@ TEST_CASE("[ReactNativeBindings][Alerts] a full custom presentation queue reject
 	CHECK_FALSE(GodotAlerts::get_singleton()->reply(fixture.runtime->get_global("session"), fixture.runtime->get_global("alertRequest"), result, error));
 	CHECK(error.code == RNErrorCode::CANCELLED);
 }
+TEST_CASE("[ReactNativeBindings][Blob] collecting one wrapper preserves live sibling collectors and native pins") {
+	auto service = std::make_shared<RNBlobService>(1024);
+	PackedByteArray bytes;
+	bytes.push_back(65);
+	bytes.push_back(0);
+	bytes.push_back(66);
+	RNError error;
+	Dictionary data = service->store(bytes, error);
+	REQUIRE_FALSE(error.is_set());
+	const String id = data["blobId"];
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	runtime->reset();
+	runtime->install_host_object("__collectors", service->collector_provider());
+	runtime->set_global("blobId", id);
+	runtime->evaluate("globalThis.first=__collectors.create(blobId);globalThis.second=__collectors.create(blobId);undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	runtime->evaluate("first=null;undefined;");
+	runtime->collect_garbage();
+	service->drain_releases();
+	CHECK(service->count() == 1);
+	PackedByteArray chunk;
+	CHECK(service->read(data, 0, 3, chunk, error));
+	CHECK(chunk == bytes);
+	runtime->evaluate("second=null;undefined;");
+	runtime->collect_garbage();
+	CHECK(service->has_pending_work());
+	runtime->evaluate("globalThis.replacement=__collectors.create(blobId);undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	service->drain_releases();
+	CHECK(service->count() == 1);
+	CHECK(service->read(data, 0, 3, chunk, error));
+	REQUIRE(service->pin(data, error));
+	runtime->evaluate("replacement=null;undefined;");
+	runtime->collect_garbage();
+	service->drain_releases();
+	CHECK(service->count() == 1);
+	CHECK(service->read(data, 0, 3, chunk, error));
+	service->unpin(id);
+	CHECK(service->count() == 0);
+	CHECK(service->used_bytes() == 0);
+	runtime->uninstall_host_object("__collectors");
+}
 } //namespace TestRNServices
 void rn_force_link_service_tests() {}

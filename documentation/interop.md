@@ -153,14 +153,18 @@ malformed UTF-8 with U+FFFD. Binary facades never enlarge
 the 16 MiB codec ceiling: native read/append chunks are at most 1 MiB. FileReader yields
 between chunks, supports abort and pins native backing until completion/cancellation.
 Blob collectors enqueue an atomic release marker without touching SceneTree/Hermes;
-the main thread reclaims it. Explicit close is idempotent; slices/clone collectors,
+the main thread reclaims it after the final collector is gone. Collectors sharing a
+blobId use an atomic reference count; a new collector created before the pending
+release drains keeps the backing alive. Native pins remain independent.
+Explicit close is idempotent; slices/clone collectors,
 object URLs and native HTTP/socket readers retain backing through their own ownership.
 Revoking a URL removes its pin. Reset closes all old-generation stores and collectors.
 
 HTTPRequest nodes are lazy, bounded, always processing and shared by fetch/XHR/images.
 A lease moves through IDLE → LEASED → DRAINING; cancellation releases no slot until the
 old native completion/deferred drain barrier. Queue timeout includes waiting time;
-zero means no caller deadline. Image cancellation reports immediate release only for
+zero means no caller deadline. Blob response descriptors preserve the case-insensitive
+Content-Type response header. Image cancellation reports immediate release only for
 queued work; active cancellation still completes its reservation. Credentials isolate
 image cache/deduplication; no-store/no-cache stays uncacheable. Redirect hops apply cookies
 and final URLs; query-only/fragment/relative references retain the current URL context

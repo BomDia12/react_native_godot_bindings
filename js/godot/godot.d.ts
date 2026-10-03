@@ -35,7 +35,9 @@ declare module 'react-native' {
 }
 
 export type GodotRootOrigin = {generation: number; rootTag: number; epoch: number};
-export type GodotAlertResult = {buttonId: number; dismissed: boolean};
+export type GodotAlertResult =
+  | {buttonId: number; dismissed: false}
+  | {buttonId: null; dismissed: true};
 export type GodotAlertPayload = {
   title: string;
   message: string;
@@ -47,7 +49,7 @@ export type GodotRegistrationOptions = {
   alerts?: boolean | ((payload: GodotAlertPayload) => GodotAlertResult | {handled: false} | Promise<GodotAlertResult | {handled: false}>);
 };
 export type GodotSceneSnapshot<T> = {
-  session: {$godot: 'Session'; token: string};
+  session: {$godot: 'Session'; handle: string};
   handle: string;
   value: T;
   sequence: number;

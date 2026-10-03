@@ -59,7 +59,7 @@ export default {
         emitter.emit('didReceiveNetworkResponse', [id, response.status, responseHeaders, response.url]);
         let value;
         try {
-          value = responseType === 'blob' ? response.body : responseType === 'base64' ? readBase64(response.body) : utf8Decode(readBytes(response.body));
+          value = responseType === 'blob' ? {...response.body, type: response.headers.find(([name]) => name.toLowerCase() === 'content-type')?.[1] ?? ''} : responseType === 'base64' ? readBase64(response.body) : utf8Decode(readBytes(response.body));
           emitter.emit('didReceiveNetworkData', [id, value]);
           complete(null);
         } finally {
