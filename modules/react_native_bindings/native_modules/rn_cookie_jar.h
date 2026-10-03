@@ -29,7 +29,8 @@ class RNCookieJar {
 	uint64_t bytes() const;
 
 public:
-	RNCookieJar(size_t p_entries, uint64_t p_bytes) : maximum_entries(p_entries), maximum_bytes(p_bytes) {}
+	RNCookieJar(size_t p_entries, uint64_t p_bytes) :
+			maximum_entries(p_entries), maximum_bytes(p_bytes) {}
 	void receive(const String &p_url, const PackedStringArray &p_headers, double p_now);
 	String header(const String &p_url, double p_now);
 	bool clear() {

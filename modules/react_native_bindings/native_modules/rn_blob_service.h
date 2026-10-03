@@ -23,7 +23,8 @@ class RNBlobService : public std::enable_shared_from_this<RNBlobService> {
 	void reclaim(const String &p_id);
 
 public:
-	explicit RNBlobService(uint64_t p_maximum) : maximum(p_maximum) {}
+	explicit RNBlobService(uint64_t p_maximum) :
+			maximum(p_maximum) {}
 	bool begin(const String &p_id, int64_t p_size, RNError &r_error);
 	bool append(const String &p_id, int64_t p_offset, const PackedByteArray &p_bytes, RNError &r_error);
 	bool finish(const String &p_id, RNError &r_error);

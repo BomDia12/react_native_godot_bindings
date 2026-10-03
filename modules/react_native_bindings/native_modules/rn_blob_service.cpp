@@ -16,7 +16,8 @@ class BlobCollector : public facebook::jsi::HostObject {
 	std::weak_ptr<std::atomic<bool>> collected;
 
 public:
-	explicit BlobCollector(std::weak_ptr<std::atomic<bool>> p_collected) : collected(std::move(p_collected)) {}
+	explicit BlobCollector(std::weak_ptr<std::atomic<bool>> p_collected) :
+			collected(std::move(p_collected)) {}
 	~BlobCollector() override {
 		if (auto flag = collected.lock()) {
 			flag->store(true);
@@ -27,7 +28,8 @@ class BlobCollectorProvider : public facebook::jsi::HostObject {
 	std::weak_ptr<RNBlobService> service;
 
 public:
-	explicit BlobCollectorProvider(const std::shared_ptr<RNBlobService> &p_service) : service(p_service) {}
+	explicit BlobCollectorProvider(const std::shared_ptr<RNBlobService> &p_service) :
+			service(p_service) {}
 	facebook::jsi::Value get(facebook::jsi::Runtime &p_runtime, const facebook::jsi::PropNameID &p_name) override {
 		if (p_name.utf8(p_runtime) != "create") {
 			return facebook::jsi::Value::undefined();
@@ -218,7 +220,8 @@ class RNBlobModule : public RNNativeModule {
 	std::function<std::shared_ptr<RNBlobService>()> service;
 
 public:
-	explicit RNBlobModule(std::function<std::shared_ptr<RNBlobService>()> p_service) : service(std::move(p_service)) {}
+	explicit RNBlobModule(std::function<std::shared_ptr<RNBlobService>()> p_service) :
+			service(std::move(p_service)) {}
 	RNModuleResult invoke_sync(const StringName &p_method, const Array &p_args, const RNCallContext &) override {
 		auto owner = service();
 		if (!owner) {

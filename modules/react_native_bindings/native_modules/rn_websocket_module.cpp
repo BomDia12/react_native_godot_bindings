@@ -43,7 +43,8 @@ class RNWebSocketModule : public RNNativeModule {
 	RNModuleResult fail(const String &p_message, const String &p_code = RNErrorCode::VALIDATION) const { return RNModuleResult::failure(RNError::make(p_code, p_message, "WebSocket")); }
 
 public:
-	RNWebSocketModule(std::function<RNServiceSettings()> p_settings, std::function<std::shared_ptr<RNBlobService>()> p_blobs) : settings_provider(std::move(p_settings)), blobs(std::move(p_blobs)) {}
+	RNWebSocketModule(std::function<RNServiceSettings()> p_settings, std::function<std::shared_ptr<RNBlobService>()> p_blobs) :
+			settings_provider(std::move(p_settings)), blobs(std::move(p_blobs)) {}
 	RNModuleResult invoke_sync(const StringName &p_method, const Array &p_args, const RNCallContext &p_context) override {
 		if (!configured) {
 			settings = settings_provider();

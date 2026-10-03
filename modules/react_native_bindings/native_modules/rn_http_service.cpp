@@ -52,7 +52,8 @@ bool header_valid(const String &p_header) {
 double RNHTTPService::now() {
 	return double(OS::get_singleton()->get_ticks_usec()) / 1000;
 }
-RNHTTPService::RNHTTPService(const RNServiceSettings &p_settings) : settings(p_settings), cookies(p_settings.limit("network/cookies/max_entries"), p_settings.limit("network/cookies/max_bytes")) {
+RNHTTPService::RNHTTPService(const RNServiceSettings &p_settings) :
+		settings(p_settings), cookies(p_settings.limit("network/cookies/max_entries"), p_settings.limit("network/cookies/max_bytes")) {
 	set_process_mode(Node::PROCESS_MODE_ALWAYS);
 }
 RNHTTPService::~RNHTTPService() {
@@ -439,7 +440,8 @@ class HTTPImageTransport : public RNImageTransport {
 	ObjectID service_id;
 
 public:
-	explicit HTTPImageTransport(const std::shared_ptr<RNHTTPService> &p_service) : service(p_service), service_id(p_service->get_instance_id()) {}
+	explicit HTTPImageTransport(const std::shared_ptr<RNHTTPService> &p_service) :
+			service(p_service), service_id(p_service->get_instance_id()) {}
 	uint64_t start(const RNImageSource &p_source, uint64_t p_limit, std::function<void(RNImageTransportResponse)> p_completion) override {
 		auto owner = service.lock();
 		if (!owner || !ObjectDB::get_instance(service_id)) {
@@ -514,7 +516,8 @@ class RNHTTPModule : public RNNativeModule {
 	std::map<String, String> completed_blobs;
 
 public:
-	RNHTTPModule(std::function<std::shared_ptr<RNHTTPService>()> p_service, std::function<std::shared_ptr<RNBlobService>()> p_blobs) : service(std::move(p_service)), blobs(std::move(p_blobs)) {}
+	RNHTTPModule(std::function<std::shared_ptr<RNHTTPService>()> p_service, std::function<std::shared_ptr<RNBlobService>()> p_blobs) :
+			service(std::move(p_service)), blobs(std::move(p_blobs)) {}
 	RNModuleResult invoke_sync(const StringName &p_method, const Array &p_args, const RNCallContext &) override {
 		auto owner = service();
 		if (!owner) {

@@ -84,6 +84,9 @@ python3 scripts/stage_game_demo.py
 Install `requirements-ci.txt` in the Python environment used by the runner, or set
 `SMOKE_FIXTURE_PYTHON` to that environment's interpreter. The display gate requires
 Xvfb, xauth and software OpenGL, or `COMPONENT_DISPLAY_READY=1` on an actual display.
+Use clang-format 18, matching Ubuntu 24.04 CI; newer versions format constructor
+initializers differently. The initial CI formatting failure was corrected with
+clang-format 18.1.8 and its full formatting gate passed locally.
 See [demo instructions](../samples/game-ui/DEMO.md) for interactive play.
 
 ## Display and input-method boundary

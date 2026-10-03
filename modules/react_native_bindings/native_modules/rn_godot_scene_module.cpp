@@ -18,7 +18,8 @@ class SceneSignalCallable : public CallableCustom {
 	static bool less(const CallableCustom *p_a, const CallableCustom *p_b) { return std::less<const CallableCustom *>()(p_a, p_b); }
 
 public:
-	SceneSignalCallable(ObjectID p_target, std::function<void(const Variant **, int)> p_callback) : target(p_target), callback(std::move(p_callback)) {}
+	SceneSignalCallable(ObjectID p_target, std::function<void(const Variant **, int)> p_callback) :
+			target(p_target), callback(std::move(p_callback)) {}
 	uint32_t hash() const override { return uint32_t(reinterpret_cast<uintptr_t>(this)); }
 	String get_as_text() const override { return "RNSceneSignal"; }
 	CompareEqualFunc get_compare_equal_func() const override { return equal; }

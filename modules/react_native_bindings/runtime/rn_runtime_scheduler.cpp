@@ -10,7 +10,8 @@
 
 using namespace facebook;
 
-RNRuntimeScheduler::RNRuntimeScheduler(Clock p_clock) : clock(std::move(p_clock)) {
+RNRuntimeScheduler::RNRuntimeScheduler(Clock p_clock) :
+		clock(std::move(p_clock)) {
 	if (!clock) {
 		clock = [] { return double(OS::get_singleton()->get_ticks_usec()) / 1000.0; };
 	}

@@ -92,7 +92,8 @@ class RNApplicationServices : public RNNativeModule {
 	}
 
 public:
-	explicit RNApplicationServices(const std::shared_ptr<RNRuntimeCoordinatorState> &p_state) : state(p_state) {}
+	explicit RNApplicationServices(const std::shared_ptr<RNRuntimeCoordinatorState> &p_state) :
+			state(p_state) {}
 	RNModuleResult invoke_sync(const StringName &p_method, const Array &p_args, const RNCallContext &p_context) override {
 		context = p_context;
 		auto shared = state.lock();
