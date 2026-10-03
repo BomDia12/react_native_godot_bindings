@@ -78,7 +78,11 @@ public:
 		control->set_indeterminate(animating);
 		control->set_visible(String(p_state.props.get("display", "flex")) != "none" && (animating || !bool(p_state.props.get("hidesWhenStopped", true))));
 		Color tint;
-		control->set_modulate(RNViewStyle::color_of(p_state.props, "color", tint) ? tint : Color(1, 1, 1));
+		if (!RNViewStyle::color_of(p_state.props, "color", tint)) {
+			tint = Color(1, 1, 1);
+		}
+		tint.a *= RNViewStyle::opacity_of(p_state.props);
+		control->set_modulate(tint);
 		return true;
 	}
 	Size2 measure(const RNPreparedHostState &p_state, const RNMeasureConstraints &) const override { return String(p_state.props.get("size", "small")) == "large" ? Size2(36, 36) : Size2(20, 20); }

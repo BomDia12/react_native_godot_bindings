@@ -99,13 +99,15 @@ LineEdit/TextEdit own Unicode input, selection, undo, clipboard and IME; control
 replacement waits while composing. Switching multiline retains the wrapper and
 value/selection while starting a new native editor history. OS candidate-window
 behavior is not covered by the automated replay test. Keyboard service integration
-is deferred. Unsupported secure multiline input fails validation.
+is deferred. Pointer eligibility applies to the wrapper and active/staged editors
+without changing editable visuals. autoFocus runs once after initial publication. Unsupported secure multiline input fails validation.
 
 ScrollView owns a native ScrollContainer and a separate React content host. The
 scroll axis measures independently, indicator reservations use native theme metrics,
 and offsets are integral and clamp when content shrinks. Native drag/deceleration
 supplies phase events; native Tweens implement animated commands and selected
-snap/paging behavior. A new user gesture cancels the programmatic Tween. Visible
+snap/paging behavior. A new user gesture cancels the programmatic Tween. Pointer modes also govern
+native scrollbars, while box-none retains interactive React children. Visible
 content anchoring uses retained row identities; a changed contentOffset wins.
 
 Modal uses an overlay in its nearest presentation window. Publication pushes a
@@ -116,7 +118,7 @@ onShow/onDismiss/onRequestClose/onResize, and owns an actual native Window.
 Window sizes are native integer pixels. User resizing survives unrelated renders.
 
 ActivityIndicator maps to Godot's indeterminate ProgressBar; it is a linear native
-indicator. Switch maps to CheckButton with controlled native state; platform track
+indicator; color alpha combines with style opacity. Switch maps to CheckButton with controlled native state; platform track
 appearance is not reproduced. Switch pointer handling honors its own and inherited
 pointerEvents without changing enabled visuals; native focus/keyboard behavior
 remains independent. Full compatibility classifications remain partial.

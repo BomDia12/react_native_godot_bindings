@@ -26,7 +26,7 @@ and includes the patch set in compiler cache identity.
 | Gate | Result |
 |---|---|
 | Pinned dev editor, tests enabled, warnings treated as errors | Passed |
-| Module unit tests | 73 cases, 805 assertions passed |
+| Module unit tests | 77 cases, 875 assertions passed |
 | Godot TextEdit/RichTextLabel default-behavior regression tests | 15 cases, 4,232 assertions passed |
 | Python script contracts | 22 tests passed |
 | JavaScript contracts, each sample package | 15 tests passed, including real Metro development/production resolution |
@@ -45,7 +45,8 @@ independent presentation state; the fixture does not provide scene authority.
 Unit contracts additionally cover publication rollback, authored/internal child
 containers, resource remeasurement, native shaping/selection and constrained sizing,
 image allocation/credential/cancellation ownership, editor acknowledgment ordering,
-native undo/redo and IME replay, scroll viewport/anchor/offset precedence, and nested
+native undo/redo and IME replay, scroll viewport/anchor/offset precedence and native wheel rejection, initial
+autofocus without repeated focus stealing, indicator tint/opacity rollback, and nested
 modal focus ownership. Default native editor/text regression tests exercise the
 engine APIs with the optional contracts unused.
 

@@ -276,6 +276,7 @@ void RNTextInputControl::reconcile(int p_ack, const Variant &p_text, int p_start
 	changing = false;
 }
 void RNTextInputControl::_configure_editor(Control *p_editor, const RNPreparedHostState &p_state) {
+	p_editor->set_mouse_filter(get_mouse_filter() == MOUSE_FILTER_IGNORE ? MOUSE_FILTER_IGNORE : MOUSE_FILTER_STOP);
 	const auto component = std::static_pointer_cast<const RNTextInputData>(p_state.component_data);
 	p_editor->add_theme_font_override("font", component->font.font);
 	p_editor->add_theme_font_size_override("font_size", component->font.size);
@@ -307,6 +308,10 @@ void RNTextInputControl::_configure_editor(Control *p_editor, const RNPreparedHo
 void RNTextInputControl::apply(const RNPreparedHostState &p_state) {
 	changing = true;
 	props = p_state.props.duplicate(true);
+	const String pointer_events = String(props.get("pointerEvents", "auto")).to_lower();
+	const bool targetable = p_state.branch_targetable && pointer_events != "none" && pointer_events != "box-none";
+	set_mouse_filter(targetable ? MOUSE_FILTER_PASS : MOUSE_FILTER_IGNORE);
+	editor->set_mouse_filter(targetable ? MOUSE_FILTER_STOP : MOUSE_FILTER_IGNORE);
 	const bool multiline = props.get("multiline", false);
 	if (multiline != (Object::cast_to<TextEdit>(editor) != nullptr)) {
 		if (staged_editor) {
@@ -386,11 +391,19 @@ void RNTextInputControl::publish(const RNPreparedHostState &p_state, const RNHos
 			subscribed_font->connect("changed", callable_mp(this, &RNTextInputControl::_font_changed));
 		}
 	}
+	if (!published) {
+		published = true;
+		if (bool(props.get("autoFocus", false)) && is_inside_tree() && is_visible_in_tree()) {
+			focus();
+		}
+	}
 }
 Ref<RNTextInputState> RNTextInputControl::capture_state() const {
 	Ref<RNTextInputState> state;
 	state.instantiate();
 	state->editor_id = editor->get_instance_id();
+	state->wrapper_mouse_filter = get_mouse_filter();
+	state->editor_mouse_filter = editor->get_mouse_filter();
 	if (auto *line = Object::cast_to<LineEdit>(editor)) {
 		state->line = line->capture_edit_state();
 	} else {
@@ -420,6 +433,8 @@ void RNTextInputControl::restore_state(const Ref<RNTextInputState> &p_state) {
 	} else {
 		Object::cast_to<TextEdit>(editor)->restore_edit_state(p_state->multiline);
 	}
+	set_mouse_filter(p_state->wrapper_mouse_filter);
+	editor->set_mouse_filter(p_state->editor_mouse_filter);
 	props = p_state->props;
 	deferred_replacement = p_state->deferred;
 	event_count = p_state->event_count;

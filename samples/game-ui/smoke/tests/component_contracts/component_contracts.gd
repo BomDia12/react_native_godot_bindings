@@ -104,6 +104,7 @@ func _process(_delta: float) -> void:
 			editor_id = target("inventory-editor").get_instance_id()
 			native_editor_id = editor.get_instance_id()
 			require_condition(editor is LineEdit and editor.text == "Uncontrolled 😀", "Upstream TextInput defaultValue did not mount")
+			require_condition(target("controlled-editor").get_child(0).has_focus(), "TextInput autoFocus did not run after initial publication")
 			editor.grab_focus()
 			editor.set_caret_column(editor.text.length())
 			for character in " edited":
@@ -122,6 +123,7 @@ func _process(_delta: float) -> void:
 			action("image-size")
 			next_stage()
 		1:
+			require_condition(native_editor().has_focus(), "Unrelated publication repeated TextInput autoFocus")
 			require_condition(target("inventory-editor").get_instance_id() == editor_id, "TextInput wrapper remounted")
 			require_condition(native_editor().get_instance_id() == native_editor_id and native_editor().text == retained_text, "Uncontrolled input changed after rerender: %s versus %s" % [native_editor().text, retained_text])
 			require_condition(fixture().get("uncontrolled") == retained_text, "Native editing event was not observed by React")

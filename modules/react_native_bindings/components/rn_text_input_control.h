@@ -15,6 +15,8 @@ protected:
 
 public:
 	ObjectID editor_id;
+	Control::MouseFilter wrapper_mouse_filter = Control::MOUSE_FILTER_PASS;
+	Control::MouseFilter editor_mouse_filter = Control::MOUSE_FILTER_STOP;
 	std::shared_ptr<const LineEdit::EditState> line;
 	std::shared_ptr<const TextEdit::EditState> multiline;
 	Dictionary props;
@@ -34,6 +36,7 @@ class RNTextInputControl : public Control {
 	RNHostContext published_context;
 	Dictionary deferred_replacement;
 	bool changing = false;
+	bool published = false;
 	bool pending_native_event = false;
 	int event_count = 0;
 	uint64_t text_revision = UINT64_MAX;

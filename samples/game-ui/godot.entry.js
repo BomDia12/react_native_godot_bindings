@@ -70,7 +70,7 @@ function Inventory() {
     </View>
     <TextInput testID="inventory-editor" ref={editor} defaultValue="Uncontrolled 😀" multiline={multiline} style={{height: 48, color: '#ffffff'}}
       onChangeText={text => {state.uncontrolled = text; record('edit');}} onSubmitEditing={() => record('submit')} />
-    <TextInput testID="controlled-editor" value={controlled} onChangeText={setControlled} style={{height: 36, color: '#ffffff'}} />
+    <TextInput testID="controlled-editor" autoFocus value={controlled} onChangeText={setControlled} style={{height: 36, color: '#ffffff'}} />
     <ScrollView testID="native-scroll" style={{height: 120}} showsVerticalScrollIndicator>
       {rows.slice(0, 10).map(item => <Text key={item.id} style={{height: 32}}>{item.title}</Text>)}
     </ScrollView>

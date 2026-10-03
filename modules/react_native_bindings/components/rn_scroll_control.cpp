@@ -80,7 +80,11 @@ public:
 		scroll->set_horizontal_scroll_mode(data->horizontal ? mode : ScrollContainer::SCROLL_MODE_DISABLED);
 		scroll->set_vertical_scroll_mode(data->horizontal ? ScrollContainer::SCROLL_MODE_DISABLED : mode);
 		scroll->set_follow_focus(true);
-		scroll->set_mouse_filter(p_state.branch_targetable ? Control::MOUSE_FILTER_STOP : Control::MOUSE_FILTER_IGNORE);
+		const String pointer_events = String(p_state.props.get("pointerEvents", "auto")).to_lower();
+		const bool targetable = p_state.branch_targetable && pointer_events != "none" && pointer_events != "box-none";
+		scroll->set_mouse_filter(targetable ? Control::MOUSE_FILTER_STOP : Control::MOUSE_FILTER_IGNORE);
+		scroll->get_h_scroll_bar()->set_mouse_filter(targetable ? Control::MOUSE_FILTER_STOP : Control::MOUSE_FILTER_IGNORE);
+		scroll->get_v_scroll_bar()->set_mouse_filter(targetable ? Control::MOUSE_FILTER_STOP : Control::MOUSE_FILTER_IGNORE);
 		scroll->set_visible(String(p_state.props.get("display", "flex")) != "none");
 		scroll->set_modulate(Color(1, 1, 1, RNViewStyle::opacity_of(p_state.props)));
 		return true;
@@ -90,6 +94,9 @@ public:
 		scroll->prepare_anchor();
 		Dictionary state;
 		state["offset"] = Point2(scroll->get_h_scroll(), scroll->get_v_scroll());
+		state["mouse_filter"] = int(scroll->get_mouse_filter());
+		state["h_mouse_filter"] = int(scroll->get_h_scroll_bar()->get_mouse_filter());
+		state["v_mouse_filter"] = int(scroll->get_v_scroll_bar()->get_mouse_filter());
 		state["hmode"] = int(scroll->get_horizontal_scroll_mode());
 		state["vmode"] = int(scroll->get_vertical_scroll_mode());
 		state["visible"] = scroll->is_visible();
@@ -105,6 +112,9 @@ public:
 		scroll->set_visible(state["visible"]);
 		scroll->set_modulate(state["modulate"]);
 		scroll->get_content()->set_custom_minimum_size(state["content_min"]);
+		scroll->set_mouse_filter(Control::MouseFilter(int(state["mouse_filter"])));
+		scroll->get_h_scroll_bar()->set_mouse_filter(Control::MouseFilter(int(state["h_mouse_filter"])));
+		scroll->get_v_scroll_bar()->set_mouse_filter(Control::MouseFilter(int(state["v_mouse_filter"])));
 		scroll->set_offset(state["offset"]);
 	}
 	void after_publish(Control *p_host, const RNPreparedHostState &p_state, const RNHostContext &p_context) const override { Object::cast_to<RNScrollControl>(p_host)->publish(p_state, p_context); }
