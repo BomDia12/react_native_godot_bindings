@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:godot": "node ../../scripts/build_godot_bundle.cjs --project . --entry godot.entry.js --out dist/godot.bundle.js",
-    "test:godot": "node --test ../../js/godot/tests/*.test.cjs"
+    "build:godot": "node ../../scripts/build_godot_bundle.cjs --project . --entry godot.entry.js --out dist/game.bundle.js",
+    "test:godot": "node --test ../../js/godot/tests/*.test.cjs",
+    "build:gallery": "node ../../scripts/build_godot_bundle.cjs --project . --entry gallery.entry.js --out dist/godot.bundle.js"
   },
   "dependencies": {
     "react": "19.2.3",

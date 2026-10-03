@@ -63,6 +63,8 @@ const directEventTypes = {
 };
 
 const validAttributes = {
+  allowFontScaling: true,
+  maxFontSizeMultiplier: true,
   ...ReactNativeStyleAttributes,
   style: ReactNativeStyleAttributes,
   backgroundColor: colorAttribute,

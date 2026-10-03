@@ -1,0 +1,36 @@
+{
+  "id": "game-presentations",
+  "project_dir": "samples/game-ui",
+  "scene": "res://smoke/tests/presentations/SmokeMain.tscn",
+  "timeout_seconds": 90,
+  "allowlist": "documentation/expected-warnings.txt",
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/game-ui",
+    "script": "build:godot",
+    "output": "samples/game-ui/dist/game.bundle.js"
+  },
+  "inputs": [
+    "documentation/expected-warnings.txt",
+    "samples/game-ui/assets/LICENSE.OpenSans.txt",
+    "samples/game-ui/assets/OpenSans.woff2",
+    "samples/game-ui/assets/item.png",
+    "samples/game-ui/assets/item@2x.png",
+    "samples/game-ui/assets/item@3x.png",
+    "samples/game-ui/babel.config.js",
+    "samples/game-ui/game/GameDemo.tscn",
+    "samples/game-ui/game/enemy.gd",
+    "samples/game-ui/game/game.gd",
+    "samples/game-ui/game/inventory.gd",
+    "samples/game-ui/game/schemas.gd",
+    "samples/game-ui/godot.entry.js",
+    "samples/game-ui/metro.config.godot.js",
+    "samples/game-ui/package-lock.json",
+    "samples/game-ui/package.json",
+    "samples/game-ui/project.godot",
+    "samples/game-ui/smoke/game_test.gd",
+    "samples/game-ui/game/network.js",
+    "samples/game-ui/smoke/tests/presentations/case.gd",
+    "samples/game-ui/smoke/tests/presentations/SmokeMain.tscn"
+  ]
+}

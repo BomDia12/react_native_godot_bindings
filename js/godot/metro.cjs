@@ -32,6 +32,7 @@ function createGodotMetroConfig(projectRoot) {
 		path.join(godotRoot, 'bootstrap.js'),
 	  ],
       getModulesRunBeforeMainModule: () => [
+        path.join(godotRoot, 'native-facades-install.js'),
         projectRequire.resolve('react-native/Libraries/Core/InitializeCore'),
         path.join(godotRoot, 'bootstrap-finalize.js'),
       ],

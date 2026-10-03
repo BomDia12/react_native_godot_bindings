@@ -85,6 +85,8 @@ struct RNPreparedHostState {
 };
 
 struct RNHostContext {
+	double font_scale = 1;
+	uint64_t metrics_revision = 1;
 	ReactNativeRootView *owner = nullptr;
 	ObjectID host_id;
 	uint64_t generation = 0;

@@ -4,6 +4,8 @@
 #include "../interop/rn_resource_path.h"
 #include "../interop/rn_value_codec.h"
 #include "../native_modules/rn_native_module_registry.h"
+#include "../runtime/rn_execution_scope.h"
+#include "../runtime/rn_runtime_scheduler.h"
 #include "hermes_runtime_lifecycle.h"
 
 #include "core/error/error_macros.h"
@@ -14,6 +16,7 @@
 #include "core/string/string_name.h"
 
 #include <hermes/hermes.h>
+#include <jsi/instrumentation.h>
 #include <jsi/jsi.h>
 
 #include <cmath>
@@ -78,6 +81,9 @@ void HermesRuntimeSingleton::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_global", "name"), &HermesRuntimeSingleton::get_global);
 	ClassDB::bind_method(D_METHOD("has_global_function", "name"), &HermesRuntimeSingleton::has_global_function);
 	ClassDB::bind_method(D_METHOD("reset"), &HermesRuntimeSingleton::reset);
+#ifdef DEBUG_ENABLED
+	ClassDB::bind_method(D_METHOD("collect_garbage"), &HermesRuntimeSingleton::collect_garbage);
+#endif
 	ClassDB::bind_method(D_METHOD("get_runtime_generation"), &HermesRuntimeSingleton::get_runtime_generation);
 	ClassDB::bind_method(D_METHOD("is_ready"), &HermesRuntimeSingleton::is_ready);
 	ClassDB::bind_method(D_METHOD("get_last_error"), &HermesRuntimeSingleton::get_last_error);
@@ -129,6 +135,14 @@ bool HermesRuntimeSingleton::has_global_function(const String &p_name) {
 	}
 }
 
+void HermesRuntimeSingleton::collect_garbage() {
+	ERR_FAIL_COND_MSG(!require_main_thread("collect_garbage"), "Garbage collection must run on the main thread.");
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	if (runtime) {
+		runtime->instrumentation().collectGarbage("Godot diagnostic");
+	}
+}
+
 void HermesRuntimeSingleton::reset() {
 	ERR_FAIL_COND_MSG(!require_main_thread("reset"), "HermesRuntime.reset() must run on Godot's main thread.");
 	std::lock_guard<std::mutex> lock(runtime_mutex);
@@ -159,17 +173,32 @@ void HermesRuntimeSingleton::dispatch_queued_events(const std::shared_ptr<Fabric
 	run_microtask_checkpoint_locked();
 }
 
-void HermesRuntimeSingleton::dispatch_native_module_deliveries(const std::shared_ptr<RNNativeModuleRegistry> &p_registry) {
-	ERR_FAIL_COND_MSG(!require_main_thread("dispatch_native_module_deliveries"), "HermesRuntime.dispatch_native_module_deliveries() must run on Godot's main thread.");
+size_t HermesRuntimeSingleton::dispatch_native_module_deliveries(const std::shared_ptr<RNNativeModuleRegistry> &p_registry) {
+	ERR_FAIL_COND_V_MSG(!require_main_thread("dispatch_native_module_deliveries"), 0, "HermesRuntime.dispatch_native_module_deliveries() must run on Godot's main thread.");
 	if (!p_registry) {
-		return;
+		return 0;
 	}
 	std::lock_guard<std::mutex> lock(runtime_mutex);
 	if (!runtime) {
+		return 0;
+	}
+	const size_t delivered = p_registry->deliver_locked(*runtime, runtime_generation, [this] { run_microtask_checkpoint_locked(); });
+	run_microtask_checkpoint_locked();
+	return delivered;
+}
+
+void HermesRuntimeSingleton::dispatch_scheduler(const std::shared_ptr<RNRuntimeScheduler> &p_scheduler, bool p_idle, bool p_visual_frame, double p_available_ms, size_t p_native_delivered) {
+	ERR_FAIL_COND_MSG(!require_main_thread("dispatch_scheduler"), "Scheduler must run on the main thread.");
+	std::lock_guard<std::mutex> lock(runtime_mutex);
+	if (!runtime || !p_scheduler) {
 		return;
 	}
-	p_registry->deliver_locked(*runtime, runtime_generation);
-	run_microtask_checkpoint_locked();
+	auto checkpoint = [this] { run_microtask_checkpoint_locked(); };
+	if (p_idle) {
+		p_scheduler->process_idle_locked(*runtime, checkpoint, p_available_ms);
+	} else {
+		p_scheduler->process_frame_locked(*runtime, p_visual_frame, checkpoint, p_native_delivered);
+	}
 }
 
 bool HermesRuntimeSingleton::is_ready() const {
@@ -424,6 +453,7 @@ void HermesRuntimeSingleton::run_microtask_checkpoint_locked() {
 	if (!runtime || microtask_checkpoint_active) {
 		return;
 	}
+	RNExecutionScope clear_scope({});
 	microtask_checkpoint_active = true;
 	try {
 		runtime->drainMicrotasks();

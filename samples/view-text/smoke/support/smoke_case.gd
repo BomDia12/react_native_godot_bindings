@@ -9,6 +9,9 @@ var settle_frames := -1
 func smoke_id() -> String:
 	return ""
 
+func ready_to_validate() -> bool:
+	return true
+
 func validate_smoke() -> String:
 	return "smoke test did not implement validate_smoke"
 
@@ -28,6 +31,10 @@ func _process(_delta: float) -> void:
 
 	settle_frames += 1
 	if settle_frames < SETTLE_FRAMES:
+		return
+
+	if not ready_to_validate():
+		if frames >= TIMEOUT_FRAMES: fail_smoke("asynchronous fixture did not become ready")
 		return
 
 	set_process(false)

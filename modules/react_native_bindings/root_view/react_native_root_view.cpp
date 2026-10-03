@@ -2,6 +2,8 @@
 
 #include "../fabric/fabric_ui_manager.h"
 #include "../mounting/rn_mounting_manager.h"
+#include "../native_modules/rn_alert_service.h"
+#include "../native_modules/rn_native_module_registry.h"
 
 #include "core/config/project_settings.h"
 #include "core/object/callable_mp.h"
@@ -16,6 +18,7 @@ ReactNativeRootView::ReactNativeRootView() {
 }
 
 ReactNativeRootView::~ReactNativeRootView() {
+	_disconnect_scene_target();
 	if (registered) {
 		if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
 			coordinator->unregister_root(this);
@@ -24,6 +27,10 @@ ReactNativeRootView::~ReactNativeRootView() {
 }
 
 void ReactNativeRootView::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_alert_handler", "handler"), &ReactNativeRootView::set_alert_handler);
+	ClassDB::bind_method(D_METHOD("complete_alert", "request", "result"), &ReactNativeRootView::complete_alert);
+	ClassDB::bind_method(D_METHOD("attach_scene_binding", "target", "binding"), &ReactNativeRootView::attach_scene_binding);
+	ClassDB::bind_method(D_METHOD("detach_scene_binding"), &ReactNativeRootView::detach_scene_binding);
 	ClassDB::bind_method(D_METHOD("mount", "tree"), &ReactNativeRootView::mount);
 	ClassDB::bind_method(D_METHOD("get_root_tag"), &ReactNativeRootView::get_root_tag);
 	ClassDB::bind_method(D_METHOD("set_application_key", "application_key"), &ReactNativeRootView::set_application_key);
@@ -36,6 +43,11 @@ void ReactNativeRootView::_bind_methods() {
 }
 
 void ReactNativeRootView::_notification(int p_what) {
+	if (p_what == NOTIFICATION_APPLICATION_PAUSED || p_what == NOTIFICATION_APPLICATION_RESUMED) {
+		if (auto coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+			coordinator->get_state()->application_paused = p_what == NOTIFICATION_APPLICATION_PAUSED;
+		}
+	}
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			get_viewport()->connect("gui_input_dispatched", callable_mp(this, &ReactNativeRootView::_on_gui_input_dispatched));
@@ -500,5 +512,61 @@ void ReactNativeRootView::_cancel_host_input() {
 	_enqueue_events(input_router.cancel_all(snapshot.get(), root_tag, runtime_generation));
 	if (auto *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
 		_enqueue_events(coordinator->get_state()->pointer_capture.clear_surface(root_tag, surface_epoch, runtime_generation));
+	}
+}
+
+Dictionary ReactNativeRootView::attach_scene_binding(Object *p_target, const Ref<RNSceneBinding> &p_binding) {
+	RNError error;
+	auto attachment = std::make_shared<RNSceneAttachment>();
+	if (p_binding.is_null() || !p_binding->compile(p_target, *attachment, error)) {
+		if (!error.is_set()) {
+			error = RNError::make(RNErrorCode::VALIDATION, "binding resource is required", "scene.attach");
+		}
+		return error.to_dictionary();
+	}
+	attachment->identity = next_binding_identity++;
+	_disconnect_scene_target();
+	scene_attachment = attachment;
+	Node *node = Object::cast_to<Node>(p_target);
+	scene_target_available = !node || node->is_inside_tree();
+	if (node) {
+		node->connect("tree_entered", callable_mp(this, &ReactNativeRootView::_scene_target_changed).bind(true));
+		node->connect("tree_exiting", callable_mp(this, &ReactNativeRootView::_scene_target_changed).bind(false));
+	}
+	if (auto coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+		coordinator->get_native_module_registry()->scene_binding_changed(get_instance_id());
+	}
+	return Dictionary();
+}
+void ReactNativeRootView::detach_scene_binding() {
+	_disconnect_scene_target();
+	scene_attachment.reset();
+	scene_target_available = false;
+	if (auto coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+		coordinator->get_native_module_registry()->scene_binding_changed(get_instance_id());
+	}
+}
+
+bool ReactNativeRootView::complete_alert(const String &p_request, const Dictionary &p_result) {
+	RNError error;
+	return GodotAlerts::get_singleton() && GodotAlerts::get_singleton()->complete_for(get_instance_id(), p_request, p_result, error);
+}
+
+void ReactNativeRootView::_disconnect_scene_target() {
+	Node *node = scene_attachment ? Object::cast_to<Node>(ObjectDB::get_instance(scene_attachment->target)) : nullptr;
+	if (!node) {
+		return;
+	}
+	for (const auto &entry : { std::pair<const char *, bool>("tree_entered", true), { "tree_exiting", false } }) {
+		const Callable callback = callable_mp(this, &ReactNativeRootView::_scene_target_changed).bind(entry.second);
+		if (node->is_connected(entry.first, callback)) {
+			node->disconnect(entry.first, callback);
+		}
+	}
+}
+void ReactNativeRootView::_scene_target_changed(bool p_available) {
+	scene_target_available = p_available;
+	if (auto coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+		coordinator->get_native_module_registry()->scene_binding_changed(get_instance_id());
 	}
 }

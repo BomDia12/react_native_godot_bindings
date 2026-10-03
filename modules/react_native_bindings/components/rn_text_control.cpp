@@ -22,6 +22,9 @@ Dictionary text_config() {
 Dictionary inherit(const Dictionary &p_parent, const Dictionary &p_child) {
 	Dictionary result = p_parent.duplicate(true);
 	for (const Variant &key : p_child.keys()) {
+		if (String(key) == "maxFontSizeMultiplier" && p_child[key].get_type() == Variant::NIL) {
+			continue;
+		}
 		result[key] = p_child[key];
 	}
 	return result;
@@ -285,7 +288,7 @@ void RNTextControl::apply_document(const std::shared_ptr<const RNTextDocument> &
 	const String direction = document->props.get("writingDirection", document->props.get("direction", "auto"));
 	set_text_direction(direction == "rtl" ? TEXT_DIRECTION_RTL : direction == "ltr" ? TEXT_DIRECTION_LTR
 																					: TEXT_DIRECTION_AUTO);
-	set_line_height_override(document->props.get("lineHeight", 0.0));
+	set_line_height_override(double(document->props.get("lineHeight", 0.0)) * document->font.multiplier);
 	const int line_limit = document->props.get("numberOfLines", 0);
 	set_visible_line_limit(line_limit > 0 ? line_limit : -1);
 	set_selection_enabled(document->props.get("selectable", false));

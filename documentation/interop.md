@@ -23,6 +23,9 @@ embedded NUL, arrays, plain records, and `Uint8Array`. Typed wrappers represent 
 explicit arguments or record fields: either the value schema or the argument/field
 may allow null.
 
+A `DYNAMIC` schema infers Godot integers for exact safe JavaScript integers. Other
+finite numbers, including negative zero, retain their floating-point representation.
+
 Functions are not data values. Event subscriptions and internal microtasks validate and
 retain JSI functions through dedicated callback paths. Symbols, BigInt, sparse arrays,
 class instances, arbitrary HostObjects, cycles, non-finite numbers, unsafe integers,
@@ -62,7 +65,7 @@ Hermes revokes its handles.
 One module instance is created lazily per Hermes generation and shared by roots. Work
 that touches a scene opens an explicit root session. A frame processes copied native
 jobs, queues copied completions/events, then reacquires Hermes to deliver callbacks and
-run the outer microtask checkpoint. Late or duplicate completions are ignored.
+run a microtask checkpoint after each callback. Late or duplicate completions are ignored.
 
 `callAsync(module, method, args, {signal})` in `js/godot/modules.js` connects an
 `AbortSignal` to the native request token. An already-aborted signal rejects with
@@ -88,6 +91,100 @@ extension point and is outside this built-in rule.
 
 Component events and GodotImageLoader reuse the existing schema registry and native
 completion queue. Image source records and queryCache arrays are validated before
-native casts. Real HTTP transport, scheduler, Keyboard, scoped Alert and generic
-scene bindings are deferred to Phase 6B. The component gallery uses deterministic
-presentation actions; it does not claim authoritative gameplay or scene round trips.
+native casts. The shared HTTP transport is installed before bundle execution. Generic scene bindings
+provide direct script snapshots, declared commands and signals; the working game uses
+these without a network hop.
+
+## Script capability resources
+
+Attach an `RNSceneBinding` Resource with `root.attach_scene_binding(target, resource)`.
+It returns an empty Dictionary on success or an error Dictionary; attachment is atomic.
+Exported fields are `capability`, positive `schema_version`, `snapshot_method`,
+`snapshot_schema`, `commands`, and `signals`. GDScript and `.tres` resources use the
+same validated grammar. The target may precede tree entry; its binding is ready once
+it is live inside the SceneTree. Leaving the tree/death/rebinding revokes old handles.
+
+Value schemas are Dictionaries with a `type`: `void`, `dynamic`, `null`, `boolean`,
+`number`, `integer`, `string`, `array`, `record`, `Uint8Array`, `int64`, `Color`,
+`Vector2`, `Vector3`, `Rect2`, `Transform2D`, `Object`, or `Session`. `nullable` is
+optional. Array schemas require `element`; records require `fields`, default to closed,
+and can set `closed=false`. Record fields allow `optional` and a validated `default`.
+Object schemas require a capability; Rect2 can allow negative size explicitly.
+Unknown/misplaced options, cycles and structural/payload overflow fail before use.
+
+Commands map a public name to `{method, mode, arguments, result}`. `mode` is `sync` or
+`queued`. Ordered arguments use `{name, value, optional?, nullable?, default?}`;
+omitted trailing arguments can use native script defaults. Signals map a native signal
+to `{event, arguments, payload}`: argument names zip to a record payload. Methods,
+arity, typed signatures, defaults and mapped signal fields are checked on attachment;
+arguments/returns/emitted values are checked on every call. Only declared public methods
+are callable; there is no unrestricted reflection from JS.
+
+`react-native-godot/scene` exports `getBinding`, `read`, `call`, `callAsync`, `onChanged`
+and `useGodotScene(rootTag)`. Responses carry `ready`, opaque `binding`, monotonic
+`sequence`, `event`, `payload`, capability and schemaVersion. Subscribe, look up and read;
+ignore older sequences. The hook waits for readiness, re-reads snapshots and closes its
+session/subscription on cleanup. Handles cannot cross sessions, even on the same root.
+All scene operations run on Godot's main thread. A sync script can trigger root reload;
+the coordinator defers runtime lifecycle work until the current Hermes call returns.
+
+## Scheduling, binary and transport ownership
+
+Timers use a generation-owned monotonic clock. Due callback IDs are snapshotted;
+nested registration waits for the next turn, cancellation applies immediately, missed
+intervals skip catch-up bursts, thrown callbacks do not stop later work, and Hermes owns
+microtasks. Recurring timers rotate behind waiting due callbacks to prevent starvation.
+rAF runs only with a visible eligible root. Timer/native delivery drains are
+bounded; idle deadlines cap configured work by remaining frame time (configured frame
+rate, or a 60 Hz budget when uncapped). Game physics pause does not stop service time.
+Root-origin scopes are retained for timers and listener registrations; microtasks begin
+unattributed, so asynchronous app flows should retain `useGodotAlert()` explicitly.
+
+General interop strings reject embedded NUL. Networking text uses byte transport and JS
+UTF-8 decoding, preserving NUL and replacement characters. Binary facades never enlarge
+the 16 MiB codec ceiling: native read/append chunks are at most 1 MiB. FileReader yields
+between chunks, supports abort and pins native backing until completion/cancellation.
+Blob collectors enqueue an atomic release marker without touching SceneTree/Hermes;
+the main thread reclaims it. Explicit close is idempotent; slices/clone collectors,
+object URLs and native HTTP/socket readers retain backing through their own ownership.
+Revoking a URL removes its pin. Reset closes all old-generation stores and collectors.
+
+HTTPRequest nodes are lazy, bounded, always processing and shared by fetch/XHR/images.
+A lease moves through IDLE → LEASED → DRAINING; cancellation releases no slot until the
+old native completion/deferred drain barrier. Queue timeout includes waiting time;
+zero means no caller deadline. Image cancellation reports immediate release only for
+queued work; active cancellation still completes its reservation. Credentials isolate
+image cache/deduplication; no-store/no-cache stays uncacheable. Redirect hops apply cookies
+and final URLs; query-only/fragment/relative references retain the current URL context
+and normalize literal dot segments. Cross-origin sensitive headers are removed. Cookies are bounded and
+in-memory, without a complete browser persistence/public-suffix policy.
+
+WebSocketPeer owns protocol framing/TLS. Polling continues through CLOSING, with limits
+on peers, messages, queues, retained bytes and packets delivered per frame. A message can
+overshoot the per-frame byte target once so a legal packet cannot starve. Normal close,
+failure, cancellation and generation reset release native peers once.
+Open notifications retry when the native event queue is full, before messages are delivered.
+
+## Editor service limits
+
+Limits below live under `react_native/`, expose editor ranges and are immutable per
+generation. Invalid types/ranges, HTTP idle > active, or HTTP body > aggregate buffer
+limits fail startup. A zero HTTP wait
+queue permits immediate leases only; zero idle retires every completed node. Zero cookie
+limits disable storage and zero scheduler idle budget runs only expired idle timeouts.
+
+| Setting suffix | Default |
+|---|---|
+| network/http/max_active_requests / max_idle_requests / max_queued_requests | 8 / 2 / 128 |
+| network/http/max_body_bytes / max_buffered_bytes / max_redirects | 8 MiB / 32 MiB / 8 |
+| network/cookies/max_entries / max_bytes | 256 / 256 KiB |
+| network/websocket/max_message_bytes / max_queued_packets / max_buffered_bytes | 1 MiB / 256 / 4 MiB |
+| network/websocket/packets_per_frame / close_timeout_ms | 64 / 2000 |
+| binary/max_blob_bytes | 32 MiB |
+| scheduler/max_tasks_per_frame / idle_budget_ms | 256 / 2 |
+| appearance/color_scheme / follow_system | light / false |
+| text/font_scale | 1.0 |
+
+WebSocket message settings reserve codec envelope headroom below 16 MiB. Existing
+image cache/decode/total ceilings and font aliases remain separate generation snapshots;
+HTTP reservations account for image requests without taking ownership of image caches.

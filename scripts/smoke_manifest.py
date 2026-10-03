@@ -33,6 +33,12 @@ class Bundle:
 
 
 @dataclass(frozen=True)
+class Fixture:
+    kind: str
+    config: Path
+
+
+@dataclass(frozen=True)
 class SmokeManifest:
     id: str
     manifest_path: Path
@@ -43,6 +49,7 @@ class SmokeManifest:
     allowlist: Path
     bundle: Bundle
     inputs: tuple[Path, ...]
+    fixture: Fixture | None = None
 
 
 @dataclass(frozen=True)
@@ -119,7 +126,7 @@ def load_manifest(repo_root: Path, manifest_path: Path) -> SmokeManifest:
         raw = json.loads(absolute_manifest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ManifestError(f"cannot read {relative_manifest.as_posix()}: {error}") from error
-    data = _require_exact_fields(raw, MANIFEST_FIELDS, "manifest")
+    data = _require_exact_fields(raw, MANIFEST_FIELDS | ({"fixture"} if isinstance(raw, dict) and "fixture" in raw else set()), "manifest")
 
     test_id = data["id"]
     if not isinstance(test_id, str) or ID_PATTERN.fullmatch(test_id) is None:
@@ -176,6 +183,16 @@ def load_manifest(repo_root: Path, manifest_path: Path) -> SmokeManifest:
     if missing_inputs:
         raise ManifestError(f"inputs is missing declared files: {', '.join(missing_inputs)}")
 
+    fixture = None
+    if "fixture" in data:
+        fixture_data = _require_exact_fields(data["fixture"], {"kind", "config"}, "fixture")
+        if fixture_data["kind"] != "local_network":
+            raise ManifestError("unknown fixture kind")
+        config = _relative_path(repo_root, fixture_data["config"], "fixture.config")
+        if config not in inputs or not (repo_root / config).is_file():
+            raise ManifestError("fixture configuration must be a declared input file")
+        fixture = Fixture(kind="local_network", config=config)
+
     return SmokeManifest(
         id=test_id,
         manifest_path=relative_manifest,
@@ -186,6 +203,7 @@ def load_manifest(repo_root: Path, manifest_path: Path) -> SmokeManifest:
         allowlist=allowlist,
         bundle=Bundle(mode=mode, package_dir=package_dir, script=script, output=output),
         inputs=inputs,
+        fixture=fixture,
     )
 
 

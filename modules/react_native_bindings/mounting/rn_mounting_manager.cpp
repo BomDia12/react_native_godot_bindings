@@ -208,6 +208,10 @@ void RNMountingManager::reconcile_overrides(const Ref<RNShadowNode> &p_node, Has
 RNHostContext RNMountingManager::host_context(int p_tag, uint64_t p_revision) const {
 	RNHostContext context;
 	context.owner = owner;
+	if (auto coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
+		context.font_scale = coordinator->get_state()->font_scale;
+		context.metrics_revision = coordinator->get_state()->metrics_revision;
+	}
 	context.host_id = host_for_tag(p_tag) ? host_for_tag(p_tag)->get_instance_id() : ObjectID();
 	context.generation = runtime_generation;
 	context.root_tag = root_tag;
@@ -305,7 +309,14 @@ bool RNMountingManager::prepare_transaction(RNMountingTransaction &r_transaction
 	HashMap<int, Size2> presentations;
 	presentations[p_next_root->tag] = owner && owner->is_inside_tree() ? Size2(owner->get_window()->get_size()) : p_constraint;
 	HashMap<int, bool> directions;
-	directions[p_next_root->tag] = owner && owner->is_layout_rtl();
+	bool native_direction = false;
+	for (Control *control = owner; control; control = control->get_parent_control()) {
+		if (control->get_layout_direction() != Control::LAYOUT_DIRECTION_INHERITED) {
+			native_direction = true;
+			break;
+		}
+	}
+	directions[p_next_root->tag] = owner && (native_direction ? owner->is_layout_rtl() : ReactNativeRuntimeCoordinator::get_singleton()->get_state()->is_rtl);
 	Vector<Ref<RNShadowNode>> pending;
 	pending.push_back(p_next_root);
 	while (!pending.is_empty()) {

@@ -5,6 +5,7 @@
 
 #include "tests/test_macros.h"
 
+#include <cmath>
 #include <limits>
 
 namespace TestRNValueCodec {
@@ -73,4 +74,14 @@ TEST_CASE("[ReactNativeBindings][ValueCodec] oversized native strings preserve p
 	CHECK(String(runtime->get_global("validString")) == "valid");
 }
 
+TEST_CASE("[ReactNativeBindings][ValueCodec] dynamic safe integers retain native integer typing without rounding") {
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	runtime->reset();
+	CHECK(runtime->evaluate("7").get_type() == Variant::INT);
+	CHECK(runtime->evaluate("7.5").get_type() == Variant::FLOAT);
+	const Variant negative_zero = runtime->evaluate("-0");
+	CHECK(negative_zero.get_type() == Variant::FLOAT);
+	CHECK(std::signbit(double(negative_zero)));
+	CHECK(runtime->evaluate("9007199254740992").get_type() == Variant::FLOAT);
+}
 } // namespace TestRNValueCodec

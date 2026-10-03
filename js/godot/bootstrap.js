@@ -24,37 +24,19 @@ global.RN$LegacyInterop_UIManager_getConstants = () => {
 global.RN$LegacyInterop_UIManager_getConstantsForViewManager = name =>
   hostDescriptors?.getConfig(name) ?? null;
 
-const TIMERS = new Map();
-let nextTimerId = 1;
-function schedule(fn, delayMs, repeatMs, args) {
-  const id = nextTimerId++;
-  TIMERS.set(id, {fn, args, due: Date.now() + (delayMs || 0), repeatMs});
-  return id;
+const scheduler = global.__godotScheduler;
+if (scheduler == null) {
+  throw new Error('Godot native scheduler must be installed before bootstrap.');
 }
-const enqueueImmediate = (fn, ...args) => schedule(fn, 0, null, args);
-global.setTimeout = (fn, ms, ...args) => schedule(fn, ms, null, args);
-global.setInterval = (fn, ms, ...args) => schedule(fn, ms, ms || 0, args);
-global.setImmediate = enqueueImmediate;
-global.requestAnimationFrame = fn => schedule(() => fn(Date.now()), 0, null, []);
-global.clearTimeout = id => TIMERS.delete(id);
-global.clearInterval = global.clearTimeout;
-global.clearImmediate = global.clearTimeout;
-global.cancelAnimationFrame = global.clearTimeout;
-global.__godotFlushTimers = () => {
-  const now = Date.now();
-  Array.from(TIMERS.keys()).forEach(id => {
-    const timer = TIMERS.get(id);
-    if (timer == null || timer.due > now) {
-      return;
-    }
-    if (timer.repeatMs == null) {
-      TIMERS.delete(id);
-    } else {
-      timer.due = now + timer.repeatMs;
-    }
-    timer.fn(...timer.args);
-  });
-};
+for (const name of [
+  'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+  'requestAnimationFrame', 'cancelAnimationFrame',
+]) {
+  global[name] = scheduler[name];
+}
+global.__blobCollectorProvider = global.__godotBlobCollectors?.create;
+global.nativePerformanceNow = scheduler.now;
+global.performance = {now: scheduler.now};
 
 const unsupported = operation => {
   const error = new Error(operation + ' is pending on the Godot platform.');
@@ -64,21 +46,14 @@ const unsupported = operation => {
 };
 
 const SHIMS = {
-  DeviceInfo: {
-    getConstants: () => ({
-      Dimensions: {
-        window: {width: 800, height: 600, scale: 1, fontScale: 1},
-        screen: {width: 800, height: 600, scale: 1, fontScale: 1},
-      },
-    }),
-  },
   SourceCode: {getConstants: () => ({scriptURL: null})},
   NativeMicrotasksCxx: {
     queueMicrotask: callback =>
       typeof global.__godotQueueMicrotask === 'function'
         ? global.__godotQueueMicrotask(callback)
-        : enqueueImmediate(callback),
+        : unsupported('queueMicrotask'),
   },
+  NativeIdleCallbacksCxx: scheduler,
   NativeDOMCxx: global.__godotNativeDOM,
   NativeReactNativeFeatureFlagsCxx: {
     shouldPressibilityUseW3CPointerEventsForHover: () => true,
@@ -91,18 +66,12 @@ const SHIMS = {
     updateExceptionMessage: () => {},
     dismissRedbox: () => {},
   },
-  Appearance: {
-    getColorScheme: () => 'light',
-    setColorScheme: () => unsupported('Appearance.setColorScheme'),
-    addListener: () => {},
-    removeListeners: () => {},
-  },
   LogBox: {show: () => {}, hide: () => {}},
 };
 
 const nativeRegistry = global.__godotNativeModules;
 global.__turboModuleProxy = name =>
-  nativeRegistry?.get?.(name) ?? SHIMS[name] ?? null;
+  global.__godotNativeFacade?.(name) ?? nativeRegistry?.get?.(name) ?? SHIMS[name] ?? null;
 global.__godotUnsupported = unsupported;
 
 function rejectionMessage(reason) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../runtime/rn_execution_scope.h"
 #include "../singletons/hermes_runtime_lifecycle.h"
 #include "rn_native_module.h"
 
@@ -23,17 +24,22 @@ class RNNativeModuleRegistry : public facebook::jsi::HostObject, public HermesRu
 		RNCallContext context;
 	};
 	struct NativeCompletion {
+		uint64_t order = 0;
 		String request_token;
 		uint64_t generation = 0;
 		Variant value;
 		RNError error;
 	};
 	struct NativeEvent {
+		uint64_t order = 0;
 		String module_name;
 		StringName event;
 		String session_token;
 		uint64_t generation = 0;
 		Variant payload;
+		std::vector<std::string> listeners;
+		size_t next_listener = 0;
+		bool listeners_captured = false;
 	};
 	struct PendingPromise {
 		String module_name;
@@ -43,8 +49,10 @@ class RNNativeModuleRegistry : public facebook::jsi::HostObject, public HermesRu
 		std::unique_ptr<facebook::jsi::Function> resolve;
 		std::unique_ptr<facebook::jsi::Function> reject;
 		bool settled = false;
+		RNError cancellation_error;
 	};
 	struct Subscription {
+		RNExecutionOrigin origin;
 		String module_name;
 		StringName event;
 		String session_token;
@@ -62,6 +70,8 @@ class RNNativeModuleRegistry : public facebook::jsi::HostObject, public HermesRu
 	std::deque<NativeJob> jobs;
 	std::deque<NativeCompletion> completions;
 	std::deque<NativeEvent> events;
+	uint64_t event_bytes = 0;
+	uint64_t next_delivery = 1;
 	HashSet<String> cancelled_requests;
 	mutable std::mutex delivery_mutex;
 	uint64_t generation = 0;
@@ -91,13 +101,16 @@ public:
 	void begin_generation(uint64_t p_generation);
 	void close_surface(int p_root_tag, uint64_t p_epoch);
 	void process_jobs();
-	void deliver_locked(facebook::jsi::Runtime &p_runtime, uint64_t p_generation);
+	void process_frame(double p_now_ms);
+	void scene_binding_changed(ObjectID p_root);
+	size_t deliver_locked(facebook::jsi::Runtime &p_runtime, uint64_t p_generation, const std::function<void()> &p_checkpoint = {});
 	bool has_pending_work() const;
 	RNObjectRegistry &get_objects() { return objects; }
 	Dictionary get_module_metadata(const String &p_name) const;
 
 	void queue_completion(const String &p_request_token, uint64_t p_generation, const Variant &p_value, const RNError &p_error);
-	void queue_event(const String &p_module, const StringName &p_event, const String &p_session, uint64_t p_generation, const Variant &p_payload);
+	bool can_queue_event(uint64_t p_bytes) const;
+	bool queue_event(const String &p_module, const StringName &p_event, const String &p_session, uint64_t p_generation, const Variant &p_payload);
 	void cancel_request(const String &p_request_token, const RNError &p_error);
 
 	facebook::jsi::Value get(facebook::jsi::Runtime &p_runtime, const facebook::jsi::PropNameID &p_name) override;

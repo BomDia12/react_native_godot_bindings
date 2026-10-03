@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../input/rn_input_router.h"
+#include "../interop/rn_scene_binding.h"
 #include "../runtime/react_native_runtime_coordinator.h"
 
 #include "scene/gui/control.h"
@@ -14,6 +15,12 @@ class ReactNativeRootView : public Control {
 
 	friend class RNMountingManager;
 
+	std::shared_ptr<const RNSceneAttachment> scene_attachment;
+	uint64_t next_binding_identity = 1;
+	bool scene_target_available = false;
+	void _disconnect_scene_target();
+	void _scene_target_changed(bool p_available);
+	Callable alert_handler;
 	std::unique_ptr<RNMountingManager> mounting_manager;
 	RNInputRouter input_router;
 	String application_key = "GodotApp";
@@ -50,6 +57,12 @@ public:
 	String get_application_key() const { return application_key; }
 	int get_root_tag() const { return root_tag; }
 	void reload();
+	void set_alert_handler(const Callable &p_handler) { alert_handler = p_handler; }
+	Callable get_alert_handler() const { return alert_handler; }
+	bool complete_alert(const String &p_request, const Dictionary &p_result);
+	Dictionary attach_scene_binding(Object *p_target, const Ref<RNSceneBinding> &p_binding);
+	void detach_scene_binding();
+	std::shared_ptr<const RNSceneAttachment> get_scene_attachment() const { return scene_target_available ? scene_attachment : nullptr; }
 	void set_mount_failure_injection(int p_before_mutation, int p_after_mutation);
 
 	void mount(const Ref<RNShadowNode> &p_tree);

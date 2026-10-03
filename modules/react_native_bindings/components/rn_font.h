@@ -8,6 +8,7 @@ struct RNFontSnapshot {
 	Ref<Font> base;
 	Ref<Font> font;
 	int size = 16;
+	double multiplier = 1;
 	Color color = Color(1, 1, 1);
 	uint64_t revision = 0;
 };

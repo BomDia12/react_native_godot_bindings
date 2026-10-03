@@ -35,7 +35,9 @@ for (const dev of [false, true]) {
         assert.match(result.code, new RegExp(marker));
       }
       assert.doesNotMatch(result.code, /wrong-native-js|wrong-generic-js/);
-      const context = {console};
+      const context = {console, __godotScheduler: Object.fromEntries(
+        ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'now', 'requestIdleCallback', 'cancelIdleCallback'].map(name => [name, () => 0]),
+      )};
       context.globalThis = context;
       vm.runInNewContext(result.code, context);
       assert.equal(
