@@ -145,7 +145,7 @@ RefreshControl is pending; use an explicit Refresh button for network data.
 
 HTTP/fetch/XHR support complete responses, status, cancellation/timeout, redirects,
 verified TLS, decompression, multipart strings/Blob/local files, binary byte views and
-bounded in-memory cookies. XHR receives response/data/completion in order after native
+bounded in-memory host-only cookies; Domain attributes are rejected. XHR receives response/data/completion in order after native
 completion; incremental responseText/progress streaming is outside this subset.
 Text decoding preserves NUL and replaces invalid UTF-8. Blob/FileReader and object URLs
 use bounded native chunks and explicit/GC ownership. WebSocketPeer handles framing,

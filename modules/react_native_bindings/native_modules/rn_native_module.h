@@ -47,7 +47,7 @@ public:
 
 	void complete(const Variant &p_value) const;
 	void fail(const RNError &p_error) const;
-	void emit(const StringName &p_event, const Variant &p_payload) const;
+	bool emit(const StringName &p_event, const Variant &p_payload) const;
 };
 
 class RNNativeModule {

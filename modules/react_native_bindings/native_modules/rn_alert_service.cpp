@@ -138,7 +138,9 @@ void GodotAlerts::request(const Variant &p_origin, const Dictionary &p_payload, 
 		event["requestId"] = p_context.request_token;
 		event["rootTag"] = pending.origin.root_tag;
 		event["payload"] = pending.payload;
-		p_completion.emit("present", event);
+		if (!p_completion.emit("present", event)) {
+			discard(p_context.request_token, RNError::make(RNErrorCode::LIMIT, "custom presentation queue is full", "GodotAlerts.request"));
+		}
 	} else {
 		auto root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(pending.owner));
 		if (!root || !root->is_inside_tree()) {
@@ -217,7 +219,11 @@ void GodotAlerts::_selected(const String &p_request, int p_button) {
 }
 void GodotAlerts::_dismissed(const String &p_request) {
 	Request *pending = requests.getptr(p_request);
-	if (!pending || !bool(pending->payload["cancelable"])) {
+	if (!pending) {
+		return;
+	}
+	if (!bool(pending->payload["cancelable"])) {
+		callable_mp(this, &GodotAlerts::restore_dialog).call_deferred(p_request);
 		return;
 	}
 	Dictionary result;
@@ -225,6 +231,19 @@ void GodotAlerts::_dismissed(const String &p_request) {
 	result["dismissed"] = true;
 	RNError error;
 	complete_for(pending->owner, p_request, result, error);
+}
+void GodotAlerts::restore_dialog(const String &p_request) {
+	Request *pending = requests.getptr(p_request);
+	if (!pending) {
+		return;
+	}
+	auto root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(pending->owner));
+	auto dialog = Object::cast_to<AcceptDialog>(ObjectDB::get_instance(pending->dialog));
+	if (!root || !root->is_inside_tree() || !dialog || dialog->is_queued_for_deletion()) {
+		cancel(p_request);
+		return;
+	}
+	dialog->popup_centered();
 }
 void GodotAlerts::cancel(const String &p_request) {
 	discard(p_request, RNError::make(RNErrorCode::CANCELLED, "alert was canceled", "GodotAlerts"));

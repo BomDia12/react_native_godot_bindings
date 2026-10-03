@@ -13,6 +13,7 @@
 #include "servers/text/text_server.h"
 
 #include <cmath>
+#include <map>
 
 namespace {
 class RNApplicationServices : public RNNativeModule {
@@ -22,6 +23,7 @@ class RNApplicationServices : public RNNativeModule {
 	String previous_scheme;
 	String previous_app_state;
 	String override_scheme;
+	std::map<String, Dictionary> pending_events;
 	bool previous_focus = true;
 	int previous_keyboard_height = 0;
 
@@ -70,11 +72,20 @@ class RNApplicationServices : public RNNativeModule {
 		return shared ? shared->service_settings.color_scheme : String("light");
 	}
 	void emit(const String &p_name, const Variant &p_payload) {
+		Dictionary event;
+		event["name"] = p_name;
+		event["payload"] = p_payload;
+		const String key = p_name == "keyboardDidShow" || p_name == "keyboardDidHide" ? String("keyboard") : p_name;
+		pending_events[key] = event;
+	}
+	void flush_events() {
 		if (auto registry = context.registry.lock()) {
-			Dictionary event;
-			event["name"] = p_name;
-			event["payload"] = p_payload;
-			registry->queue_event("GodotServices", "event", "", context.generation, event);
+			for (auto entry = pending_events.begin(); entry != pending_events.end();) {
+				if (!registry->queue_event("GodotServices", "event", "", context.generation, entry->second)) {
+					break;
+				}
+				entry = pending_events.erase(entry);
+			}
 		}
 	}
 	void invalidate() {
@@ -242,7 +253,10 @@ public:
 			previous_focus = focus;
 			emit("appStateFocusChange", focus);
 		}
+		flush_events();
 	}
+	bool has_pending_work() const override { return !pending_events.empty(); }
+	void shutdown() override { pending_events.clear(); }
 };
 } //namespace
 bool rn_register_application_services(RNNativeModuleRegistry &p_registry, const std::shared_ptr<RNRuntimeCoordinatorState> &p_state, RNError &r_error) {

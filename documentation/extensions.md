@@ -223,3 +223,9 @@ The shared image service receives the pooled HTTP adapter before bundle evaluati
 Its start/complete/cancel contract and existing descriptor publication hooks remain as
 above; failed preparation starts no transport work. A module completion must honor the
 generation and release retained response ownership when delivery/conversion fails.
+
+`RNCompletionToken::emit` returns whether the bounded event queue accepted a
+notification. Producers must retain a bounded retry or fail/remove their pending work
+when it returns false. Custom Alert presentation rejects with `E_LIMIT` and removes its
+request when the presentation notification cannot be queued. Native noncancelable
+alerts reopen after a window-close attempt and remain available for a button choice.

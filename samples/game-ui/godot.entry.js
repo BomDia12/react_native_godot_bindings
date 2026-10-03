@@ -6,7 +6,7 @@ import GodotWindow from 'react-native-godot/GodotWindow';
 import {fontFamily} from 'react-native-godot/fonts';
 import '../../js/godot/bootstrap-finalize';
 
-import {runHTTPChecks, runSocketChecks} from './game/network';
+import {runHTTPChecks, runSocketChecks, runLowFPSDownload} from './game/network';
 const icon = require('./assets/item.png');
 const font = fontFamily(require('./assets/OpenSans.woff2'));
 const observations = global.__game = {enemies: {}, inventory: null, sequences: {}, events: [], rendered: [], network: []};
@@ -74,6 +74,7 @@ function GameInventory({rootTag}) {
       testAlert: (title = 'Inventory alert') => alert(title, 'Local policy', [{text: 'OK', onPress: () => record('inventory-alert-button')}], {cancelable: true}).then(() => record('alert-settled')).catch(error => {observations.alertError = error.code;}),
       ambientAlert: () => global.__godotScheduler.withoutOrigin(() => require('react-native/Libraries/Alert/Alert').default.alert('Unattributed', 'Godot handler', [{text: 'OK', onPress: () => record('ambient-alert-button')}])),
       staleAlert: () => savedAlert?.(),
+      lowFPSDownload: base => runLowFPSDownload(base).then(() => {observations.lowFPSDownload = true;}).catch(error => {observations.networkError = error.message;}),
       httpChecks: (base, https) => runHTTPChecks(base, https).then(evidence => {observations.httpEvidence = evidence;}).catch(error => {observations.networkError = error.message;}),
       socketChecks: url => runSocketChecks(url, update => queued('networkUpdate', [update])).then(evidence => {observations.socketEvidence = evidence;}).catch(error => {observations.networkError = error.message;}),
       alert: (...args) => alert(...args), modal: setModal, window: setWindowVisible,

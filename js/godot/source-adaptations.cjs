@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const adaptations = {
+  'Libraries/Blob/BlobManager.js': source => source.replace("import NativeBlobModule from './NativeBlobModule';", "import NativeBlobModule from './NativeBlobModule';\nimport Platform from '../Utilities/Platform';").replace('return acc + global.unescape(encodeURI(curr.data)).length;', "return acc + (Platform.OS === 'godot' ? require('react-native-godot/binary').utf8Encode(curr.data).length : global.unescape(encodeURI(curr.data)).length);"),
   'Libraries/vendor/emitter/EventEmitter.js': source => source.replace('    const registrations = allocate<', `    const origin = global.__godotScheduler?.getOrigin?.() ?? null;
     if (global.__godotScheduler?.withOrigin != null) {
       const callback = listener;

@@ -18,7 +18,6 @@ struct RNParsedURL {
 class RNCookieJar {
 	struct Cookie {
 		String name, value, domain, path;
-		bool host_only = true;
 		bool secure = false;
 		double expires = 0;
 		uint64_t order = 0;

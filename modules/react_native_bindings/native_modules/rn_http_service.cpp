@@ -210,7 +210,7 @@ void RNHTTPService::lease(size_t p_slot, uint64_t p_request) {
 	HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(slot.node));
 	if (!node) {
 		node = memnew(HTTPRequest);
-		node->set_use_threads(false);
+		node->set_use_threads(true);
 		node->set_process_mode(Node::PROCESS_MODE_ALWAYS);
 		add_child(node);
 		slot.node = node->get_instance_id();

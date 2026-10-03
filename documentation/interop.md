@@ -124,9 +124,16 @@ are callable; there is no unrestricted reflection from JS.
 and `useGodotScene(rootTag)`. Responses carry `ready`, opaque `binding`, monotonic
 `sequence`, `event`, `payload`, capability and schemaVersion. Subscribe, look up and read;
 ignore older sequences. The hook waits for readiness, re-reads snapshots and closes its
-session/subscription on cleanup. Handles cannot cross sessions, even on the same root.
+session/subscription on cleanup. When the event queue is full, each session retains
+one resynchronization flag. A later `resync` notification carries current readiness and
+handle with a null payload; consumers re-read the snapshot. Intermediate signal payloads
+may coalesce under backpressure. Handles cannot cross sessions, even on the same root.
 All scene operations run on Godot's main thread. A sync script can trigger root reload;
 the coordinator defers runtime lifecycle work until the current Hermes call returns.
+
+Application state events retain at most one latest notification per dimensions,
+appearance, app state, keyboard and focus channel while the native queue is full. Native
+layout invalidation proceeds immediately; notification retries do not repeat it.
 
 ## Scheduling, binary and transport ownership
 
@@ -141,7 +148,8 @@ Root-origin scopes are retained for timers and listener registrations; microtask
 unattributed, so asynchronous app flows should retain `useGodotAlert()` explicitly.
 
 General interop strings reject embedded NUL. Networking text uses byte transport and JS
-UTF-8 decoding, preserving NUL and replacement characters. Binary facades never enlarge
+UTF-8 encoding/decoding, preserving NUL and replacing lone UTF-16 surrogates or
+malformed UTF-8 with U+FFFD. Binary facades never enlarge
 the 16 MiB codec ceiling: native read/append chunks are at most 1 MiB. FileReader yields
 between chunks, supports abort and pins native backing until completion/cancellation.
 Blob collectors enqueue an atomic release marker without touching SceneTree/Hermes;
@@ -157,13 +165,21 @@ queued work; active cancellation still completes its reservation. Credentials is
 image cache/deduplication; no-store/no-cache stays uncacheable. Redirect hops apply cookies
 and final URLs; query-only/fragment/relative references retain the current URL context
 and normalize literal dot segments. Cross-origin sensitive headers are removed. Cookies are bounded and
-in-memory, without a complete browser persistence/public-suffix policy.
+in-memory and host-only. Set-Cookie headers with any Domain attribute are rejected;
+parent-domain and public-suffix cookies are outside this subset. Path, Secure and expiry
+rules still apply. There is no browser persistence.
+
+HTTPRequest uses Godot worker threads, bounded by the active request limit. Network
+progress continues independently of render FPS. Completion callbacks are deferred onto
+the main thread, and cancellation joins the worker before the lease drains.
 
 WebSocketPeer owns protocol framing/TLS. Polling continues through CLOSING, with limits
 on peers, messages, queues, retained bytes and packets delivered per frame. A message can
 overshoot the per-frame byte target once so a legal packet cannot starve. Normal close,
 failure, cancellation and generation reset release native peers once.
 Open notifications retry when the native event queue is full, before messages are delivered.
+Handshake/connect/packet failures and close notifications retain the peer until terminal
+delivery is accepted, then release it once.
 
 ## Editor service limits
 

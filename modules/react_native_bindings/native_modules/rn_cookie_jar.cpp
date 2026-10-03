@@ -134,11 +134,7 @@ void RNCookieJar::receive(const String &p_url, const PackedStringArray &p_header
 			if (name == "secure") {
 				cookie.secure = true;
 			} else if (name == "domain") {
-				cookie.domain = value.trim_prefix(".").to_lower();
-				cookie.host_only = false;
-				if (cookie.domain.is_empty() || (url.host != cookie.domain && !url.host.ends_with("." + cookie.domain)) || (!cookie.domain.contains(".") && cookie.domain != "localhost")) {
-					valid = false;
-				}
+				valid = false;
 			} else if (name == "path" && value.begins_with("/")) {
 				cookie.path = value;
 			} else if (name == "max-age" && value.is_valid_int()) {
@@ -181,7 +177,7 @@ String RNCookieJar::header(const String &p_url, double p_now) {
 	std::vector<const Cookie *> selected;
 	const String path = url.path.get_slice("?", 0);
 	for (const auto &cookie : cookies) {
-		const bool domain = url.host == cookie.domain || (!cookie.host_only && url.host.ends_with("." + cookie.domain));
+		const bool domain = url.host == cookie.domain;
 		const bool matches = path == cookie.path || (path.begins_with(cookie.path) && (cookie.path.ends_with("/") || path.substr(cookie.path.length(), 1) == "/"));
 		if (domain && matches && (!cookie.secure || url.scheme == "https")) {
 			selected.push_back(&cookie);

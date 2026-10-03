@@ -7,5 +7,6 @@
   "Libraries/Components/Touchable/TouchableOpacity.js": "d1e90d0d5846866ccb1cc5ab35c6775379c2deb39bcd2c3e38c0a7b0d1fcd4bb",
   "Libraries/WebSocket/WebSocket.js": "722508694e0fb0d7cd7878421801d3e9df2b119b79775320ee832870628f2569",
   "Libraries/Blob/FileReader.js": "a0a1244ea1bd20007bdef6b4b9279ac12a3ad93576dc7914c1e573d3a55c904b",
-  "Libraries/vendor/emitter/EventEmitter.js": "adb61a5de47f0b89f72da0f27a69a9631cf60257beb9b0bc7b5830c081c0e221"
+  "Libraries/vendor/emitter/EventEmitter.js": "adb61a5de47f0b89f72da0f27a69a9631cf60257beb9b0bc7b5830c081c0e221",
+  "Libraries/Blob/BlobManager.js": "aeaa78b92cb1d5a58773a9deeb44f85f98b3255f8099b2a6b9551e8a70e87ee1"
 }

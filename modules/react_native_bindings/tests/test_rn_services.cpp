@@ -3,9 +3,14 @@
 #include "../components/rn_text_control.h"
 #include "../fabric/rn_shadow_node.h"
 #include "../interop/rn_scene_binding.h"
+#include "../native_modules/rn_alert_service.h"
+#include "../native_modules/rn_application_services.h"
 #include "../native_modules/rn_blob_service.h"
 #include "../native_modules/rn_cookie_jar.h"
+#include "../native_modules/rn_godot_scene_module.h"
 #include "../native_modules/rn_websocket_module.h"
+#include "../root_view/react_native_root_view.h"
+#include "../runtime/react_native_runtime_coordinator.h"
 #include "../runtime/rn_service_settings.h"
 #include "../singletons/hermes_runtime_singleton.h"
 
@@ -21,6 +26,7 @@ class SocketFixturePeer : public WebSocketPeer {
 	bool packet_available = true;
 
 public:
+	static inline int failure_mode = 0;
 	using Factory = WebSocketPeer *(*)(bool);
 	static Factory exchange_factory(Factory p_factory) {
 		const Factory previous = _create;
@@ -30,7 +36,12 @@ public:
 	static WebSocketPeer *create_fixture(bool p_notify) {
 		return static_cast<WebSocketPeer *>(ClassDB::creator<SocketFixturePeer>(p_notify));
 	}
-	Error connect_to_url(const String &, const Ref<TLSOptions> &) override { return OK; }
+	Error connect_to_url(const String &, const Ref<TLSOptions> &) override {
+		if (failure_mode == 1 || failure_mode == 2) {
+			state = STATE_CLOSED;
+		}
+		return failure_mode == 2 ? ERR_CANT_CONNECT : OK;
+	}
 	Error accept_stream(const Ref<StreamPeer> &) override { return ERR_UNAVAILABLE; }
 	Error send(const uint8_t *, int, WriteMode) override { return OK; }
 	void close(int = 1000, const String & = "") override { state = STATE_CLOSED; }
@@ -50,6 +61,9 @@ public:
 	int get_close_code() const override { return 1000; }
 	String get_close_reason() const override { return String(); }
 	Error get_packet(const uint8_t **r_buffer, int &r_size) override {
+		if (failure_mode == 3) {
+			return ERR_CANT_CONNECT;
+		}
 		static const uint8_t packet[] = { 'h', 'i' };
 		*r_buffer = packet;
 		r_size = 2;
@@ -57,12 +71,15 @@ public:
 		return OK;
 	}
 	Error put_packet(const uint8_t *, int) override { return OK; }
-	int get_available_packet_count() const override { return packet_available ? 1 : 0; }
+	int get_available_packet_count() const override { return state == STATE_OPEN && packet_available ? 1 : 0; }
 	int get_max_packet_size() const override { return 2; }
 };
 struct SocketFactoryGuard {
 	SocketFixturePeer::Factory previous = SocketFixturePeer::exchange_factory(SocketFixturePeer::create_fixture);
-	~SocketFactoryGuard() { SocketFixturePeer::exchange_factory(previous); }
+	~SocketFactoryGuard() {
+		SocketFixturePeer::exchange_factory(previous);
+		SocketFixturePeer::failure_mode = 0;
+	}
 };
 Dictionary schema(const String &p_name) {
 	Dictionary result;
@@ -362,6 +379,216 @@ TEST_CASE("[ReactNativeBindings][WebSocket] a full native queue retries open bef
 	CHECK(runtime->evaluate("socketEvents.length") == Variant(2));
 	runtime->reset();
 	runtime->uninstall_host_object("__testSockets");
+}
+TEST_CASE("[ReactNativeBindings][Cookies] Domain attributes cannot cross registrants or shared hosting tenants") {
+	RNCookieJar jar(8, 4096);
+	for (const String &host : { String("attacker.co.uk"), String("tenant.github.io"), String("sub.example.test") }) {
+		PackedStringArray headers;
+		headers.push_back("Set-Cookie: attack=one; Domain=" + host.substr(host.find(".") + 1) + "; Path=/");
+		headers.push_back("Set-Cookie: exact=two; Domain=" + host + "; Path=/");
+		headers.push_back("Set-Cookie: local=three; Path=/");
+		jar.receive("https://" + host + "/", headers, 100);
+		CHECK(jar.header("https://" + host + "/", 100) == "local=three");
+		CHECK(jar.header("https://victim.co.uk/", 100).is_empty());
+		CHECK(jar.header("https://other.github.io/", 100).is_empty());
+		CHECK(jar.header("https://child." + host + "/", 100).is_empty());
+		jar.clear();
+	}
+}
+TEST_CASE("[ReactNativeBindings][WebSocket] failed handshakes and inbound errors survive a full native queue once") {
+	SocketFactoryGuard guard;
+	SUBCASE("closed handshake") {
+		SocketFixturePeer::failure_mode = 1;
+	}
+	SUBCASE("immediate connect failure") {
+		SocketFixturePeer::failure_mode = 2;
+	}
+	SUBCASE("inbound packet failure") {
+		SocketFixturePeer::failure_mode = 3;
+	}
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	runtime->reset();
+	const uint64_t generation = runtime->get_runtime_generation();
+	auto registry = std::make_shared<RNNativeModuleRegistry>(std::shared_ptr<RNRuntimeCoordinatorState>());
+	registry->begin_generation(generation);
+	RNServiceSettings settings;
+	RNError error;
+	REQUIRE(RNServiceSettings::snapshot(settings, error));
+	REQUIRE(rn_register_websocket_module(*registry, [settings] { return settings; }, [] { return std::shared_ptr<RNBlobService>(); }, error));
+	runtime->install_host_object("__testFailure", registry);
+	runtime->evaluate("globalThis.failedEvents=[];globalThis.ws=__testFailure.get('GodotWebSocket');ws.onEvent(event=>{if(event.name!=='blocked')failedEvents.push(event.name);});ws.connect('ws://localhost/test',[],{},123);undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	Dictionary payload;
+	payload["name"] = "blocked";
+	payload["payload"] = Dictionary();
+	for (int i = 0; i < 1024; ++i) {
+		REQUIRE(registry->queue_event("GodotWebSocket", "event", "", generation, payload));
+	}
+	registry->process_frame(0);
+	CHECK(runtime->evaluate("JSON.stringify(failedEvents)") == Variant("[]"));
+	CHECK(runtime->evaluate("ws.stats().peers") == Variant(1));
+	for (int i = 0; i < 4; ++i) {
+		runtime->dispatch_native_module_deliveries(registry);
+	}
+	for (int i = 0; i < 3; ++i) {
+		registry->process_frame(i + 1);
+		runtime->dispatch_native_module_deliveries(registry);
+	}
+	CHECK(runtime->evaluate("failedEvents.filter(name=>name==='websocketFailed').length") == Variant(1));
+	CHECK(runtime->evaluate("ws.stats().peers") == Variant(0));
+	CHECK(runtime->evaluate("failedEvents.includes('websocketClosed')") == Variant(false));
+	runtime->reset();
+	runtime->uninstall_host_object("__testFailure");
+}
+TEST_CASE("[ReactNativeBindings][Services] blocked application events coalesce the final state without repeated native invalidation") {
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	runtime->reset();
+	const uint64_t generation = runtime->get_runtime_generation();
+	auto state = std::make_shared<RNRuntimeCoordinatorState>();
+	auto registry = std::make_shared<RNNativeModuleRegistry>(state);
+	registry->begin_generation(generation);
+	RNError error;
+	REQUIRE(rn_register_application_services(*registry, state, error));
+	runtime->install_host_object("__testServices", registry);
+	runtime->evaluate("globalThis.serviceEvents=[];globalThis.services=__testServices.get('GodotServices');services.getState();services.onEvent(event=>{if(event.name!=='blocked')serviceEvents.push(event);});undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	registry->process_frame(0);
+	runtime->dispatch_native_module_deliveries(registry);
+	runtime->evaluate("serviceEvents.length=0;undefined;");
+	Dictionary payload;
+	payload["name"] = "blocked";
+	payload["payload"] = Dictionary();
+	for (int i = 0; i < 1024; ++i) {
+		REQUIRE(registry->queue_event("GodotServices", "event", "", generation, payload));
+	}
+	state->font_scale = 2;
+	state->application_paused = true;
+	runtime->evaluate("services.setColorScheme('dark');undefined;");
+	state->font_scale = 3;
+	runtime->evaluate("services.setColorScheme('light');undefined;");
+	const uint64_t revision = state->metrics_revision;
+	registry->process_frame(1);
+	CHECK(state->metrics_revision == revision);
+	CHECK(runtime->evaluate("serviceEvents.length") == Variant(0));
+	for (int i = 0; i < 4; ++i) {
+		runtime->dispatch_native_module_deliveries(registry);
+	}
+	registry->process_frame(2);
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(runtime->evaluate("serviceEvents.length") == Variant(3));
+	CHECK(runtime->evaluate("serviceEvents.find(event=>event.name==='didUpdateDimensions').payload.window.fontScale") == Variant(3));
+	CHECK(runtime->evaluate("serviceEvents.find(event=>event.name==='appearanceChanged').payload.colorScheme") == Variant("light"));
+	CHECK(runtime->evaluate("serviceEvents.find(event=>event.name==='appStateDidChange').payload.app_state") == Variant("background"));
+	registry->process_frame(3);
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(runtime->evaluate("serviceEvents.length") == Variant(3));
+	runtime->reset();
+	runtime->uninstall_host_object("__testServices");
+}
+struct SceneServiceFixture {
+	HermesRuntimeSingleton *runtime = HermesRuntimeSingleton::get_singleton();
+	ReactNativeRootView *root = memnew(ReactNativeRootView);
+	std::shared_ptr<RNRuntimeCoordinatorState> state = std::make_shared<RNRuntimeCoordinatorState>();
+	std::shared_ptr<RNNativeModuleRegistry> registry;
+	uint64_t generation;
+	SceneServiceFixture() {
+		runtime->reset();
+		generation = runtime->get_runtime_generation();
+		RNSurfaceRoute route;
+		route.root_tag = 11;
+		route.root_view_id = root->get_instance_id();
+		route.runtime_generation = generation;
+		route.surface_epoch = 1;
+		route.status = RNSurfaceStatus::ACTIVE;
+		state->routes[11] = route;
+		registry = std::make_shared<RNNativeModuleRegistry>(state);
+		registry->begin_generation(generation);
+		runtime->install_host_object("__testScene", registry);
+	}
+	~SceneServiceFixture() {
+		runtime->reset();
+		runtime->uninstall_host_object("__testScene");
+		GodotAlerts::get_singleton()->configure(ReactNativeRuntimeCoordinator::get_singleton()->get_state());
+		memdelete(root);
+	}
+};
+TEST_CASE("[ReactNativeBindings][SceneBinding] full queues eventually resynchronize signals and replacement handles") {
+	SceneServiceFixture fixture;
+	RNError error;
+	REQUIRE(rn_register_godot_scene_module(*fixture.registry, error));
+	Ref<Resource> target;
+	target.instantiate();
+	Ref<RNSceneBinding> resource;
+	resource.instantiate();
+	resource->set_capability("ResourceProbe");
+	resource->set_snapshot_method("get_path");
+	resource->set_snapshot_schema(schema("string"));
+	Dictionary payload_schema = schema("record");
+	payload_schema["fields"] = Dictionary();
+	Dictionary signal;
+	signal["event"] = "updated";
+	signal["arguments"] = Array();
+	signal["payload"] = payload_schema;
+	Dictionary signals;
+	signals["changed"] = signal;
+	resource->set_signals(signals);
+	REQUIRE(fixture.root->attach_scene_binding(target.ptr(), resource).is_empty());
+	fixture.runtime->evaluate("globalThis.sceneEvents=[];globalThis.session=__testScene.openSession(11);const scene=__testScene.get('GodotScene');scene.onChanged(session,event=>{if(event.event!=='blocked')sceneEvents.push(event);});globalThis.before=scene.getBinding(session);undefined;");
+	REQUIRE(fixture.runtime->get_last_error().is_empty());
+	fixture.runtime->dispatch_native_module_deliveries(fixture.registry);
+	fixture.runtime->evaluate("sceneEvents.length=0;undefined;");
+	const String session = fixture.runtime->get_global("session");
+	Dictionary payload;
+	payload["event"] = "blocked";
+	for (int i = 0; i < 1024; ++i) {
+		REQUIRE(fixture.registry->queue_event("GodotScene", "changed", session, fixture.generation, payload));
+	}
+	target->emit_changed();
+	fixture.registry->process_frame(0);
+	CHECK(fixture.runtime->evaluate("sceneEvents.length") == Variant(0));
+	for (int i = 0; i < 4; ++i) {
+		fixture.runtime->dispatch_native_module_deliveries(fixture.registry);
+	}
+	fixture.registry->process_frame(1);
+	fixture.runtime->dispatch_native_module_deliveries(fixture.registry);
+	CHECK(fixture.runtime->evaluate("sceneEvents.length===1 && sceneEvents[0].event==='resync' && sceneEvents[0].sequence>before.sequence && sceneEvents[0].binding===before.binding") == Variant(true));
+	for (int i = 0; i < 1024; ++i) {
+		REQUIRE(fixture.registry->queue_event("GodotScene", "changed", session, fixture.generation, payload));
+	}
+	REQUIRE(fixture.root->attach_scene_binding(target.ptr(), resource).is_empty());
+	fixture.registry->scene_binding_changed(fixture.root->get_instance_id());
+	for (int i = 0; i < 4; ++i) {
+		fixture.runtime->dispatch_native_module_deliveries(fixture.registry);
+	}
+	fixture.registry->process_frame(2);
+	fixture.runtime->dispatch_native_module_deliveries(fixture.registry);
+	CHECK(fixture.runtime->evaluate("sceneEvents.length===2 && sceneEvents[1].ready && sceneEvents[1].binding!==before.binding && sceneEvents[1].sequence>sceneEvents[0].sequence") == Variant(true));
+	fixture.registry->process_frame(3);
+	fixture.runtime->dispatch_native_module_deliveries(fixture.registry);
+	CHECK(fixture.runtime->evaluate("sceneEvents.length") == Variant(2));
+}
+TEST_CASE("[ReactNativeBindings][Alerts] a full custom presentation queue rejects and removes the pending request") {
+	SceneServiceFixture fixture;
+	GodotAlerts::get_singleton()->configure(fixture.state);
+	RNError error;
+	REQUIRE(rn_register_alert_module(*fixture.registry, error));
+	fixture.runtime->evaluate("globalThis.session=__testScene.openSession(11);globalThis.alerts=__testScene.get('GodotAlert');globalThis.origin=alerts.getOrigin(session);undefined;");
+	REQUIRE(fixture.runtime->get_last_error().is_empty());
+	for (int i = 0; i < 1024; ++i) {
+		REQUIRE(fixture.registry->queue_event("GodotAlert", "present", "", fixture.generation, Dictionary()));
+	}
+	fixture.runtime->evaluate("globalThis.alertResult='pending';const request=alerts.__godotStartAsync('request',[origin,{title:'Test',message:'Message',buttons:[{text:'OK'}],cancelable:false},'custom',session]);globalThis.alertRequest=request.requestId;request.promise.then(()=>{alertResult='resolved';},error=>{alertResult=error.code;});undefined;");
+	REQUIRE(fixture.runtime->get_last_error().is_empty());
+	fixture.registry->process_jobs();
+	for (int i = 0; i < 5; ++i) {
+		fixture.runtime->dispatch_native_module_deliveries(fixture.registry);
+	}
+	CHECK(fixture.runtime->get_global("alertResult") == Variant(RNErrorCode::LIMIT));
+	Dictionary result;
+	result["buttonId"] = 0;
+	result["dismissed"] = false;
+	CHECK_FALSE(GodotAlerts::get_singleton()->reply(fixture.runtime->get_global("session"), fixture.runtime->get_global("alertRequest"), result, error));
+	CHECK(error.code == RNErrorCode::CANCELLED);
 }
 } //namespace TestRNServices
 void rn_force_link_service_tests() {}

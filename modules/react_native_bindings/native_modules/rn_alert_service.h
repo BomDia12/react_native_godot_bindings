@@ -26,6 +26,7 @@ class GodotAlerts : public Object {
 	bool bubble(const String &p_request, RNError &r_error);
 	void _selected(const String &p_request, int p_button);
 	void _dismissed(const String &p_request);
+	void restore_dialog(const String &p_request);
 	void discard(const String &p_request, const RNError &p_error);
 
 protected:

@@ -27,10 +27,10 @@ production HTTP and sockets use Godot's native transports.
 | Gate | Result |
 |---|---|
 | Pinned dev editor/module build, tests and warnings as errors | Passed |
-| Module contracts | 100 cases, 6,157 assertions passed |
+| Module contracts | 105 cases, 13,384 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
-| JavaScript contracts, after `npm ci` in both packages | 19 tests passed per package |
+| JavaScript contracts, after `npm ci` in both packages | 22 tests passed per package |
 | Complete headless suite | All 19 discovered manifests passed |
 | Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
 | Formatting, tracked smoke inputs and engine provenance | Passed |
@@ -48,7 +48,8 @@ per-callback Hermes checkpoints and enqueue-ordered native events/completions;
 typed Dictionary schemas/defaults and unrelated script capabilities; session and
 surface isolation; native inherited/capped/disabled font scaling; settings bounds;
 Blob chunks exceeding the codec ceiling, collector reclamation and URL/native
-pins; and cookie scope/expiry/bounds.
+pins; cookie scope/expiry/bounds and cross-registrant isolation; and event queue
+saturation across sockets, scene bindings, application state and custom Alerts.
 
 Review regressions additionally verify that continuously due intervals rotate
 behind waiting timers/rAF, relative redirects preserve paths/queries/fragments,
@@ -95,6 +96,12 @@ Use clang-format 18, matching Ubuntu 24.04 CI; newer versions format constructor
 initializers differently. The initial CI formatting failure was corrected with
 clang-format 18.1.8 and its full formatting gate passed locally.
 See [demo instructions](../samples/game-ui/DEMO.md) for interactive play.
+
+The review regressions also verify replacement UTF-8 for lone UTF-16 surrogates in
+Blob/HTTP/WebSocket strings, a 2 MiB HTTP download within a 1.5-second deadline at
+5 FPS, and noncancelable native alert recovery after window close. Native services
+retain bounded resynchronization/state notifications or reject unavailable custom
+presentation explicitly. Cookies are host-only; Domain attributes are rejected.
 
 ## Display and input-method boundary
 

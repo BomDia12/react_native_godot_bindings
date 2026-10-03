@@ -20,6 +20,10 @@ export async function runHTTPChecks(base, https) {
     reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsText(value);
   });
   check(await read(slice) === '\0bc', 'Blob parts and slices');
+  const surrogateBlob = new Blob(['a\ud800b\udc00']);
+  check(surrogateBlob.size === 8 && await read(surrogateBlob) === 'a\ufffdb\ufffd', 'Blob lone surrogates use replacement UTF-8');
+  check(await fetchText('/echo', {method: 'POST', body: 'a\ud800b\udc00'}) === 'a\ufffdb\ufffd', 'HTTP lone surrogates use replacement UTF-8');
+  surrogateBlob.close();
   const form = new FormData();
   form.append('label', 'hello');
   form.append('file', {uri: 'res://assets/item.png', name: 'item.png', type: 'image/png'});
@@ -147,15 +151,15 @@ export async function runSocketChecks(url, applyUpdate) {
     let messages = 0;
     socket.onopen = () => {
       if (socket.protocol !== 'fixture') {reject(new Error('subprotocol was not negotiated')); return;}
-      evidence.push('native subprotocol'); socket.send('echo');
+      evidence.push('native subprotocol'); socket.send('echo\ud800');
     };
     socket.onerror = () => reject(new Error('socket failed'));
     socket.onmessage = async event => {
       try {
         messages++;
         if (messages === 1) {
-          if (event.data !== 'echo') {throw new Error('native text echo');}
-          evidence.push('native text'); socket.send(new Uint8Array([9, 65, 0, 66, 9]).subarray(1, 4));
+          if (event.data !== 'echo\ufffd') {throw new Error('native text echo');}
+          evidence.push('native text lone surrogate replacement'); socket.send(new Uint8Array([9, 65, 0, 66, 9]).subarray(1, 4));
         } else if (messages === 2) {
           const bytes = new Uint8Array(event.data);
           if (bytes.length !== 3 || bytes[0] !== 65 || bytes[1] !== 0 || bytes[2] !== 66) {throw new Error('native binary echo');}
@@ -169,5 +173,17 @@ export async function runSocketChecks(url, applyUpdate) {
       if (messages !== 3 || event.code !== 1000 || !event.wasClean) {reject(new Error('clean close did not complete: ' + JSON.stringify({messages, code: event.code, clean: event.wasClean}))); return;}
       evidence.push('clean close'); resolve(evidence);
     };
+  });
+}
+
+export function runLowFPSDownload(base) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', base + '/large?bytes=2097152');
+    xhr.timeout = 1500;
+    xhr.onload = () => xhr.status === 200 && xhr.responseText.length === 2097152 ? resolve(true) : reject(new Error('Low FPS download was incomplete'));
+    xhr.onerror = () => reject(new Error('Low FPS download failed'));
+    xhr.ontimeout = () => reject(new Error('Low FPS download exceeded its deadline'));
+    xhr.send();
   });
 }

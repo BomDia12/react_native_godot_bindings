@@ -48,6 +48,7 @@ class RNGodotSceneModule : public RNNativeModule {
 		ObjectID root;
 		std::shared_ptr<const RNSceneAttachment> attachment;
 		String handle;
+		bool needs_resync = false;
 		Vector<Connection> connections;
 	};
 	HashMap<String, Binding> bindings;
@@ -80,11 +81,11 @@ class RNGodotSceneModule : public RNNativeModule {
 		}
 		return value;
 	}
-	void publish(const Binding &p_binding, const StringName &p_event, const Variant &p_payload) {
+	void publish(Binding &p_binding, const StringName &p_event, const Variant &p_payload) {
 		ERR_FAIL_COND_MSG(sequence >= 9007199254740991ULL, "Scene sequence exhausted.");
 		++sequence;
 		if (auto registry = p_binding.context.registry.lock()) {
-			registry->queue_event("GodotScene", "changed", p_binding.context.session_token, p_binding.context.generation, envelope(p_binding, p_event, p_payload));
+			p_binding.needs_resync = !registry->queue_event("GodotScene", "changed", p_binding.context.session_token, p_binding.context.generation, envelope(p_binding, p_event, p_payload));
 		}
 	}
 	bool refresh(Binding &p_binding, RNError &r_error) {
@@ -270,7 +271,20 @@ public:
 				RNError error;
 				refresh(entry.value, error);
 			}
+			if (entry.value.needs_resync) {
+				if (auto registry = entry.value.context.registry.lock()) {
+					entry.value.needs_resync = !registry->queue_event("GodotScene", "changed", entry.key, entry.value.context.generation, envelope(entry.value, "resync", Variant()));
+				}
+			}
 		}
+	}
+	bool has_pending_work() const override {
+		for (const auto &entry : bindings) {
+			if (entry.value.needs_resync) {
+				return true;
+			}
+		}
+		return false;
 	}
 	void shutdown() override {
 		for (auto &entry : bindings) {

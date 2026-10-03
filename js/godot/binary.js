@@ -5,8 +5,23 @@ export const CHUNK_BYTES = 1024 * 1024;
 export const binaryService = () => global.__godotNativeModules.get('GodotBinary');
 export const descriptor = data => ({blobId: data.blobId, offset: data.offset, size: data.size, type: data.type ?? ''});
 export function utf8Encode(text) {
-  const encoded = unescape(encodeURIComponent(text));
-  return Uint8Array.from(encoded, value => value.charCodeAt(0));
+  const value = String(text);
+  let size = 0;
+  for (const character of value) {
+    const code = character.codePointAt(0);
+    size += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const character of value) {
+    let code = character.codePointAt(0);
+    if (code >= 0xd800 && code <= 0xdfff) {code = 0xfffd;}
+    if (code < 0x80) {bytes[offset++] = code;}
+    else if (code < 0x800) {bytes[offset++] = 0xc0 | (code >> 6); bytes[offset++] = 0x80 | (code & 63);}
+    else if (code < 0x10000) {bytes[offset++] = 0xe0 | (code >> 12); bytes[offset++] = 0x80 | ((code >> 6) & 63); bytes[offset++] = 0x80 | (code & 63);}
+    else {bytes[offset++] = 0xf0 | (code >> 18); bytes[offset++] = 0x80 | ((code >> 12) & 63); bytes[offset++] = 0x80 | ((code >> 6) & 63); bytes[offset++] = 0x80 | (code & 63);}
+  }
+  return bytes;
 }
 export function utf8Decode(bytes) {
   const output = [];

@@ -17,6 +17,7 @@ class RNWebSocketModule : public RNNativeModule {
 		Ref<WebSocketPeer> peer;
 		RNCallContext context;
 		bool opened = false;
+		String failure;
 		bool closing = false;
 		bool forced = false;
 		double close_deadline = 0;
@@ -97,10 +98,8 @@ public:
 			socket.peer->set_handshake_headers(native_headers);
 			const Error error = socket.peer->connect_to_url(url, TLSOptions::client());
 			if (error != OK) {
-				Dictionary payload;
-				payload["message"] = vformat("WebSocket connect failed (%d)", error);
-				emit(socket, "websocketFailed", id, payload);
-				return RNModuleResult::success();
+				socket.failure = vformat("WebSocket connect failed (%d)", error);
+				socket.peer->close(-1);
 			}
 			sockets.emplace(id, std::move(socket));
 			return RNModuleResult::success();
@@ -172,6 +171,14 @@ public:
 		std::vector<int> closed;
 		for (auto &entry : sockets) {
 			Socket &socket = entry.second;
+			if (!socket.failure.is_empty()) {
+				Dictionary payload;
+				payload["message"] = socket.failure;
+				if (emit(socket, "websocketFailed", entry.first, payload)) {
+					closed.push_back(entry.first);
+				}
+				continue;
+			}
 			socket.peer->poll();
 			auto state = socket.peer->get_ready_state();
 			if (state == WebSocketPeer::STATE_OPEN && !socket.opened && !socket.closing) {
@@ -193,11 +200,8 @@ public:
 				int size = 0;
 				const Error error = socket.peer->get_packet(&data, size);
 				if (error != OK || size > settings.limit("network/websocket/max_message_bytes")) {
-					Dictionary payload;
-					payload["message"] = "Socket inbound message exceeds limit or failed";
-					emit(socket, "websocketFailed", entry.first, payload);
+					socket.failure = "Socket inbound message exceeds limit or failed";
 					socket.peer->close(-1);
-					closed.push_back(entry.first);
 					break;
 				}
 				PackedByteArray packet;
@@ -212,7 +216,7 @@ public:
 				++packets;
 				bytes += size;
 			}
-			if (std::find(closed.begin(), closed.end(), entry.first) != closed.end()) {
+			if (!socket.failure.is_empty()) {
 				continue;
 			}
 			if (socket.closing && state != WebSocketPeer::STATE_CLOSED && double(OS::get_singleton()->get_ticks_usec()) / 1000 >= socket.close_deadline) {
@@ -225,7 +229,9 @@ public:
 				const int code = socket.peer->get_close_code();
 				if (!socket.opened && !socket.closing) {
 					payload["message"] = "Socket handshake failed";
-					emit(socket, "websocketFailed", entry.first, payload);
+					if (!emit(socket, "websocketFailed", entry.first, payload)) {
+						continue;
+					}
 				} else {
 					payload["code"] = code > 0 ? code : 1006;
 					payload["reason"] = socket.peer->get_close_reason();

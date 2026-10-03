@@ -22,10 +22,11 @@ void RNCompletionToken::fail(const RNError &p_error) const {
 	}
 }
 
-void RNCompletionToken::emit(const StringName &p_event, const Variant &p_payload) const {
+bool RNCompletionToken::emit(const StringName &p_event, const Variant &p_payload) const {
 	if (std::shared_ptr<RNNativeModuleRegistry> owner = registry.lock()) {
-		owner->queue_event(module_name, p_event, session_token, generation, p_payload);
+		return owner->queue_event(module_name, p_event, session_token, generation, p_payload);
 	}
+	return false;
 }
 
 void RNNativeModule::start_async(const StringName &p_method, const Array &p_arguments, const RNCallContext &p_context, const RNCompletionToken &p_completion) {
