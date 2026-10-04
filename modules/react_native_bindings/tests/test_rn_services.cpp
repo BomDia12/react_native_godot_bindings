@@ -8,6 +8,7 @@
 #include "../native_modules/rn_blob_service.h"
 #include "../native_modules/rn_cookie_jar.h"
 #include "../native_modules/rn_godot_scene_module.h"
+#include "../native_modules/rn_http_service.h"
 #include "../native_modules/rn_websocket_module.h"
 #include "../root_view/react_native_root_view.h"
 #include "../runtime/react_native_runtime_coordinator.h"
@@ -15,7 +16,10 @@
 #include "../singletons/hermes_runtime_singleton.h"
 
 #include "core/config/project_settings.h"
+#include "core/object/message_queue.h"
 #include "scene/2d/node_2d.h"
+#include "scene/main/scene_tree.h"
+#include "scene/main/window.h"
 #include "tests/test_macros.h"
 
 #include "modules/websocket/websocket_peer.h"
@@ -631,6 +635,41 @@ TEST_CASE("[ReactNativeBindings][Blob] collecting one wrapper preserves live sib
 	CHECK(service->count() == 0);
 	CHECK(service->used_bytes() == 0);
 	runtime->uninstall_host_object("__collectors");
+}
+TEST_CASE("[ReactNativeBindings][HTTP][SceneTree] immediate native start failures leave no owned request tokens") {
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	runtime->reset();
+	RNServiceSettings settings;
+	RNError error;
+	REQUIRE(RNServiceSettings::snapshot(settings, error));
+	auto service = std::shared_ptr<RNHTTPService>(memnew(RNHTTPService(settings)), [](RNHTTPService *p_service) { memdelete(p_service); });
+	SceneTree::get_singleton()->get_root()->add_child(service.get());
+	auto blobs = std::make_shared<RNBlobService>(1024);
+	auto registry = std::make_shared<RNNativeModuleRegistry>(std::shared_ptr<RNRuntimeCoordinatorState>());
+	registry->begin_generation(runtime->get_runtime_generation());
+	REQUIRE(rn_register_http_module(*registry, [service] { return service; }, [blobs] { return blobs; }, error));
+	runtime->install_host_object("__testHTTP", registry);
+	runtime->evaluate("globalThis.http=__testHTTP.get('GodotHTTP');globalThis.startErrors=[];undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	for (int i = 0; i < 20; ++i) {
+		runtime->evaluate("http.send({url:'http://localhost?unused:invalid',method:'GET',credentials:false,timeout:0,headers:{}}).then(()=>startErrors.push('resolved'),error=>startErrors.push(error.code));undefined;");
+		REQUIRE(runtime->get_last_error().is_empty());
+		ERR_PRINT_OFF;
+		registry->process_jobs();
+		ERR_PRINT_ON;
+		runtime->dispatch_native_module_deliveries(registry);
+		CHECK(runtime->evaluate("http.stats().ownedRequests") == Variant(0));
+		CHECK(runtime->evaluate("startErrors.every(code=>code==='E_NATIVE')") == Variant(true));
+		MessageQueue::get_singleton()->flush();
+		CHECK_FALSE(service->has_pending_work());
+	}
+	CHECK(runtime->evaluate("startErrors.length") == Variant(20));
+	CHECK(runtime->evaluate("http.stats().started") == Variant(20));
+	CHECK(blobs->used_bytes() == 0);
+	runtime->uninstall_host_object("__testHTTP");
+	runtime->reset();
+	service->shutdown();
+	SceneTree::get_singleton()->get_root()->remove_child(service.get());
 }
 } //namespace TestRNServices
 void rn_force_link_service_tests() {}

@@ -23,12 +23,13 @@ func snapshot() -> Dictionary:
 		"maxHealth": maximum_health, "lastDamage": last_damage, "revision": revision}
 
 func apply_damage(amount: int) -> Dictionary:
+	var was_alive := health > 0
 	last_damage = clampi(amount, 0, health)
 	health -= last_damage
 	revision += 1
 	changed.emit(snapshot())
 	queue_redraw()
-	if health == 0:
+	if was_alive and health == 0:
 		died.emit()
 	return snapshot()
 

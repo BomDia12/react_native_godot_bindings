@@ -175,7 +175,9 @@ rules still apply. There is no browser persistence.
 
 HTTPRequest uses Godot worker threads, bounded by the active request limit. Network
 progress continues independently of render FPS. Completion callbacks are deferred onto
-the main thread, and cancellation joins the worker before the lease drains.
+the main thread, and cancellation joins the worker before the lease drains. Requests
+that complete during submission are never retained in the module ownership map;
+`GodotHTTP.stats().ownedRequests` reports its current pending ownership count.
 
 WebSocketPeer owns protocol framing/TLS. Polling continues through CLOSING, with limits
 on peers, messages, queues, retained bytes and packets delivered per frame. A message can

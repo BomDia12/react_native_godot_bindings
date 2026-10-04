@@ -32,7 +32,7 @@ func _ready() -> void:
 		assert(panel.attach_scene_binding(enemy, enemy.binding()).is_empty())
 		ui.add_child(panel)
 		panels.append(panel)
-		enemy.died.connect(func(): panel.queue_free())
+		enemy.died.connect(func(): panel.queue_free(), CONNECT_ONE_SHOT)
 	inventory_root = ReactNativeRootView.new()
 	inventory_root.name = "InventoryHUD"
 	inventory_root.application_key = "GameInventory"

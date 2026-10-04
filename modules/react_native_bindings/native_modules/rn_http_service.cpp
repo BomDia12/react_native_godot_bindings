@@ -519,7 +519,9 @@ public:
 			return RNModuleResult::failure(http_error("HTTP service unavailable"));
 		}
 		if (p_method == "stats") {
-			return RNModuleResult::success(owner->stats());
+			Dictionary stats = owner->stats();
+			stats["ownedRequests"] = int64_t(owned.size());
+			return RNModuleResult::success(stats);
 		}
 		if (p_method == "setTrustResource") {
 			RNError error;
@@ -679,7 +681,9 @@ public:
 			retained.push_back("Content-Type: multipart/form-data; boundary=" + boundary);
 			request.headers = retained;
 		}
-		auto completed = [this, lifetime_guard = std::weak_ptr<int>(lifetime), p_completion, binary, token = p_context.request_token](RNHTTPResponse response) {
+		const auto completion_ran = std::make_shared<bool>(false);
+		auto completed = [this, completion_ran, lifetime_guard = std::weak_ptr<int>(lifetime), p_completion, binary, token = p_context.request_token](RNHTTPResponse response) {
+			*completion_ran = true;
 			if (lifetime_guard.expired()) { return; }
 			owned.erase(token);
 			if (response.error.is_set()) {
@@ -724,7 +728,7 @@ public:
 		const uint64_t id = owner->submit(request, std::move(completed), error);
 		if (error.is_set()) {
 			p_completion.fail(error);
-		} else {
+		} else if (!*completion_ran) {
 			owned[p_context.request_token] = id;
 		}
 	}

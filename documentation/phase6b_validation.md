@@ -1,6 +1,6 @@
 # Native services and game validation
 
-The Linux editor/headless application gate passed locally on 2026-10-03. The
+The Linux editor/headless application gate passed locally on 2026-10-04. The
 versioned application is `samples/game-ui`; its built standalone copy is staged at
 `../godotProjects/Phase6BGame`. Three GDScript enemies and a Godot-owned inventory
 drive four independent RN surfaces through declared script capabilities. Direct
@@ -27,7 +27,7 @@ production HTTP and sockets use Godot's native transports.
 | Gate | Result |
 |---|---|
 | Pinned dev editor/module build, tests and warnings as errors | Passed |
-| Module contracts | 106 cases, 13,398 assertions passed |
+| Module contracts | 107 cases, 13,484 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
 | JavaScript contracts, after `npm ci` in both packages | 23 tests passed per package |
@@ -55,6 +55,10 @@ Review regressions additionally verify that continuously due intervals rotate
 behind waiting timers/rAF, relative redirects preserve paths/queries/fragments,
 HTTP body limits fit the aggregate buffer budget, full event queues retry socket
 open before messages, and Keyboard-only consumers instantiate the native service.
+Immediate native HTTP start failures leave no owned request tokens after twenty
+repeated attempts, and drained leases release their buffer reservations. Enemy death
+emits once per positive-to-zero health transition; repeated damage and a later life
+cannot call a freed panel, and sibling surfaces remain valid.
 The HTTP fixture also exercises query-only and root-relative redirects through
 the actual HTTPRequest/fetch path.
 
