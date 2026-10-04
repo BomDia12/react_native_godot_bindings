@@ -84,3 +84,25 @@ test('tagged bridgeless immediate shim preserves cancellation, arguments and mic
   assert.deepEqual(events, [['ready', 17], 'nested']);
   assert.throws(() => setImmediate('invalid'), /function/);
 });
+
+test('Appearance null clears the native scheme override through the auto sentinel', () => {
+  const {createRequire} = require('node:module');
+  const projectRequire = createRequire(path.resolve(__dirname, '../../../samples/view-text/package.json'));
+  const filename = path.resolve(__dirname, '../native-facades.js');
+  const transformed = projectRequire('@babel/core').transformSync(fs.readFileSync(filename, 'utf8'), {
+    filename, presets: [[projectRequire.resolve('@react-native/babel-preset'), {enableBabelRuntime: false}]],
+    babelrc: false, configFile: false,
+  }).code;
+  const calls = [];
+  const services = {getState: () => ({colorScheme: 'dark'}), onEvent: () => ({remove() {}}), setColorScheme: value => calls.push(value)};
+  const context = {module: {exports: {}}, __godotNativeModules: {get: () => services},
+    __godotScheduler: {withoutOrigin: callback => callback()},
+    require(name) {if (name === './websocket-facade' || name === './binary') {return {};} return projectRequire(name);},
+  };
+  context.exports = context.module.exports; context.global = context;
+  vm.runInNewContext(transformed, context);
+  const appearance = context.module.exports.nativeFacade('Appearance');
+  assert.equal(appearance.getColorScheme(), 'dark');
+  for (const value of ['light', 'dark', null, 'auto']) {appearance.setColorScheme(value);}
+  assert.deepEqual(calls, ['light', 'dark', 'auto', 'auto']);
+});

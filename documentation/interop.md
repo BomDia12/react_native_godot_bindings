@@ -151,7 +151,10 @@ microtasks. Tagged RN supplies `setImmediate`/`clearImmediate` through its bridg
 arguments and nested immediates are exercised in the real application. Recurring timers rotate behind waiting due callbacks to prevent starvation.
 rAF runs only with a visible eligible root. Timer/native delivery drains are
 bounded; idle deadlines cap configured work by remaining frame time (configured frame
-rate, or a 60 Hz budget when uncapped). Game physics pause does not stop service time.
+rate, or a 60 Hz budget when uncapped). Explicit idle timeout zero is immediately
+expired; an omitted timeout waits for spare frame time. Once all roots are removed,
+the coordinator drains outstanding work and disconnects frame polling; new root entry
+reconnects it. Game physics pause does not stop service time.
 Root-origin scopes are retained for timers and listener registrations; microtasks begin
 unattributed, so asynchronous app flows should retain `useGodotAlert()` explicitly.
 
@@ -166,6 +169,9 @@ blobId use an atomic reference count; a new collector created before the pending
 release drains keeps the backing alive. Native pins remain independent.
 Explicit close is idempotent; slices/clone collectors,
 object URLs and native HTTP/socket readers retain backing through their own ownership.
+Queued HTTP Blob and multipart uploads pin borrowed backing synchronously before
+enqueue and unpin it on settlement, cancellation or submission failure. Closing the
+source Blob before the next frame cannot invalidate an accepted upload.
 Revoking a URL removes its pin. Reset closes all old-generation stores and collectors.
 
 HTTPRequest nodes are lazy, bounded, always processing and shared by fetch/XHR/images.
@@ -186,7 +192,9 @@ rules still apply. Secure cookie prefixes are checked case-insensitively before
 replacement: `__Secure-` requires Secure over HTTPS, and `__Host-` additionally requires
 an explicit `Path=/` and no Domain attribute, following the
 [cookie-prefix requirements](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/16/#section-5.6).
-There is no browser persistence.
+Ordinary Secure cookies also reject insecure replacement, deletion and child-path
+overlays, using the asymmetric path/domain matching rules in the same specification.
+Expired Secure entries do not block a new cookie. There is no browser persistence.
 
 HTTPRequest uses Godot worker threads, bounded by the active request limit. Network
 progress continues independently of render FPS. Completion callbacks are deferred onto

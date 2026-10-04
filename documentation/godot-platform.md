@@ -129,7 +129,9 @@ Scaling is inherited through Text spans; `allowFontScaling=false` disables it an
 `maxFontSizeMultiplier` null inherits, zero is unlimited, and values ≥1 cap scaling.
 Native sizes round once after scaling; explicit lineHeight uses the same multiplier.
 
-Appearance is application-controlled (`light`/`dark`); `follow_system=false` by default.
+Appearance is application-controlled (`light`/`dark`); null/`auto` clears the override
+and restores the configured default or enabled host preference. `follow_system=false`
+by default.
 AppState tracks application pause/resume and focus independently of SceneTree pause.
 I18nManager direction preferences persist in `user://react_native_direction.cfg` and
 apply on restart/bundle generation. Native authored layout direction remains available.

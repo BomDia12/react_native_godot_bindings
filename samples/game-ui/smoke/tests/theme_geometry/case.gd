@@ -6,11 +6,13 @@ var metrics: Dictionary
 var original_viewport: Vector2i
 var original_window_size: Vector2i
 var original_locale: String
+var original_scheme: String
 func _process(_delta: float) -> void:
 	if not advance(): return
 	match stage:
 		0:
 			original_locale = TranslationServer.get_locale()
+			original_scheme = HermesRuntime.evaluate("__godotNativeModules.get('GodotServices').getState().colorScheme")
 			original_viewport = get_window().content_scale_size
 			original_window_size = get_window().size
 			metrics = fixture().dimensions
@@ -32,12 +34,15 @@ func _process(_delta: float) -> void:
 			check(target("scaled-text").get_instance_id() == text_id and target("scaled-text").get_theme_font_size("normal_font_size") == 40, "Unchanged React text did not remeasure with native font scaling")
 			check(target("inventory-editor").get_child(0).get_instance_id() == editor_id, "Metrics update replaced editor identity")
 			check(target("imported-font").get_theme_font_size("normal_font_size") == 44, "Imported font scale was not consumed")
+			check(HermesRuntime.evaluate("__godotNativeModules.get('GodotServices').getState().colorScheme") == "dark", "Explicit Appearance override did not reach native services")
+			action("scheme", [null])
 			get_tree().paused = true
 			process_mode = Node.PROCESS_MODE_ALWAYS
 			inventory_root.process_mode = Node.PROCESS_MODE_ALWAYS
 			action("fontScale", [1.0])
 			next_stage()
 		2:
+			check(HermesRuntime.evaluate("__godotNativeModules.get('GodotServices').getState().colorScheme") == original_scheme, "Null Appearance override did not restore the system scheme")
 			check(fixture().dimensions.fontScale == 1.0, "Real-time services stopped while game was paused")
 			inventory_root.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
 			check(HermesRuntime.evaluate("__godotNativeModules.get('GodotServices').getState().initialAppState") == "background", "Application pause did not reach AppState")

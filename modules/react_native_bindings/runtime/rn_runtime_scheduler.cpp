@@ -39,12 +39,14 @@ jsi::Value RNRuntimeScheduler::schedule(jsi::Runtime &p_runtime, Kind p_kind, co
 		throw jsi::JSError(p_runtime, "Scheduler callback IDs exhausted.");
 	}
 	double delay = 0;
+	bool has_timeout = false;
 	if (p_count > 1 && p_kind != Kind::FRAME) {
 		jsi::Value value(p_runtime, p_arguments[1]);
 		if (p_kind == Kind::IDLE) {
 			value = value.isObject() ? value.getObject(p_runtime).getProperty(p_runtime, "timeout") : jsi::Value::undefined();
 		}
 		if (!value.isUndefined()) {
+			has_timeout = true;
 			const jsi::Value number = p_runtime.global().getPropertyAsFunction(p_runtime, "Number").call(p_runtime, value);
 			delay = number.getNumber();
 			if (!std::isfinite(delay) || delay < 0 || delay > double(INT32_MAX)) {
@@ -57,7 +59,7 @@ jsi::Value RNRuntimeScheduler::schedule(jsi::Runtime &p_runtime, Kind p_kind, co
 	task.order = next_order++;
 	task.origin = RNExecutionScope::current();
 	task.kind = p_kind;
-	task.due = p_kind == Kind::IDLE && delay <= 0 ? std::numeric_limits<double>::infinity() : now() + delay;
+	task.due = p_kind == Kind::IDLE && !has_timeout ? std::numeric_limits<double>::infinity() : now() + delay;
 	task.interval = std::max(1.0, delay);
 	task.callback = std::make_unique<jsi::Function>(p_arguments[0].getObject(p_runtime).getFunction(p_runtime));
 	if (p_kind == Kind::TIMEOUT || p_kind == Kind::INTERVAL) {

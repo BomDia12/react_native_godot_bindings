@@ -32,6 +32,19 @@ TEST_CASE("[ReactNativeBindings][Scheduler] due snapshots cancellation arguments
 	CHECK_FALSE(f.scheduler->has_pending_work());
 }
 
+TEST_CASE("[ReactNativeBindings][Scheduler] explicit zero idle timeout runs without spare frame time") {
+	Fixture f;
+	f.runtime->evaluate("s.requestIdleCallback(d=>events.push(['zero',d.didTimeout,d.timeRemaining()]),{timeout:0});s.requestIdleCallback(d=>events.push(['omitted',d.didTimeout]));s.requestIdleCallback(d=>events.push(['empty',d.didTimeout]),{});undefined;");
+	f.runtime->dispatch_scheduler(f.scheduler, true, false, 0);
+	CHECK(f.events() == "[[\"zero\",true,0]]");
+	CHECK(f.scheduler->has_pending_work());
+	f.runtime->dispatch_scheduler(f.scheduler, true, false, 0);
+	CHECK(f.events() == "[[\"zero\",true,0]]");
+	f.runtime->dispatch_scheduler(f.scheduler, true, false, 2);
+	CHECK(f.events() == "[[\"zero\",true,0],[\"omitted\",false],[\"empty\",false]]");
+	CHECK_FALSE(f.scheduler->has_pending_work());
+}
+
 TEST_CASE("[ReactNativeBindings][Scheduler] intervals skip missed periods and cancellation inside delivery") {
 	Fixture f;
 	f.runtime->evaluate("var interval=s.setInterval(()=>{events.push(s.now());if(events.length===2)s.clearInterval(interval);},10);undefined;");

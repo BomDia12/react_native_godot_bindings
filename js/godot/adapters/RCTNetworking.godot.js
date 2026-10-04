@@ -9,9 +9,17 @@ const emitter = new EventEmitter();
 const requests = new Map();
 let nextId = 1;
 const native = () => global.__godotNativeModules.get('GodotHTTP');
-function bytesBody(value, owned) {
+function borrowedBlob(value, pinned) {
+  const clean = descriptor(value);
+  if (!pinned.has(clean.blobId)) {
+    binaryService().pin(clean);
+    pinned.add(clean.blobId);
+  }
+  return clean;
+}
+function bytesBody(value, owned, pinned) {
   if (value == null) { return null; }
-  if (value.blob) { return descriptor(value.blob); }
+  if (value.blob) { return borrowedBlob(value.blob, pinned); }
   if (value.string != null) {
     const id = 'upload-' + nextId++;
     createFromParts([{type: 'string', data: value.string}], id);
@@ -33,24 +41,33 @@ export default {
   sendRequest(method, trackingName, url, headers, body, responseType, incrementalUpdates, timeout, callback, withCredentials) {
     const id = nextId++;
     const owned = [];
+    const pinned = new Set();
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) {return;}
+      cleaned = true;
+      for (const blobId of pinned) {binaryService().unpin(blobId);}
+      for (const blobId of owned) {binaryService().release(blobId);}
+    };
     let terminal = false;
     const complete = (error, timedOut = false) => {if (!terminal) {terminal = true; emitter.emit('didCompleteNetworkResponse', [id, error, timedOut]);}};
-    const converted = convertRequestBody(body);
-    let request;
+    let operation;
+    let notified = false;
+    const notify = () => {if (!notified) {notified = true; callback(id);}};
     try {
-      request = {method, url, headers, timeout, credentials: withCredentials, body: converted?.formData ? null : bytesBody(converted, owned)};
+      const converted = convertRequestBody(body);
+      const request = {method, url, headers, timeout, credentials: withCredentials, body: converted?.formData ? null : bytesBody(converted, owned, pinned)};
       if (converted?.formData) {
         request.formData = converted.formData.map(part => {
           const clean = {headers: part.headers};
-          if (part.string != null) { clean.blob = bytesBody({string: part.string}, owned); }
-          else if (part.blob || part.data?.blobId || part._data?.blobId) { clean.blob = descriptor(part.blob ?? part.data ?? part._data); }
+          if (part.string != null) { clean.blob = bytesBody({string: part.string}, owned, pinned); }
+          else if (part.blob || part.data?.blobId || part._data?.blobId) { clean.blob = borrowedBlob(part.blob ?? part.data ?? part._data, pinned); }
           else if (part.uri) { clean.uri = part.uri; }
           return clean;
         });
       }
-      const operation = native().__godotStartAsync('send', [request]);
+      operation = native().__godotStartAsync('send', [request]);
       requests.set(id, operation.requestId);
-      callback(id);
       operation.promise.then(response => {
         let transferred = false;
         try {
@@ -68,11 +85,14 @@ export default {
         }
       }, error => complete(error.message, error.code === 'E_TIMEOUT'))
         .catch(error => complete(error.message))
-        .finally(() => { requests.delete(id); for (const blobId of owned) { binaryService().release(blobId); } });
+        .finally(() => { requests.delete(id); cleanup(); });
+      notify();
     } catch (error) {
-      callback(id);
-      for (const blobId of owned) { binaryService().release(blobId); }
+      if (operation) {global.__godotNativeModules.cancel(operation.requestId);}
+      requests.delete(id);
+      cleanup();
       queueMicrotask(() => complete(error.message));
+      notify();
     }
   },
   abortRequest(id) { const token = requests.get(id); if (token) { global.__godotNativeModules.cancel(token); } },

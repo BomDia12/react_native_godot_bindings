@@ -636,6 +636,30 @@ TEST_CASE("[ReactNativeBindings][Blob] collecting one wrapper preserves live sib
 	CHECK(service->used_bytes() == 0);
 	runtime->uninstall_host_object("__collectors");
 }
+TEST_CASE("[ReactNativeBindings][Cookies] insecure cookies cannot replace delete or overlay live Secure cookies") {
+	RNCookieJar jar(32, 4096);
+	jar.receive("https://example.test/login", { "Set-Cookie: session=good; Secure; Path=/login" }, 100);
+	for (const String &header : { String("Set-Cookie: session=evil; Path=/login"), String("Set-Cookie: session=deleted; Path=/login; Max-Age=0"), String("Set-Cookie: session=child; Path=/login/en"), String("Set-Cookie: session=child; Path=/login/en; Max-Age=0") }) {
+		jar.receive("http://example.test/login", { header }, 101);
+		CHECK(jar.header("https://example.test/login/en", 101) == "session=good");
+	}
+	jar.receive("http://child.example.test/login", { "Set-Cookie: session=child; Path=/login" }, 101);
+	CHECK(jar.header("https://child.example.test/login", 101).is_empty());
+	jar.receive("http://other.test/login", { "Set-Cookie: session=other; Path=/login" }, 101);
+	CHECK(jar.header("http://other.test/login", 101) == "session=other");
+	jar.receive("http://example.test/", { "Set-Cookie: session=wide; Path=/", "Set-Cookie: session=unrelated; Path=/login-other" }, 101);
+	CHECK(jar.header("https://example.test/login/en", 101) == "session=good; session=wide");
+	CHECK(jar.header("http://example.test/login-other", 101) == "session=unrelated; session=wide");
+	jar.receive("https://example.test/login", { "Set-Cookie: session=replaced; Path=/login" }, 102);
+	CHECK(jar.header("https://example.test/login", 102) == "session=replaced; session=wide");
+	jar.receive("https://example.test/", { "Set-Cookie: expired=old; Secure; Path=/; Max-Age=1" }, 100);
+	jar.receive("http://example.test/", { "Set-Cookie: expired=new; Path=/" }, 102);
+	CHECK(jar.header("http://example.test/", 102) == "session=wide; expired=new");
+	jar.receive("https://example.test/", { "Set-Cookie: root=good; Secure; Path=/" }, 102);
+	jar.receive("http://example.test/", { "Set-Cookie: root=deleted; Path=/; Max-Age=0", "Set-Cookie: root=child; Path=/child" }, 103);
+	CHECK(jar.header("https://example.test/child", 103) == "session=wide; expired=new; root=good");
+}
+
 TEST_CASE("[ReactNativeBindings][Cookies] secure prefixes reject insecure replacements and require an explicit root path") {
 	RNCookieJar jar(32, 4096);
 	jar.receive("https://example.test/", { "Set-Cookie: __Host-session=good; Secure; Path=/", "Set-Cookie: __Secure-token=good; Secure; Path=/" }, 100);

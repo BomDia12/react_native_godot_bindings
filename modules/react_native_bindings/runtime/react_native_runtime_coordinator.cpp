@@ -625,6 +625,7 @@ void ReactNativeRuntimeCoordinator::_process_frame() {
 		operation();
 	}
 	if (state->shutting_down || (state->registered_roots.empty() && !native_module_registry->has_pending_work() && !scheduler->has_pending_work() && (!state->http || !ObjectDB::get_instance(state->http_id) || !state->http->has_pending_work()) && (!state->blobs || !state->blobs->has_pending_work()))) {
+		disconnect_frame_signal();
 		return;
 	}
 	HermesRuntimeSingleton *hermes = HermesRuntimeSingleton::get_singleton();

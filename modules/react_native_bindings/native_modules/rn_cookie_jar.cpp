@@ -5,6 +5,15 @@
 #include <iomanip>
 #include <sstream>
 
+namespace {
+bool domains_overlap(const String &p_left, const String &p_right) {
+	return p_left == p_right || (!p_left.is_valid_ip_address() && p_left.ends_with("." + p_right)) || (!p_right.is_valid_ip_address() && p_right.ends_with("." + p_left));
+}
+bool path_matches(const String &p_path, const String &p_cookie_path) {
+	return p_path == p_cookie_path || (p_path.begins_with(p_cookie_path) && (p_cookie_path.ends_with("/") || p_path.substr(p_cookie_path.length(), 1) == "/"));
+}
+} // namespace
+
 bool RNParsedURL::parse(const String &p_url, RNParsedURL &r_url) {
 	String source = p_url;
 	const int authority_start = source.find("://") + 3;
@@ -162,6 +171,11 @@ void RNCookieJar::receive(const String &p_url, const PackedStringArray &p_header
 		if (((cookie_name.begins_with("__secure-") || cookie_name.begins_with("__host-")) && !cookie.secure) || (cookie_name.begins_with("__host-") && (!root_path_attribute || cookie.path != "/"))) {
 			continue;
 		}
+		if (!cookie.secure && url.scheme != "https" && std::any_of(cookies.begin(), cookies.end(), [&](const Cookie &p_existing) {
+				return p_existing.secure && p_existing.name == cookie.name && domains_overlap(p_existing.domain, cookie.domain) && (p_existing.expires == 0 || p_existing.expires > p_now) && path_matches(cookie.path, p_existing.path);
+			})) {
+			continue;
+		}
 		cookies.erase(std::remove_if(cookies.begin(), cookies.end(), [&](const Cookie &p_existing) { return p_existing.name == cookie.name && p_existing.domain == cookie.domain && p_existing.path == cookie.path; }), cookies.end());
 		if (cookie.expires != 0 && cookie.expires <= p_now) {
 			continue;
@@ -186,7 +200,7 @@ String RNCookieJar::header(const String &p_url, double p_now) {
 	const String path = url.path.get_slice("?", 0);
 	for (const auto &cookie : cookies) {
 		const bool domain = url.host == cookie.domain;
-		const bool matches = path == cookie.path || (path.begins_with(cookie.path) && (cookie.path.ends_with("/") || path.substr(cookie.path.length(), 1) == "/"));
+		const bool matches = path_matches(path, cookie.path);
 		if (domain && matches && (!cookie.secure || url.scheme == "https")) {
 			selected.push_back(&cookie);
 		}

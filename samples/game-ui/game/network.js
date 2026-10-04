@@ -32,6 +32,16 @@ export async function runHTTPChecks(base, https) {
   check(surrogateBlob.size === 8 && await read(surrogateBlob) === 'a\ufffdb\ufffd', 'Blob lone surrogates use replacement UTF-8');
   check(await fetchText('/echo', {method: 'POST', body: 'a\ud800b\udc00'}) === 'a\ufffdb\ufffd', 'HTTP lone surrogates use replacement UTF-8');
   surrogateBlob.close();
+  const closingUpload = new Blob(['closed\0upload']);
+  const closingRequest = fetchText('/echo', {method: 'POST', body: closingUpload});
+  closingUpload.close();
+  check(await closingRequest === 'closed\0upload', 'queued Blob upload pins closed source');
+  const closingPart = new Blob(['closed\0part']);
+  const closingForm = new FormData();
+  closingForm.append('body', closingPart);
+  const closingMultipart = fetchText('/echo', {method: 'POST', body: closingForm});
+  closingPart.close();
+  check((await closingMultipart).includes('closed\0part'), 'queued multipart upload pins closed source');
   const form = new FormData();
   form.append('label', 'hello');
   form.append('file', {uri: 'res://assets/item.png', name: 'item.png', type: 'image/png'});

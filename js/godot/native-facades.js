@@ -53,7 +53,7 @@ export function nativeFacade(name) {
   } else if (name === 'Appearance') {
     facade = {...listeners,
       getColorScheme: () => applicationServices().getState().colorScheme,
-      setColorScheme: value => applicationServices().setColorScheme(value),
+      setColorScheme: value => applicationServices().setColorScheme(value ?? 'auto'),
     };
   } else if (name === 'AppState') {
     applicationServices();

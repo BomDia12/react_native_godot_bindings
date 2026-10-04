@@ -27,10 +27,10 @@ production HTTP and sockets use Godot's native transports.
 | Gate | Result |
 |---|---|
 | Pinned dev editor/module build, tests and warnings as errors | Passed |
-| Module contracts | 109 cases, 13,512 assertions passed |
+| Module contracts | 112 cases, 13,541 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
-| JavaScript contracts, after `npm ci` in both packages | 28 tests passed per package |
+| JavaScript contracts, after `npm ci` in both packages | 30 tests passed per package |
 | Complete headless suite | All 19 discovered manifests passed |
 | Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
 | Formatting, tracked smoke inputs and engine provenance | Passed |
@@ -70,6 +70,13 @@ WebSocket Blob quota exhaustion emits one error/abnormal close, preserves byte a
 and releases the peer; adapter tests also cover failed append/finish and sibling events.
 The actual RN application executes the tagged bridgeless immediate shim through native
 Hermes microtasks, verifying cancellation, arguments and nested delivery.
+Explicit zero idle timeouts run even with no spare frame time, and an empty coordinator
+disconnects frame polling after pending delivery before reconnecting on root entry.
+Borrowed HTTP/multipart uploads pin backing before enqueue; unit tests cover conversion,
+submission, callback, cancellation and asynchronous failures, while actual fetch requests
+close their source Blobs before native copying. Appearance null clears the override in
+both adapter and application/display tests. Ordinary Secure cookies reject insecure
+replacement, deletion and child-path overlays without blocking unrelated or expired entries.
 The HTTP fixture also exercises query-only and root-relative redirects through
 the actual HTTPRequest/fetch path.
 
