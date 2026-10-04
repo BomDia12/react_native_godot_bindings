@@ -636,6 +636,87 @@ TEST_CASE("[ReactNativeBindings][Blob] collecting one wrapper preserves live sib
 	CHECK(service->used_bytes() == 0);
 	runtime->uninstall_host_object("__collectors");
 }
+TEST_CASE("[ReactNativeBindings][Cookies] secure prefixes reject insecure replacements and require an explicit root path") {
+	RNCookieJar jar(32, 4096);
+	jar.receive("https://example.test/", { "Set-Cookie: __Host-session=good; Secure; Path=/", "Set-Cookie: __Secure-token=good; Secure; Path=/" }, 100);
+	const String expected = "__Host-session=good; __Secure-token=good";
+	REQUIRE(jar.header("https://example.test/", 100) == expected);
+	for (const String &header : { String("Set-Cookie: __Host-session=evil; Path=/"), String("Set-Cookie: __Host-session=gone; Path=/; Max-Age=0"), String("Set-Cookie: __Secure-token=evil; Path=/"), String("Set-Cookie: __Secure-token=evil; Secure; Path=/") }) {
+		jar.receive("http://example.test/", { header }, 101);
+		CHECK(jar.header("https://example.test/", 101) == expected);
+	}
+	for (const String &header : { String("Set-Cookie: __Host-session=evil; Path=/"), String("Set-Cookie: __Host-session=evil; Secure"), String("Set-Cookie: __Host-session=evil; Secure; Path=/inner"), String("Set-Cookie: __Host-session=evil; Secure; Domain=example.test; Path=/"), String("Set-Cookie: __Host-session=evil; Secure; Path=invalid"), String("Set-Cookie: __Secure-token=evil; Path=/"), String("Set-Cookie: __hOsT-mixed=evil; Secure"), String("Set-Cookie: __sEcUrE-mixed=evil") }) {
+		jar.receive("https://example.test/", { header }, 102);
+		CHECK(jar.header("https://example.test/", 102) == expected);
+	}
+	CHECK(jar.header("http://example.test/", 102).is_empty());
+	jar.receive("https://example.test/", { "Set-Cookie: __Host-session=new; Secure; Path=/", "Set-Cookie: __hOsT-mixed=valid; Secure; Path=/", "Set-Cookie: __sEcUrE-mixed=valid; Secure; Path=/" }, 103);
+	CHECK(jar.header("https://example.test/", 103).contains("__Host-session=new"));
+	CHECK(jar.header("https://example.test/", 103).contains("__hOsT-mixed=valid"));
+	CHECK(jar.header("https://example.test/", 103).contains("__sEcUrE-mixed=valid"));
+	jar.receive("https://example.test/", { "Set-Cookie: __Host-session=deleted; Secure; Path=/; Max-Age=0" }, 104);
+	CHECK_FALSE(jar.header("https://example.test/", 104).contains("__Host-session="));
+}
+TEST_CASE("[ReactNativeBindings][SceneBinding][SceneTree] Object commands resolve session capabilities and wrap native results") {
+	SceneServiceFixture fixture;
+	Node2D *target = memnew(Node2D);
+	Node *child = memnew(Node);
+	target->add_child(child);
+	SceneTree::get_singleton()->get_root()->add_child(target);
+	Ref<RNSceneBinding> resource;
+	resource.instantiate();
+	resource->set_capability("TreeProbe");
+	resource->set_snapshot_method("get_parent");
+	Dictionary object_schema = schema("Object");
+	object_schema["capability"] = "TreeNode";
+	resource->set_snapshot_schema(object_schema);
+	Dictionary object_argument;
+	object_argument["name"] = "node";
+	object_argument["value"] = object_schema;
+	Dictionary ancestor;
+	ancestor["method"] = "is_ancestor_of";
+	ancestor["mode"] = "sync";
+	ancestor["arguments"] = Array({ object_argument });
+	ancestor["result"] = schema("boolean");
+	Dictionary index_argument;
+	index_argument["name"] = "index";
+	index_argument["value"] = schema("integer");
+	Dictionary internal_argument;
+	internal_argument["name"] = "include_internal";
+	internal_argument["value"] = schema("boolean");
+	internal_argument["optional"] = true;
+	Dictionary get_child;
+	get_child["method"] = "get_child";
+	get_child["mode"] = "sync";
+	get_child["arguments"] = Array({ index_argument, internal_argument });
+	get_child["result"] = object_schema;
+	Dictionary commands;
+	commands["ancestor"] = ancestor;
+	commands["child"] = get_child;
+	get_child = get_child.duplicate();
+	get_child["mode"] = "queued";
+	commands["childAsync"] = get_child;
+	resource->set_commands(commands);
+	REQUIRE(fixture.root->attach_scene_binding(target, resource).is_empty());
+	RNError error;
+	REQUIRE(rn_register_godot_scene_module(*fixture.registry, error));
+	fixture.runtime->evaluate("globalThis.scene=__testScene.get('GodotScene');globalThis.session=__testScene.openSession(11);globalThis.handle=scene.getBinding(session).binding;globalThis.childHandle=scene.call(session,handle,'child',[0]);globalThis.parentHandle=scene.read(session,handle).payload;undefined;");
+	REQUIRE(fixture.runtime->get_last_error().is_empty());
+	CHECK(fixture.runtime->evaluate("childHandle.$godot==='Object' && parentHandle.$godot==='Object' && scene.call(session,handle,'ancestor',[childHandle]) && !scene.call(session,handle,'ancestor',[parentHandle])") == Variant(true));
+	fixture.runtime->evaluate("globalThis.other=__testScene.openSession(11);globalThis.otherHandle=scene.getBinding(other).binding;globalThis.cross='';try{scene.call(other,otherHandle,'ancestor',[childHandle]);}catch(e){cross=e.code;}globalThis.asyncChild=null;scene.callAsync(session,handle,'childAsync',[0]).then(value=>{asyncChild=value;});undefined;");
+	REQUIRE(fixture.runtime->get_last_error().is_empty());
+	CHECK(fixture.runtime->get_global("cross") == Variant(RNErrorCode::STALE_HANDLE));
+	fixture.registry->process_jobs();
+	fixture.runtime->dispatch_native_module_deliveries(fixture.registry);
+	CHECK(fixture.runtime->evaluate("asyncChild.$godot==='Object' && asyncChild.handle===childHandle.handle") == Variant(true));
+	const String wrong = fixture.registry->get_objects().register_object(String(fixture.runtime->evaluate("session.handle")), child->get_instance_id(), "OtherNode", error);
+	REQUIRE_FALSE(error.is_set());
+	fixture.runtime->set_global("wrongCapability", wrong);
+	CHECK(fixture.runtime->evaluate("(()=>{try{scene.call(session,handle,'ancestor',[{$godot:'Object',handle:wrongCapability}]);return false;}catch(e){return e.code==='E_VALIDATION';}})()") == Variant(true));
+	memdelete(child);
+	CHECK(fixture.runtime->evaluate("(()=>{try{scene.call(session,handle,'ancestor',[childHandle]);return false;}catch(e){return e.code==='E_OBJECT_GONE';}})()") == Variant(true));
+	memdelete(target);
+}
 TEST_CASE("[ReactNativeBindings][HTTP][SceneTree] immediate native start failures leave no owned request tokens") {
 	auto runtime = HermesRuntimeSingleton::get_singleton();
 	runtime->reset();

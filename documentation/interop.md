@@ -118,7 +118,12 @@ omitted trailing arguments can use native script defaults. Signals map a native 
 to `{event, arguments, payload}`: argument names zip to a record payload. Methods,
 arity, typed signatures, defaults and mapped signal fields are checked on attachment;
 arguments/returns/emitted values are checked on every call. Only declared public methods
-are callable; there is no unrestricted reflection from JS.
+are callable; there is no unrestricted reflection from JS. Object-typed arguments
+resolve their opaque handles against the current session and declared capability
+before invocation. Object results, snapshot fields and signal fields are registered
+and returned as `{$godot: 'Object', handle}` wrappers, including declared array/record
+fields and nullable values. Godot retains ownership of the objects; destroyed objects
+fail resolution and session closure invalidates their handles.
 
 `react-native-godot/scene` exports `getBinding`, `read`, `call`, `callAsync`, `onChanged`
 and `useGodotScene(rootTag)`. Responses carry `ready`, opaque `binding`, monotonic
@@ -164,14 +169,21 @@ HTTPRequest nodes are lazy, bounded, always processing and shared by fetch/XHR/i
 A lease moves through IDLE → LEASED → DRAINING; cancellation releases no slot until the
 old native completion/deferred drain barrier. Queue timeout includes waiting time;
 zero means no caller deadline. Blob response descriptors preserve the case-insensitive
-Content-Type response header. Image cancellation reports immediate release only for
+Content-Type response header. Metadata and data delivery share a response ownership
+guard: listener failures release storage unless a Blob descriptor was successfully
+handed off. Response headers use a prototype-free record, preserving names such as
+`constructor` and `__proto__`. Image cancellation reports immediate release only for
 queued work; active cancellation still completes its reservation. Credentials isolate
 image cache/deduplication; no-store/no-cache stays uncacheable. Redirect hops apply cookies
 and final URLs; query-only/fragment/relative references retain the current URL context
 and normalize literal dot segments. Cross-origin sensitive headers are removed. Cookies are bounded and
 in-memory and host-only. Set-Cookie headers with any Domain attribute are rejected;
 parent-domain and public-suffix cookies are outside this subset. Path, Secure and expiry
-rules still apply. There is no browser persistence.
+rules still apply. Secure cookie prefixes are checked case-insensitively before
+replacement: `__Secure-` requires Secure over HTTPS, and `__Host-` additionally requires
+an explicit `Path=/` and no Domain attribute, following the
+[cookie-prefix requirements](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/16/#section-5.6).
+There is no browser persistence.
 
 HTTPRequest uses Godot worker threads, bounded by the active request limit. Network
 progress continues independently of render FPS. Completion callbacks are deferred onto

@@ -126,6 +126,7 @@ void RNCookieJar::receive(const String &p_url, const PackedStringArray &p_header
 		cookie.order = ++sequence;
 		bool valid = true;
 		bool max_age = false;
+		bool root_path_attribute = false;
 		for (int i = 1; i < parts.size(); ++i) {
 			const String part = parts[i].strip_edges();
 			const int split = part.find("=");
@@ -135,8 +136,11 @@ void RNCookieJar::receive(const String &p_url, const PackedStringArray &p_header
 				cookie.secure = true;
 			} else if (name == "domain") {
 				valid = false;
-			} else if (name == "path" && value.begins_with("/")) {
-				cookie.path = value;
+			} else if (name == "path") {
+				root_path_attribute = value == "/";
+				if (value.begins_with("/")) {
+					cookie.path = value;
+				}
 			} else if (name == "max-age" && value.is_valid_int()) {
 				const int64_t seconds = value.to_int();
 				cookie.expires = seconds <= 0 ? -1 : p_now + double(seconds);
@@ -152,6 +156,10 @@ void RNCookieJar::receive(const String &p_url, const PackedStringArray &p_header
 			}
 		}
 		if (cookie.name.contains("\n") || cookie.name.contains("\r") || cookie.value.contains("\n") || cookie.value.contains("\r") || !valid || (cookie.secure && url.scheme != "https")) {
+			continue;
+		}
+		const String cookie_name = cookie.name.to_lower();
+		if (((cookie_name.begins_with("__secure-") || cookie_name.begins_with("__host-")) && !cookie.secure) || (cookie_name.begins_with("__host-") && (!root_path_attribute || cookie.path != "/"))) {
 			continue;
 		}
 		cookies.erase(std::remove_if(cookies.begin(), cookies.end(), [&](const Cookie &p_existing) { return p_existing.name == cookie.name && p_existing.domain == cookie.domain && p_existing.path == cookie.path; }), cookies.end());

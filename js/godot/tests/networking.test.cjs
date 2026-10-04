@@ -44,3 +44,71 @@ test('Blob responses carry case-insensitive Content-Type metadata without mutati
     assert.equal(events[2][1][1], null);
   }
 });
+
+function executeResponse(response, responseType, throwingEvent = null) {
+  const events = [];
+  const released = [];
+  class Emitter {
+    emit(name, value) {
+      events.push([name, value]);
+      if (name === throwingEvent) {throw new Error('listener failed');}
+    }
+  }
+  const context = {module: {exports: {}}, queueMicrotask,
+    __godotNativeModules: {get() {return {
+      __godotStartAsync() {return {requestId: 'request', promise: Promise.resolve(response)};},
+    };}},
+    require(name) {
+      if (name.endsWith('/EventEmitter')) {return Emitter;}
+      if (name.endsWith('/convertRequestBody')) {return value => value;}
+      if (name === '../binary') {return {
+        binaryService: () => ({release: id => released.push(id)}),
+        readBytes: () => new Uint8Array([65]), utf8Decode: () => 'A', readBase64: () => 'QQ==',
+      };}
+      return projectRequire(name);
+    },
+  };
+  context.exports = context.module.exports; context.global = context;
+  vm.runInNewContext(transformed, context);
+  context.module.exports.default.sendRequest('GET', '', response.url, {}, null, responseType, false, 0, () => {}, false);
+  return new Promise(resolve => setImmediate(() => resolve({events, released})));
+}
+
+const nativeResponse = () => ({status: 200, headers: [], url: 'https://fixture.test/',
+  body: {blobId: 'response', offset: 0, size: 1, type: ''}});
+
+test('response backing is released once when metadata or data listeners throw', async () => {
+  for (const responseType of ['text', 'base64', 'blob']) {
+    for (const throwingEvent of ['didReceiveNetworkResponse', 'didReceiveNetworkData']) {
+      const {events, released} = await executeResponse(nativeResponse(), responseType, throwingEvent);
+      assert.deepEqual(released, ['response']);
+      assert.equal(events.at(-1)[0], 'didCompleteNetworkResponse');
+      assert.equal(events.at(-1)[1][1], 'listener failed');
+      assert.equal(events.filter(([name]) => name === 'didCompleteNetworkResponse').length, 1);
+    }
+  }
+});
+
+test('successful Blob handoff preserves backing even if completion listeners throw', async () => {
+  for (const responseType of ['text', 'base64', 'blob']) {
+    const {events, released} = await executeResponse(nativeResponse(), responseType, 'didCompleteNetworkResponse');
+    assert.deepEqual(released, responseType === 'blob' ? [] : ['response']);
+    assert.equal(events.filter(([name]) => name === 'didCompleteNetworkResponse').length, 1);
+    assert.equal(events[1][0], 'didReceiveNetworkData');
+  }
+});
+
+test('prototype-colliding response header names and duplicates retain exact values', async () => {
+  const response = nativeResponse();
+  response.headers = [['constructor', 'ctor'], ['__proto__', 'first'], ['toString', 'text'],
+    ['hasOwnProperty', 'own'], ['__proto__', 'second'], ['constructor', 'next']];
+  const {events, released} = await executeResponse(response, 'text');
+  const headers = events[0][1][2];
+  assert.equal(Object.getPrototypeOf(headers), null);
+  assert.equal(headers.constructor, 'ctor, next');
+  assert.equal(headers.__proto__, 'first, second');
+  assert.equal(headers.toString, 'text');
+  assert.equal(headers.hasOwnProperty, 'own');
+  assert.deepEqual(Object.keys(headers), ['constructor', '__proto__', 'toString', 'hasOwnProperty']);
+  assert.deepEqual(released, ['response']);
+});

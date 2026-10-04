@@ -27,10 +27,10 @@ production HTTP and sockets use Godot's native transports.
 | Gate | Result |
 |---|---|
 | Pinned dev editor/module build, tests and warnings as errors | Passed |
-| Module contracts | 107 cases, 13,484 assertions passed |
+| Module contracts | 109 cases, 13,512 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
-| JavaScript contracts, after `npm ci` in both packages | 23 tests passed per package |
+| JavaScript contracts, after `npm ci` in both packages | 26 tests passed per package |
 | Complete headless suite | All 19 discovered manifests passed |
 | Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
 | Formatting, tracked smoke inputs and engine provenance | Passed |
@@ -59,6 +59,11 @@ Immediate native HTTP start failures leave no owned request tokens after twenty
 repeated attempts, and drained leases release their buffer reservations. Enemy death
 emits once per positive-to-zero health transition; repeated damage and a later life
 cannot call a freed panel, and sibling surfaces remain valid.
+Further review regressions exercise metadata/data listener failures and successful
+Blob handoff followed by a throwing completion listener, prototype-colliding HTTP
+header names, invalid secure cookie prefix replacements/deletions, and sync/queued
+Object command results with session/capability/destruction checks. The unrelated
+script fixture checks nested/nullable Object arguments, results and signal payloads.
 The HTTP fixture also exercises query-only and root-relative redirects through
 the actual HTTPRequest/fetch path.
 

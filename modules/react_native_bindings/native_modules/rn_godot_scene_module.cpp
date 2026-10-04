@@ -37,6 +37,89 @@ bool live_target(ObjectID p_target) {
 	Node *node = Object::cast_to<Node>(target);
 	return target && (!node || node->is_inside_tree());
 }
+enum class SceneValueMode { TO_SCRIPT,
+	TO_TOKEN,
+	TO_WRAPPER };
+bool convert_scene_value(const Variant &p_value, const RNValueSchema &p_schema, const RNCallContext &p_context, SceneValueMode p_mode, Variant &r_value, RNError &r_error, uint32_t &r_visited, uint32_t p_depth = 0) {
+	if (++r_visited > 65536 || p_depth > 32) {
+		r_error = RNError::make(RNErrorCode::LIMIT, "scene value exceeds structural limits", "GodotScene", "value");
+		return false;
+	}
+	r_value = p_value;
+	if (p_value.get_type() == Variant::NIL) {
+		return true;
+	}
+	if (p_schema.type == RNValueType::OBJECT) {
+		if (p_mode == SceneValueMode::TO_TOKEN) {
+			if (p_value.get_type() != Variant::OBJECT) {
+				r_error = RNError::make(RNErrorCode::VALIDATION, "scene result requires an Object", "GodotScene", "value");
+				return false;
+			}
+			bool previously_freed = false;
+			Object *object = p_value.get_validated_object_with_check(previously_freed);
+			if (!object) {
+				if (previously_freed) {
+					r_error = RNError::make(RNErrorCode::OBJECT_GONE, "scene result Object was destroyed", "GodotScene", "value");
+					return false;
+				}
+				r_value = Variant();
+				return true;
+			}
+			r_value = p_context.objects->register_object(p_context.session_token, object->get_instance_id(), p_schema.capability, r_error);
+			return !r_error.is_set();
+		}
+		if (p_mode == SceneValueMode::TO_SCRIPT) {
+			Object *object = p_context.objects->resolve_object(p_value, p_context.session_token, p_schema.capability, r_error);
+			if (!object) {
+				return false;
+			}
+			r_value = object;
+			return true;
+		}
+	}
+	if (p_mode == SceneValueMode::TO_WRAPPER && (p_schema.type == RNValueType::OBJECT || p_schema.type == RNValueType::SESSION)) {
+		Dictionary wrapper;
+		wrapper["$godot"] = p_schema.type == RNValueType::OBJECT ? "Object" : "Session";
+		wrapper["handle"] = p_value;
+		r_value = wrapper;
+	} else if (p_schema.type == RNValueType::ARRAY && p_value.get_type() == Variant::ARRAY) {
+		const Array source = p_value;
+		if (source.size() > 4096) {
+			r_error = RNError::make(RNErrorCode::LIMIT, "scene array exceeds entry limit", "GodotScene", "value");
+			return false;
+		}
+		Array converted;
+		for (const Variant &element : source) {
+			Variant value;
+			if (!convert_scene_value(element, *p_schema.element, p_context, p_mode, value, r_error, r_visited, p_depth + 1)) {
+				return false;
+			}
+			converted.push_back(value);
+		}
+		r_value = converted;
+	} else if (p_schema.type == RNValueType::RECORD && p_value.get_type() == Variant::DICTIONARY) {
+		Dictionary converted = Dictionary(p_value).duplicate();
+		if (converted.size() > 4096) {
+			r_error = RNError::make(RNErrorCode::LIMIT, "scene record exceeds entry limit", "GodotScene", "value");
+			return false;
+		}
+		for (const RNRecordFieldSchema &field : p_schema.fields) {
+			if (converted.has(field.name)) {
+				Variant value;
+				if (!convert_scene_value(converted[field.name], *field.value, p_context, p_mode, value, r_error, r_visited, p_depth + 1)) {
+					return false;
+				}
+				converted[field.name] = value;
+			}
+		}
+		r_value = converted;
+	}
+	return true;
+}
+bool convert_scene_value(const Variant &p_value, const RNValueSchema &p_schema, const RNCallContext &p_context, SceneValueMode p_mode, Variant &r_value, RNError &r_error) {
+	uint32_t visited = 0;
+	return convert_scene_value(p_value, p_schema, p_context, p_mode, r_value, r_error, visited);
+}
 class RNGodotSceneModule : public RNNativeModule {
 	struct Connection {
 		ObjectID target;
@@ -122,11 +205,12 @@ class RNGodotSceneModule : public RNNativeModule {
 					payload[signal.arguments[i]] = *args[i];
 				}
 				RNError error;
-				if (!rn_validate_native_value(payload, signal.payload, error, "signal.payload")) {
+				Variant converted;
+				if (!convert_scene_value(payload, signal.payload, binding->context, SceneValueMode::TO_TOKEN, converted, error) || !rn_validate_native_value(converted, signal.payload, error, "signal.payload") || !convert_scene_value(rn_apply_native_defaults(converted, signal.payload), signal.payload, binding->context, SceneValueMode::TO_WRAPPER, converted, error)) {
 					ERR_PRINT(error.describe());
 					return;
 				}
-				publish(*binding, signal.event, rn_apply_native_defaults(payload, signal.payload));
+				publish(*binding, signal.event, converted);
 			})));
 			if (target->connect(entry.key, callback) != OK) {
 				disconnect(p_binding);
@@ -200,7 +284,11 @@ class RNGodotSceneModule : public RNNativeModule {
 				if (index >= supplied.size() && argument.optional && !argument.has_default) {
 					break;
 				}
-				arguments.push_back(rn_apply_native_defaults(value, schema));
+				Variant converted;
+				if (!convert_scene_value(rn_apply_native_defaults(value, schema), schema, p_context, SceneValueMode::TO_SCRIPT, converted, error)) {
+					return RNModuleResult::failure(error);
+				}
+				arguments.push_back(converted);
 			}
 		}
 		Vector<const Variant *> pointers;
@@ -216,13 +304,14 @@ class RNGodotSceneModule : public RNNativeModule {
 		if (!binding || binding->attachment != attachment || binding->handle != handle || !live_target(attachment->target)) {
 			return RNModuleResult::failure(RNError::make(RNErrorCode::STALE_HANDLE, "binding changed during script invocation", "GodotScene.call"));
 		}
-		if (!rn_validate_native_value(value, result_schema, error, "result")) {
+		Variant converted;
+		if (!convert_scene_value(value, result_schema, p_context, SceneValueMode::TO_TOKEN, converted, error) || !rn_validate_native_value(converted, result_schema, error, "result") || !convert_scene_value(rn_apply_native_defaults(converted, result_schema), result_schema, p_context, SceneValueMode::TO_WRAPPER, converted, error)) {
 			return RNModuleResult::failure(error);
 		}
 		if (p_method == "read") {
-			return RNModuleResult::success(envelope(*binding, "snapshot", rn_apply_native_defaults(value, result_schema)));
+			return RNModuleResult::success(envelope(*binding, "snapshot", converted));
 		}
-		return RNModuleResult::success(rn_apply_native_defaults(value, result_schema));
+		return RNModuleResult::success(converted);
 	}
 
 public:

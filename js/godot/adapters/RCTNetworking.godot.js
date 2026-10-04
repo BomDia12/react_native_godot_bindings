@@ -52,18 +52,19 @@ export default {
       requests.set(id, operation.requestId);
       callback(id);
       operation.promise.then(response => {
-        const responseHeaders = {};
-        for (const [name, value] of response.headers) {
-          responseHeaders[name] = responseHeaders[name] == null ? value : responseHeaders[name] + ', ' + value;
-        }
-        emitter.emit('didReceiveNetworkResponse', [id, response.status, responseHeaders, response.url]);
-        let value;
+        let transferred = false;
         try {
-          value = responseType === 'blob' ? {...response.body, type: response.headers.find(([name]) => name.toLowerCase() === 'content-type')?.[1] ?? ''} : responseType === 'base64' ? readBase64(response.body) : utf8Decode(readBytes(response.body));
+          const responseHeaders = Object.create(null);
+          for (const [name, value] of response.headers) {
+            responseHeaders[name] = responseHeaders[name] == null ? value : responseHeaders[name] + ', ' + value;
+          }
+          emitter.emit('didReceiveNetworkResponse', [id, response.status, responseHeaders, response.url]);
+          const value = responseType === 'blob' ? {...response.body, type: response.headers.find(([name]) => name.toLowerCase() === 'content-type')?.[1] ?? ''} : responseType === 'base64' ? readBase64(response.body) : utf8Decode(readBytes(response.body));
           emitter.emit('didReceiveNetworkData', [id, value]);
+          transferred = responseType === 'blob';
           complete(null);
         } finally {
-          if (responseType !== 'blob') { binaryService().release(response.body.blobId); }
+          if (!transferred) { binaryService().release(response.body.blobId); }
         }
       }, error => complete(error.message, error.code === 'E_TIMEOUT'))
         .catch(error => complete(error.message))

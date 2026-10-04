@@ -60,6 +60,10 @@ func _process(_delta: float) -> void:
 			HermesRuntime.evaluate("globalThis.probeHandle=probeModule.getBinding(probeSession).binding;globalThis.probeOther=__godotNativeModules.openSession(%d);globalThis.probeResults={};try{probeModule.read(probeOther,probeHandle);}catch(e){probeResults.cross=e.code;}probeResults.adjust=probeModule.call(probeSession,probeHandle,'adjust',[]);undefined;" % probe_root.get_root_tag())
 			check(HermesRuntime.get_global("probeResults").cross == "E_STALE_HANDLE", "Handle crossed sessions")
 			check(probe.temperature == 19.0, "Script optional default was not applied")
+			HermesRuntime.evaluate("globalThis.probeObject={$godot:'Object',handle:probeHandle};globalThis.objectArgs={node:probeObject,items:[probeObject,null]};globalThis.objectResult=probeModule.call(probeSession,probeHandle,'objects',[objectArgs]);globalThis.asyncObject=null;probeModule.callAsync(probeSession,probeHandle,'objectsAsync',[objectArgs]).then(value=>{asyncObject=value;});undefined;")
+			check(HermesRuntime.get_last_error().is_empty(), "Object-typed script invocation failed")
+			check(HermesRuntime.evaluate("objectResult.node.$godot==='Object' && objectResult.node.handle===probeHandle && objectResult.items[0].handle===probeHandle && objectResult.items[1]===null"), "Nested Object result lost its wrappers or nullable element")
+			check(HermesRuntime.evaluate("(()=>{try{probeModule.call(probeOther,probeModule.getBinding(probeOther).binding,'objects',[objectArgs]);return false;}catch(e){return e.code==='E_STALE_HANDLE';}})()"), "Nested Object argument crossed sessions")
 			var bad: RNSceneBinding = probe.binding()
 			bad.snapshot_method = &"missing"
 			check(not probe_root.attach_scene_binding(probe, bad).is_empty(), "Missing method accepted")
@@ -75,7 +79,9 @@ func _process(_delta: float) -> void:
 			next_stage()
 		8:
 			var delivered: Array = HermesRuntime.get_global("probeEvents")
-			check(delivered.back().event == "sample" and delivered.back().payload.temperature == 19.0, "Signal argument mapping failed")
+			var samples := delivered.filter(func(event): return event.event == "sample")
+			check(not samples.is_empty() and samples.back().payload.temperature == 19.0, "Signal argument mapping failed")
+			check(HermesRuntime.evaluate("asyncObject && asyncObject.node.$godot==='Object' && asyncObject.items[0].handle===probeHandle && asyncObject.items[1]===null && probeEvents.filter(event=>event.event==='reference').length===2 && probeEvents.filter(event=>event.event==='reference').every(event=>event.payload.node.$godot==='Object' && event.payload.node.handle===probeHandle)"), "Queued Object results or signal payloads lost their scoped wrappers")
 			check(delivered.back().sequence > delivered.front().sequence, "Scene sequence did not advance")
 			old_tag = probe_root.get_root_tag()
 			HermesRuntime.evaluate("probeModule.call(probeSession,probeHandle,'restart',[]);undefined;")

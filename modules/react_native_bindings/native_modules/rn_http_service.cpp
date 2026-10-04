@@ -392,7 +392,7 @@ void RNHTTPService::shutdown() {
 		auto node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(slot.node));
 		if (node) {
 			node->cancel_request();
-			if (node->is_connected("request_completed", slot.callback)) {
+			if (slot.callback.is_valid() && node->is_connected("request_completed", slot.callback)) {
 				node->disconnect("request_completed", slot.callback);
 			}
 			remove_child(node);
