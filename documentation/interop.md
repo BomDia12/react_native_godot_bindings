@@ -157,8 +157,17 @@ rate, or a 60 Hz budget when uncapped). Explicit idle timeout zero is immediatel
 expired; an omitted timeout waits for spare frame time. Once all roots are removed,
 the coordinator drains outstanding work and disconnects frame polling; new root entry
 reconnects it. Game physics pause does not stop service time.
+A tree-owned lifecycle observer retains pause/resume state while no RN roots are
+mounted. Passive application-service listeners do not keep idle frame polling alive,
+and the shared Alert subscription is removed when its last root unregisters.
 Root-origin scopes are retained for timers and listener registrations; microtasks begin
 unattributed, so asynchronous app flows should retain `useGodotAlert()` explicitly.
+
+Queued completion values/error payloads share a 16 MiB aggregate budget, checked before
+deep copying. Overflow rejects that request with `E_LIMIT`; a bounded set of small
+terminal control records remains deliverable. Cancellation, delivery (including partial
+batches), stale-generation removal and reset release accounted bytes. The diagnostic
+`__godotNativeModules.getStats().completionBytes` reports retained payload bytes.
 
 General interop strings reject embedded NUL. Networking text uses byte transport and JS
 UTF-8 encoding/decoding, preserving NUL and replacing lone UTF-16 surrogates or
@@ -169,8 +178,12 @@ Blob collectors enqueue an atomic release marker without touching SceneTree/Herm
 the main thread reclaims it after the final collector is gone. Collectors sharing a
 blobId use an atomic reference count; a new collector created before the pending
 release drains keeps the backing alive. Native pins remain independent.
-Explicit close is idempotent; slices/clone collectors,
-object URLs and native HTTP/socket readers retain backing through their own ownership.
+Tagged [BlobManager.release](https://github.com/facebook/react-native/blob/v0.87.1/packages/react-native/Libraries/Blob/BlobManager.js#L137-L148)
+reference-counts shared wrappers through BlobRegistry: native release occurs only after
+the last explicit close. A live slice survives closing its parent and vice versa.
+`new Blob([blob])` copies bytes into independent backing. Collector reference counts
+protect sibling views from automatic collection; object URLs and native HTTP/socket
+readers retain explicit pins independently of close.
 Queued HTTP Blob and multipart uploads pin borrowed backing synchronously before
 enqueue and unpin it on settlement, cancellation or submission failure. Closing the
 source Blob before the next frame cannot invalidate an accepted upload.

@@ -1,10 +1,69 @@
 #include "../native_modules/rn_native_module_registry.h"
+#include "../root_view/react_native_root_view.h"
 #include "../runtime/react_native_runtime_coordinator.h"
 #include "../singletons/hermes_runtime_singleton.h"
 
+#include "core/object/callable_mp.h"
+#include "core/object/message_queue.h"
+#include "scene/main/scene_tree.h"
+#include "scene/main/window.h"
 #include "tests/test_macros.h"
 
 namespace TestRNNativeModuleRegistry {
+
+TEST_CASE("[ReactNativeBindings][RuntimeCoordinator][SceneTree] idle frame signal disconnects after draining and reconnects on root entry") {
+	auto coordinator = ReactNativeRuntimeCoordinator::get_singleton();
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	auto tree = SceneTree::get_singleton();
+	REQUIRE(coordinator);
+	REQUIRE(runtime);
+	REQUIRE(tree);
+	runtime->reset();
+	coordinator->get_native_module_registry()->begin_generation(runtime->get_runtime_generation());
+	auto state = coordinator->get_state();
+	state->bundle_generation = runtime->get_runtime_generation();
+	state->bundle_status = RNBundleStatus::FAILED;
+	state->bundle_error = "Fixture has no application bundle.";
+	runtime->evaluate("globalThis.lifecycleService=__godotNativeModules.get('GodotServices');globalThis.lifecycleSubscription=lifecycleService.onEvent(()=>{});lifecycleService.getState();undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	const Callable frame = callable_mp(coordinator, &ReactNativeRuntimeCoordinator::_process_frame);
+	for (int turn = 0; turn < 2; ++turn) {
+		auto root = memnew(ReactNativeRootView);
+		ERR_PRINT_OFF;
+		tree->get_root()->add_child(root);
+		MessageQueue::get_singleton()->flush();
+		ERR_PRINT_ON;
+		CHECK(tree->is_connected("process_frame", frame));
+		runtime->evaluate("globalThis.drained=false;__godotScheduler.setTimeout(()=>{drained=true;},0);undefined;");
+		ERR_PRINT_OFF;
+		tree->get_root()->remove_child(root);
+		ERR_PRINT_ON;
+		memdelete(root);
+		tree->notification(Node::NOTIFICATION_APPLICATION_PAUSED);
+		CHECK(state->application_paused);
+		CHECK(runtime->evaluate("lifecycleService.getState().initialAppState") == Variant("background"));
+		tree->notification(Node::NOTIFICATION_APPLICATION_RESUMED);
+		CHECK_FALSE(state->application_paused);
+		CHECK(runtime->evaluate("lifecycleService.getState().initialAppState") == Variant("active"));
+		CHECK(tree->is_connected("process_frame", frame));
+		coordinator->_process_frame();
+		CHECK(runtime->get_global("drained") == Variant(true));
+		tree->notification(Node::NOTIFICATION_APPLICATION_PAUSED);
+		CHECK(state->application_paused);
+		CHECK(runtime->evaluate("lifecycleService.getState().initialAppState") == Variant("background"));
+		tree->notification(Node::NOTIFICATION_APPLICATION_RESUMED);
+		CHECK_FALSE(state->application_paused);
+		CHECK(runtime->evaluate("lifecycleService.getState().initialAppState") == Variant("active"));
+		CHECK(tree->is_connected("process_frame", frame));
+		coordinator->_process_frame();
+		CHECK_FALSE(tree->is_connected("process_frame", frame));
+	}
+	runtime->evaluate("lifecycleSubscription.remove();undefined;");
+	state->bundle_status = RNBundleStatus::UNEVALUATED;
+	state->bundle_generation = 0;
+	state->bundle_error = String();
+	runtime->reset();
+}
 
 class CompletedAsyncModule : public RNNativeModule {
 public:
@@ -12,6 +71,63 @@ public:
 		return RNModuleResult::success(String("completed"));
 	}
 };
+
+class LargeCompletionModule : public RNNativeModule {
+	int sequence = 0;
+
+public:
+	RNModuleResult invoke_sync(const StringName &, const Array &, const RNCallContext &) override {
+		PackedByteArray value;
+		value.resize(4 * 1024 * 1024);
+		value.set(0, ++sequence);
+		return RNModuleResult::success(value);
+	}
+};
+
+TEST_CASE("[ReactNativeBindings][NativeModules] aggregate completion bytes reject overflow and recover after cancellation delivery and reset") {
+	auto runtime = HermesRuntimeSingleton::get_singleton();
+	REQUIRE(runtime);
+	runtime->reset();
+	auto registry = std::make_shared<RNNativeModuleRegistry>(std::shared_ptr<RNRuntimeCoordinatorState>());
+	registry->begin_generation(runtime->get_runtime_generation());
+	RNMethodSchema work;
+	work.name = "work";
+	work.mode = RNCallMode::ASYNC;
+	work.result = RNValueSchema::value(RNValueType::BYTES);
+	RNModuleDefinition definition;
+	definition.name = "LargeCompletion";
+	definition.methods.push_back(work);
+	definition.factory = [] { return std::make_unique<LargeCompletionModule>(); };
+	RNError error;
+	REQUIRE(registry->register_module(definition, error));
+	runtime->install_host_object("__testNativeModules", registry);
+	runtime->evaluate("globalThis.large=__testNativeModules.get('LargeCompletion');globalThis.results=[];globalThis.requests=[];globalThis.run=()=>{const op=large.__godotStartAsync('work',[]);requests.push(op.requestId);op.promise.then(value=>results.push(value[0]),error=>results.push(error.code));};for(let i=0;i<5;i++)run();undefined;");
+	REQUIRE(runtime->get_last_error().is_empty());
+	registry->process_jobs();
+	CHECK(int64_t(runtime->evaluate("__testNativeModules.getStats().completionBytes")) == 3 * (4 * 1024 * 1024 + 64));
+	runtime->evaluate("__testNativeModules.cancel(requests[0]);run();undefined;");
+	CHECK(int64_t(runtime->evaluate("__testNativeModules.getStats().completionBytes")) == 2 * (4 * 1024 * 1024 + 64));
+	registry->process_jobs();
+	CHECK(int64_t(runtime->evaluate("__testNativeModules.getStats().completionBytes")) == 3 * (4 * 1024 * 1024 + 64));
+	runtime->dispatch_native_module_deliveries(registry);
+	CHECK(runtime->evaluate("JSON.stringify(results)") == Variant("[2,3,\"E_LIMIT\",\"E_LIMIT\",\"E_CANCELLED\",6]"));
+	CHECK(int64_t(runtime->evaluate("__testNativeModules.getStats().completionBytes")) == 0);
+	CHECK_FALSE(registry->has_pending_work());
+	runtime->evaluate("run();undefined;");
+	registry->process_jobs();
+	CHECK(int64_t(runtime->evaluate("__testNativeModules.getStats().completionBytes")) == 4 * 1024 * 1024 + 64);
+	const String late_request = runtime->evaluate("requests[requests.length-1]");
+	const uint64_t old_generation = runtime->get_runtime_generation();
+	runtime->reset();
+	CHECK_FALSE(registry->has_pending_work());
+	CHECK(int64_t(runtime->evaluate("__testNativeModules.getStats().completionBytes")) == 0);
+	PackedByteArray late_value;
+	late_value.resize(1024);
+	registry->queue_completion(late_request, old_generation, late_value, RNError());
+	CHECK_FALSE(registry->has_pending_work());
+	CHECK(int64_t(runtime->evaluate("__testNativeModules.getStats().completionBytes")) == 0);
+	runtime->uninstall_host_object("__testNativeModules");
+}
 
 struct DeferredModuleState {
 	RNCompletionToken completion;

@@ -4,6 +4,7 @@
 #include "../components/rn_host_descriptor_registry.h"
 #include "../fabric/fabric_ui_manager.h"
 #include "../fabric/native_dom.h"
+#include "../native_modules/rn_application_services.h"
 #include "../native_modules/rn_blob_service.h"
 #include "../native_modules/rn_http_service.h"
 #include "../native_modules/rn_native_module_registry.h"
@@ -420,6 +421,12 @@ void ReactNativeRuntimeCoordinator::register_root(ReactNativeRootView *p_root) {
 			}
 		});
 		return;
+	}
+	if (!ObjectDB::get_instance(lifecycle_observer_id) && p_root->get_tree()) {
+		auto observer = memnew(RNApplicationLifecycle);
+		observer->configure(state);
+		lifecycle_observer_id = observer->get_instance_id();
+		p_root->get_tree()->get_root()->call_deferred("add_child", observer, false, Node::INTERNAL_MODE_BACK);
 	}
 	state->registered_roots[id] = p_root->get_application_key();
 	connect_frame_signal(p_root);

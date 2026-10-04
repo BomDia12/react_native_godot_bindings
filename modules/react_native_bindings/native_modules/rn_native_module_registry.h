@@ -24,6 +24,7 @@ class RNNativeModuleRegistry : public facebook::jsi::HostObject, public HermesRu
 		RNCallContext context;
 	};
 	struct NativeCompletion {
+		uint64_t bytes = 0;
 		uint64_t order = 0;
 		String request_token;
 		uint64_t generation = 0;
@@ -52,6 +53,7 @@ class RNNativeModuleRegistry : public facebook::jsi::HostObject, public HermesRu
 		RNError cancellation_error;
 	};
 	struct Subscription {
+		bool keeps_runtime_alive = true;
 		RNExecutionOrigin origin;
 		String module_name;
 		StringName event;
@@ -71,6 +73,8 @@ class RNNativeModuleRegistry : public facebook::jsi::HostObject, public HermesRu
 	std::deque<NativeCompletion> completions;
 	std::deque<NativeEvent> events;
 	uint64_t event_bytes = 0;
+	uint64_t completion_bytes = 0;
+	HashSet<String> queued_completions;
 	uint64_t next_delivery = 1;
 	HashSet<String> cancelled_requests;
 	mutable std::mutex delivery_mutex;

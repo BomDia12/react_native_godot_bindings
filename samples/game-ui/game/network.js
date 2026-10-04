@@ -28,6 +28,21 @@ export async function runHTTPChecks(base, https) {
     reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsText(value);
   });
   check(await read(slice) === '\0bc', 'Blob parts and slices');
+  const shared = new Blob(['shared']);
+  const sharedSlice = shared.slice(1);
+  const copied = new Blob([shared]);
+  sharedSlice.close();
+  check(await read(shared) === 'shared' && await read(copied) === 'shared', 'slice close preserves live sibling and independent Blob copy');
+  shared.close(); copied.close();
+  const parent = new Blob(['siblings']);
+  const sibling = parent.slice(1, 5);
+  const siblingData = {blobId: sibling.data.blobId, offset: sibling.data.offset, size: sibling.data.size};
+  parent.close();
+  check(await read(sibling) === 'ibli', 'parent close preserves live slice');
+  sibling.close();
+  let sharedReleased = false;
+  try {binaryService().pin(siblingData);} catch (error) {sharedReleased = error.code === 'E_STALE_HANDLE';}
+  check(sharedReleased, 'last shared wrapper close releases native backing');
   const surrogateBlob = new Blob(['a\ud800b\udc00']);
   check(surrogateBlob.size === 8 && await read(surrogateBlob) === 'a\ufffdb\ufffd', 'Blob lone surrogates use replacement UTF-8');
   check(await fetchText('/echo', {method: 'POST', body: 'a\ud800b\udc00'}) === 'a\ufffdb\ufffd', 'HTTP lone surrogates use replacement UTF-8');

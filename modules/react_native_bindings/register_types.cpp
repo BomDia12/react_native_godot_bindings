@@ -74,6 +74,7 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		godot_alerts->configure(react_native_runtime_coordinator->get_state());
 		Engine::get_singleton()->add_singleton(Engine::Singleton("GodotAlerts", godot_alerts, "GodotAlerts"));
 		ClassDB::register_abstract_class<RNHTTPService>();
+		ClassDB::register_internal_class<RNApplicationLifecycle>();
 		ClassDB::register_abstract_class<RNTextNativeState>();
 		ClassDB::register_class<RNTextControl>();
 		ClassDB::register_class<RNViewControl>();

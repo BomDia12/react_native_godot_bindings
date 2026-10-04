@@ -15,6 +15,14 @@
 #include <cmath>
 #include <map>
 
+void RNApplicationLifecycle::_notification(int p_notification) {
+	if (p_notification == NOTIFICATION_APPLICATION_PAUSED || p_notification == NOTIFICATION_APPLICATION_RESUMED) {
+		if (auto shared = state.lock()) {
+			shared->application_paused = p_notification == NOTIFICATION_APPLICATION_PAUSED;
+		}
+	}
+}
+
 namespace {
 class RNApplicationServices : public RNNativeModule {
 	std::weak_ptr<RNRuntimeCoordinatorState> state;
@@ -287,6 +295,7 @@ bool rn_register_application_services(RNNativeModuleRegistry &p_registry, const 
 		definition.methods.push_back(method);
 	}
 	RNEventSchema event;
+	event.keeps_runtime_alive = false;
 	event.name = "event";
 	event.subscription_name = "onEvent";
 	event.payload = RNValueSchema::value(RNValueType::DYNAMIC);

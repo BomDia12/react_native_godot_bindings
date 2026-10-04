@@ -169,6 +169,8 @@ void RNNativeModuleRegistry::begin_generation(uint64_t p_generation) {
 		completions.clear();
 		events.clear();
 		event_bytes = 0;
+		completion_bytes = 0;
+		queued_completions.clear();
 	}
 	cancelled_requests.clear();
 	module_cache.clear();
@@ -359,6 +361,7 @@ facebook::jsi::Value RNNativeModuleRegistry::subscribe_locked(facebook::jsi::Run
 	}
 	const std::string token = to_utf8(vformat("subscription-%016x-%016x", generation, next_subscription++));
 	Subscription subscription;
+	subscription.keeps_runtime_alive = p_schema.keeps_runtime_alive;
 	subscription.origin = RNExecutionScope::current();
 	subscription.module_name = p_module;
 	subscription.event = p_schema.name;
@@ -434,6 +437,10 @@ facebook::jsi::Value RNNativeModuleRegistry::get(facebook::jsi::Runtime &p_runti
 			stats["objects"] = objects.object_count();
 			stats["subscriptions"] = int64_t(subscriptions.size());
 			stats["requests"] = int64_t(pending_promises.size());
+			{
+				std::lock_guard<std::mutex> lock(delivery_mutex);
+				stats["completionBytes"] = int64_t(completion_bytes);
+			}
 			facebook::jsi::Value value;
 			RNError error;
 			RNValueCodec::to_js(rt, stats, RNValueSchema::value(RNValueType::DYNAMIC), value, error, nullptr, "getStats");
@@ -609,17 +616,6 @@ void RNNativeModuleRegistry::process_jobs() {
 	}
 }
 
-void RNNativeModuleRegistry::queue_completion(const String &p_request_token, uint64_t p_generation, const Variant &p_value, const RNError &p_error) {
-	NativeCompletion completion;
-	completion.request_token = p_request_token;
-	completion.generation = p_generation;
-	completion.value = p_value.duplicate(true);
-	completion.error = p_error;
-	std::lock_guard<std::mutex> lock(delivery_mutex);
-	completion.order = next_delivery++;
-	completions.push_back(completion);
-}
-
 namespace {
 uint64_t delivery_size(const Variant &p_value, int p_depth = 0) {
 	if (p_depth > 32) {
@@ -651,6 +647,30 @@ uint64_t delivery_size(const Variant &p_value, int p_depth = 0) {
 	return bytes;
 }
 } //namespace
+void RNNativeModuleRegistry::queue_completion(const String &p_request_token, uint64_t p_generation, const Variant &p_value, const RNError &p_error) {
+	std::lock_guard<std::mutex> lock(delivery_mutex);
+	if (!accepting_work || p_generation != generation || queued_completions.has(p_request_token) || queued_completions.size() >= 1024) {
+		return;
+	}
+	NativeCompletion completion;
+	completion.request_token = p_request_token;
+	completion.generation = p_generation;
+	completion.error = p_error;
+	const uint64_t size = delivery_size(p_error.is_set() ? Variant(p_error.to_dictionary()) : p_value);
+	if (size > 16 * 1024 * 1024 - completion_bytes) {
+		completion.error = RNError::make(RNErrorCode::LIMIT, "native completion aggregate byte limit exceeded", "native.complete");
+	} else {
+		if (!p_error.is_set()) {
+			completion.value = p_value.duplicate(true);
+		}
+		completion.bytes = size;
+		completion_bytes += size;
+	}
+	queued_completions.insert(p_request_token);
+	completion.order = next_delivery++;
+	completions.push_back(std::move(completion));
+}
+
 bool RNNativeModuleRegistry::can_queue_event(uint64_t p_bytes) const {
 	std::lock_guard<std::mutex> lock(delivery_mutex);
 	return events.size() < 1024 && p_bytes <= 16 * 1024 * 1024 - event_bytes;
@@ -687,10 +707,15 @@ void RNNativeModuleRegistry::cancel_request(const String &p_request_token, const
 	{
 		std::lock_guard<std::mutex> lock(delivery_mutex);
 		completions.erase(
-				std::remove_if(completions.begin(), completions.end(), [&p_request_token](const NativeCompletion &p_completion) {
-					return p_completion.request_token == p_request_token;
+				std::remove_if(completions.begin(), completions.end(), [this, &p_request_token](const NativeCompletion &p_completion) {
+					if (p_completion.request_token != p_request_token) {
+						return false;
+					}
+					completion_bytes -= p_completion.bytes;
+					return true;
 				}),
 				completions.end());
+		queued_completions.insert(p_request_token);
 		cancellation.order = next_delivery++;
 		completions.push_back(cancellation);
 	}
@@ -728,6 +753,17 @@ size_t RNNativeModuleRegistry::deliver_locked(facebook::jsi::Runtime &p_runtime,
 		batch.pop_front();
 		if (auto native_completion = std::get_if<NativeCompletion>(&item)) {
 			NativeCompletion &completion = *native_completion;
+			struct CompletionAccounting {
+				RNNativeModuleRegistry &registry;
+				const NativeCompletion &completion;
+				~CompletionAccounting() {
+					std::lock_guard<std::mutex> lock(registry.delivery_mutex);
+					if (registry.generation == completion.generation && registry.accepting_work) {
+						registry.completion_bytes -= completion.bytes;
+						registry.queued_completions.erase(completion.request_token);
+					}
+				}
+			} accounting{ *this, completion };
 			if (completion.generation != generation || completion.generation != p_generation) {
 				continue;
 			}
@@ -902,6 +938,8 @@ void RNNativeModuleRegistry::before_runtime_reset_locked(facebook::jsi::Runtime 
 		completions.clear();
 		events.clear();
 		event_bytes = 0;
+		completion_bytes = 0;
+		queued_completions.clear();
 	}
 	cancelled_requests.clear();
 	pending_promises.clear();
@@ -920,8 +958,13 @@ bool RNNativeModuleRegistry::has_pending_work() const {
 			return true;
 		}
 	}
+	for (const auto &entry : subscriptions) {
+		if (entry.second.keeps_runtime_alive) {
+			return true;
+		}
+	}
 	std::lock_guard<std::mutex> lock(delivery_mutex);
-	return !jobs.empty() || !completions.empty() || !events.empty() || !pending_promises.empty() || !subscriptions.empty();
+	return !jobs.empty() || !completions.empty() || !events.empty() || !pending_promises.empty();
 }
 
 void RNNativeModuleRegistry::process_frame(double p_now_ms) {

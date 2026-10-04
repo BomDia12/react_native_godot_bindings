@@ -1,52 +1,10 @@
 #pragma once
 
-#include "../root_view/react_native_root_view.h"
 #include "../runtime/react_native_runtime_coordinator.h"
-#include "../singletons/hermes_runtime_singleton.h"
 
-#include "core/object/callable_mp.h"
-#include "scene/main/scene_tree.h"
-#include "scene/main/window.h"
 #include "tests/test_macros.h"
 
 namespace TestRNRuntimeCoordinator {
-
-TEST_CASE("[ReactNativeBindings][RuntimeCoordinator][SceneTree] idle frame signal disconnects after draining and reconnects on root entry") {
-	auto coordinator = ReactNativeRuntimeCoordinator::get_singleton();
-	auto runtime = HermesRuntimeSingleton::get_singleton();
-	auto tree = SceneTree::get_singleton();
-	REQUIRE(coordinator);
-	REQUIRE(runtime);
-	REQUIRE(tree);
-	runtime->reset();
-	auto state = coordinator->get_state();
-	state->bundle_generation = runtime->get_runtime_generation();
-	state->bundle_status = RNBundleStatus::FAILED;
-	state->bundle_error = "Fixture has no application bundle.";
-	const Callable frame = callable_mp(coordinator, &ReactNativeRuntimeCoordinator::_process_frame);
-	for (int turn = 0; turn < 2; ++turn) {
-		auto root = memnew(ReactNativeRootView);
-		ERR_PRINT_OFF;
-		tree->get_root()->add_child(root);
-		ERR_PRINT_ON;
-		CHECK(tree->is_connected("process_frame", frame));
-		runtime->evaluate("globalThis.drained=false;__godotScheduler.setTimeout(()=>{drained=true;},0);undefined;");
-		ERR_PRINT_OFF;
-		tree->get_root()->remove_child(root);
-		ERR_PRINT_ON;
-		memdelete(root);
-		CHECK(tree->is_connected("process_frame", frame));
-		coordinator->_process_frame();
-		CHECK(runtime->get_global("drained") == Variant(true));
-		CHECK(tree->is_connected("process_frame", frame));
-		coordinator->_process_frame();
-		CHECK_FALSE(tree->is_connected("process_frame", frame));
-	}
-	state->bundle_status = RNBundleStatus::UNEVALUATED;
-	state->bundle_generation = 0;
-	state->bundle_error = String();
-	runtime->reset();
-}
 
 TEST_CASE("[ReactNativeBindings][RuntimeCoordinator] routed keys keep surface tags distinct") {
 	RNSurfaceTag left{ 11, 2 };

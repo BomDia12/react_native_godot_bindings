@@ -17,7 +17,14 @@ export function registerAlertRoot(rootTag, session, presenter) {
         .catch(error => { global.__godotNativeModules.cancel(event.requestId); console.error(error); });
     }));
   }
-  return () => {if (roots.get(rootTag) === root) {roots.delete(rootTag);}};
+  return () => {
+    if (roots.get(rootTag) !== root) {return;}
+    roots.delete(rootTag);
+    if (roots.size === 0) {
+      subscription?.remove();
+      subscription = null;
+    }
+  };
 }
 export function alertForOrigin(origin, title, message, buttons, options) {
   const callbacks = buttons?.length ? buttons : [{text: 'OK'}];

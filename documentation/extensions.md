@@ -217,7 +217,11 @@ Modules can implement `shutdown`, `on_session_closed`,
 and `on_result_delivered`. The registry owns generation instances and invokes shutdown
 before JSI caches disappear. Copied native events are bounded and immutable; listener
 snapshots retain a cursor when the frame budget is exhausted. Hermes checkpoints follow
-each delivered callback. Native jobs never carry JSI references.
+each delivered callback. Native jobs never carry JSI references. Completion payloads
+share a 16 MiB byte bound; an overflowing request rejects with `E_LIMIT` and still invokes
+`on_result_delivered(..., false)` for ownership cleanup. `RNEventSchema.keeps_runtime_alive`
+defaults to true for polling subscriptions; passive listeners may set it to false.
+Queued events, promises and module-reported pending work still keep delivery active.
 
 The shared image service receives the pooled HTTP adapter before bundle evaluation.
 Its start/complete/cancel contract and existing descriptor publication hooks remain as

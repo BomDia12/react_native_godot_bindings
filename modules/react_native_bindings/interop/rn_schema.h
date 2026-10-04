@@ -79,6 +79,7 @@ struct RNMethodSchema {
 };
 
 struct RNEventSchema {
+	bool keeps_runtime_alive = true;
 	StringName name;
 	StringName subscription_name;
 	RNValueSchema payload;

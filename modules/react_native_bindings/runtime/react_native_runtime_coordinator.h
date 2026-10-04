@@ -243,6 +243,7 @@ class ReactNativeRuntimeCoordinator : public Object {
 	std::shared_ptr<RNNativeModuleRegistry> native_module_registry;
 	std::shared_ptr<class RNRuntimeScheduler> scheduler;
 	ObjectID connected_tree_id;
+	ObjectID lifecycle_observer_id;
 	bool frame_connected = false;
 
 	int allocate_root_tag();
