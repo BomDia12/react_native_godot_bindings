@@ -72,8 +72,12 @@ export default {
         let transferred = false;
         try {
           const responseHeaders = Object.create(null);
+          const headerNames = new Map();
           for (const [name, value] of response.headers) {
-            responseHeaders[name] = responseHeaders[name] == null ? value : responseHeaders[name] + ', ' + value;
+            const normalized = name.toLowerCase();
+            const key = headerNames.get(normalized) ?? name;
+            headerNames.set(normalized, key);
+            responseHeaders[key] = responseHeaders[key] == null ? value : responseHeaders[key] + ', ' + value;
           }
           emitter.emit('didReceiveNetworkResponse', [id, response.status, responseHeaders, response.url]);
           const value = responseType === 'blob' ? {...response.body, type: response.headers.find(([name]) => name.toLowerCase() === 'content-type')?.[1] ?? ''} : responseType === 'base64' ? readBase64(response.body) : utf8Decode(readBytes(response.body));

@@ -114,7 +114,9 @@ Unknown/misplaced options, cycles and structural/payload overflow fail before us
 
 Commands map a public name to `{method, mode, arguments, result}`. `mode` is `sync` or
 `queued`. Ordered arguments use `{name, value, optional?, nullable?, default?}`;
-omitted trailing arguments can use native script defaults. Signals map a native signal
+omitted trailing arguments can use native script defaults. Required arguments must
+precede optional/defaulted arguments. Nullable primitive and collection parameters
+require untyped `Variant` script parameters; Object parameters may accept null. Signals map a native signal
 to `{event, arguments, payload}`: argument names zip to a record payload. Methods,
 arity, typed signatures, defaults and mapped signal fields are checked on attachment;
 arguments/returns/emitted values are checked on every call. Only declared public methods
@@ -181,7 +183,8 @@ zero means no caller deadline. Blob response descriptors preserve the case-insen
 Content-Type response header, including synthetic responses for typed Blob object URLs. Metadata and data delivery share a response ownership
 guard: listener failures release storage unless a Blob descriptor was successfully
 handed off. Response headers use a prototype-free record, preserving names such as
-`constructor` and `__proto__`. Image cancellation reports immediate release only for
+`constructor` and `__proto__`; duplicate field names merge case-insensitively
+under the first spelling. Image cancellation reports immediate release only for
 queued work; active cancellation still completes its reservation. Credentials isolate
 image cache/deduplication; no-store/no-cache stays uncacheable. Redirect hops apply cookies
 and final URLs; query-only/fragment/relative references retain the current URL context
@@ -194,7 +197,8 @@ an explicit `Path=/` and no Domain attribute, following the
 [cookie-prefix requirements](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/16/#section-5.6).
 Ordinary Secure cookies also reject insecure replacement, deletion and child-path
 overlays, using the asymmetric path/domain matching rules in the same specification.
-Expired Secure entries do not block a new cookie. There is no browser persistence.
+Expired Secure entries do not block a new cookie. Oversized replacement values are
+ignored before erasing an existing cookie; explicit expiry still deletes it. There is no browser persistence.
 
 HTTPRequest uses Godot worker threads, bounded by the active request limit. Network
 progress continues independently of render FPS. Completion callbacks are deferred onto

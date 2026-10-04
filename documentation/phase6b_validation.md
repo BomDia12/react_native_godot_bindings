@@ -27,10 +27,10 @@ production HTTP and sockets use Godot's native transports.
 | Gate | Result |
 |---|---|
 | Pinned dev editor/module build, tests and warnings as errors | Passed |
-| Module contracts | 112 cases, 13,541 assertions passed |
+| Module contracts | 113 cases, 13,547 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
-| JavaScript contracts, after `npm ci` in both packages | 30 tests passed per package |
+| JavaScript contracts, after `npm ci` in both packages | 31 tests passed per package |
 | Complete headless suite | All 19 discovered manifests passed |
 | Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
 | Formatting, tracked smoke inputs and engine provenance | Passed |
@@ -77,6 +77,12 @@ submission, callback, cancellation and asynchronous failures, while actual fetch
 close their source Blobs before native copying. Appearance null clears the override in
 both adapter and application/display tests. Ordinary Secure cookies reject insecure
 replacement, deletion and child-path overlays without blocking unrelated or expired entries.
+Nullable primitive/collection schema attachments reject typed script parameters while
+Variant commands accept null and nonnull values. Required arguments cannot follow
+optional/defaulted arguments, and valid trailing script defaults retain required validation.
+Mixed-case HTTP duplicate fields merge under their first spelling, including prototype
+names. Oversized non-expiring cookie replacements preserve valid stored entries while
+explicit expiration still deletes them.
 The HTTP fixture also exercises query-only and root-relative redirects through
 the actual HTTPRequest/fetch path.
 

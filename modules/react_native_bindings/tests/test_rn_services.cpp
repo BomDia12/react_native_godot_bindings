@@ -636,6 +636,21 @@ TEST_CASE("[ReactNativeBindings][Blob] collecting one wrapper preserves live sib
 	CHECK(service->used_bytes() == 0);
 	runtime->uninstall_host_object("__collectors");
 }
+TEST_CASE("[ReactNativeBindings][Cookies] oversized replacements preserve valid entries and explicit expiry still deletes") {
+	RNCookieJar jar(4, 128);
+	jar.receive("https://example.test/", { "Set-Cookie: session=good; Path=/" }, 100);
+	for (const String &suffix : { String(), String("; Max-Age=100"), String("; Expires=Wed, 09 Jun 2032 10:18:14 GMT") }) {
+		jar.receive("https://example.test/", { "Set-Cookie: session=" + String("x").repeat(256) + "; Path=/" + suffix }, 101);
+		CHECK(jar.header("https://example.test/", 101) == "session=good");
+	}
+	jar.receive("https://example.test/", { "Set-Cookie: other=kept; Path=/" }, 102);
+	CHECK(jar.header("https://example.test/", 102) == "other=kept");
+	jar.receive("https://example.test/", { "Set-Cookie: other=" + String("x").repeat(256) + "; Path=/; Max-Age=0" }, 103);
+	CHECK(jar.header("https://example.test/", 103).is_empty());
+	jar.receive("https://example.test/", { "Set-Cookie: short=old; Path=/", "Set-Cookie: short=new; Path=/" }, 104);
+	CHECK(jar.header("https://example.test/", 104) == "short=new");
+}
+
 TEST_CASE("[ReactNativeBindings][Cookies] insecure cookies cannot replace delete or overlay live Secure cookies") {
 	RNCookieJar jar(32, 4096);
 	jar.receive("https://example.test/login", { "Set-Cookie: session=good; Secure; Path=/login" }, 100);

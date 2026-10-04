@@ -20,6 +20,21 @@ func object_round_trip(value: Dictionary) -> Dictionary:
 	referenced.emit(self)
 	return value
 
+func typed_string(_value: String) -> void:
+	pass
+
+func typed_integer(_value: int) -> void:
+	pass
+
+func typed_array(_value: Array) -> void:
+	pass
+
+func nullable_echo(value: Variant) -> Variant:
+	return value
+
+func argument_pair(first: float = 1.0, second: float = 2.0) -> float:
+	return first + second
+
 func restart_ui() -> void:
 	ui.reload()
 
@@ -34,6 +49,8 @@ func binding() -> RNSceneBinding:
 		"adjust": {"method": "adjust", "mode": "sync", "arguments": [{"name": "amount", "value": {"type": "number"}, "optional": true}], "result": {"type": "number"}},
 		"objects": {"method": "object_round_trip", "mode": "sync", "arguments": [{"name": "value", "value": object_record}], "result": object_record},
 		"objectsAsync": {"method": "object_round_trip", "mode": "queued", "arguments": [{"name": "value", "value": object_record}], "result": object_record},
+		"nullable": {"method": "nullable_echo", "mode": "sync", "arguments": [{"name": "value", "value": {"type": "string"}, "nullable": true}], "result": {"type": "string", "nullable": true}},
+		"pair": {"method": "argument_pair", "mode": "sync", "arguments": [{"name": "first", "value": {"type": "number"}}, {"name": "second", "value": {"type": "number"}, "optional": true}], "result": {"type": "number"}},
 		"restart": {"method": "restart_ui", "mode": "sync", "arguments": [], "result": {"type": "void"}}}
 	resource.signals = {"sampled": {"event": "sample", "arguments": ["temperature", "label"],
 		"payload": resource.snapshot_schema}, "referenced": {"event": "reference", "arguments": ["node"], "payload": {"type": "record", "fields": {"node": object_schema}}}}

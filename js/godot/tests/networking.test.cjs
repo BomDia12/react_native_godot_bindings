@@ -171,3 +171,17 @@ test('borrowed upload Blobs are pinned before enqueue and unpinned once on every
     }
   }
 });
+
+test('mixed-case duplicate headers merge under their first spelling without prototype collisions', async () => {
+  const response = nativeResponse();
+  response.headers = [['X-Value', 'a'], ['x-value', 'b'], ['X-VALUE', 'c'],
+    ['Constructor', 'first'], ['constructor', 'second'], ['__PROTO__', 'own'], ['__proto__', 'next']];
+  const {events, released} = await executeResponse(response, 'text');
+  const headers = events[0][1][2];
+  assert.equal(Object.getPrototypeOf(headers), null);
+  assert.deepEqual(Object.keys(headers), ['X-Value', 'Constructor', '__PROTO__']);
+  assert.equal(headers['X-Value'], 'a, b, c');
+  assert.equal(headers.Constructor, 'first, second');
+  assert.equal(headers.__PROTO__, 'own, next');
+  assert.deepEqual(released, ['response']);
+});

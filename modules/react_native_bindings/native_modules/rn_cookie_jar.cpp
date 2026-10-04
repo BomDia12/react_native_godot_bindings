@@ -176,12 +176,13 @@ void RNCookieJar::receive(const String &p_url, const PackedStringArray &p_header
 			})) {
 			continue;
 		}
-		cookies.erase(std::remove_if(cookies.begin(), cookies.end(), [&](const Cookie &p_existing) { return p_existing.name == cookie.name && p_existing.domain == cookie.domain && p_existing.path == cookie.path; }), cookies.end());
-		if (cookie.expires != 0 && cookie.expires <= p_now) {
+		const bool expired = cookie.expires != 0 && cookie.expires <= p_now;
+		const uint64_t size = cookie.name.utf8().length() + cookie.value.utf8().length() + cookie.domain.utf8().length() + cookie.path.utf8().length() + 64;
+		if (!expired && (!maximum_entries || size > maximum_bytes)) {
 			continue;
 		}
-		const uint64_t size = cookie.name.utf8().length() + cookie.value.utf8().length() + cookie.domain.utf8().length() + cookie.path.utf8().length() + 64;
-		if (!maximum_entries || size > maximum_bytes) {
+		cookies.erase(std::remove_if(cookies.begin(), cookies.end(), [&](const Cookie &p_existing) { return p_existing.name == cookie.name && p_existing.domain == cookie.domain && p_existing.path == cookie.path; }), cookies.end());
+		if (expired) {
 			continue;
 		}
 		while (!cookies.empty() && (cookies.size() >= maximum_entries || bytes() + size > maximum_bytes)) {

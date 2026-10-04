@@ -64,6 +64,25 @@ func _process(_delta: float) -> void:
 			check(HermesRuntime.get_last_error().is_empty(), "Object-typed script invocation failed")
 			check(HermesRuntime.evaluate("objectResult.node.$godot==='Object' && objectResult.node.handle===probeHandle && objectResult.items[0].handle===probeHandle && objectResult.items[1]===null && objectResult.counter.$godot==='int64' && objectResult.counter.value==='7' && objectResult.wide.$godot==='int64' && objectResult.wide.value==='9223372036854775807'"), "Nested Object result lost its wrappers or nullable element")
 			check(HermesRuntime.evaluate("(()=>{try{probeModule.call(probeOther,probeModule.getBinding(probeOther).binding,'objects',[objectArgs]);return false;}catch(e){return e.code==='E_STALE_HANDLE';}})()"), "Nested Object argument crossed sessions")
+			check(HermesRuntime.evaluate("probeModule.call(probeSession,probeHandle,'nullable',[null])===null && probeModule.call(probeSession,probeHandle,'nullable',['value'])==='value'"), "Nullable Variant argument failed its declared contract")
+			check(HermesRuntime.evaluate("probeModule.call(probeSession,probeHandle,'pair',[0.5])===2.5 && (()=>{try{probeModule.call(probeSession,probeHandle,'pair',[]);return false;}catch(e){return e.code==='E_VALIDATION';}})()"), "Trailing native default bypassed the required argument")
+			for definition in [{"method": "typed_string", "value": {"type": "string"}}, {"method": "typed_integer", "value": {"type": "integer"}}, {"method": "typed_array", "value": {"type": "array", "element": {"type": "string"}}}]:
+				for nested in [false, true]:
+					var incompatible: RNSceneBinding = probe.binding()
+					var nullable_argument := {"name": "value", "value": definition.value.duplicate(true)}
+					if nested:
+						nullable_argument.value.nullable = true
+					else:
+						nullable_argument.nullable = true
+					incompatible.commands = {"invalid": {"method": definition.method, "mode": "sync", "arguments": [nullable_argument], "result": {"type": "void"}}}
+					check(not probe_root.attach_scene_binding(probe, incompatible).is_empty(), "Nullable schema accepted a typed %s parameter" % definition.method)
+			for schema_default in [false, true]:
+				var invalid_order: RNSceneBinding = probe.binding()
+				invalid_order.commands.pair.arguments[0].optional = true
+				if schema_default:
+					invalid_order.commands.pair.arguments[0].default = 1.0
+				invalid_order.commands.pair.arguments[1].optional = false
+				check(not probe_root.attach_scene_binding(probe, invalid_order).is_empty(), "Required argument accepted after an optional argument")
 			var bad: RNSceneBinding = probe.binding()
 			bad.snapshot_method = &"missing"
 			check(not probe_root.attach_scene_binding(probe, bad).is_empty(), "Missing method accepted")

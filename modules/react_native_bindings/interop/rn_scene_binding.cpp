@@ -66,6 +66,13 @@ bool compatible(const PropertyInfo &p_info, const RNValueSchema &p_schema) {
 	}
 	return false;
 }
+bool argument_compatible(const PropertyInfo &p_info, const RNArgumentSchema &p_schema) {
+	const bool variant = p_info.type == Variant::NIL && (p_info.usage & PROPERTY_USAGE_NIL_IS_VARIANT);
+	if ((p_schema.nullable || p_schema.value.nullable) && p_info.type != Variant::OBJECT && !variant) {
+		return false;
+	}
+	return compatible(p_info, p_schema.value);
+}
 bool signature_valid(Object *p_target, const StringName &p_method, const Vector<RNArgumentSchema> &p_arguments, const RNValueSchema &p_result, RNError &r_error) {
 	List<MethodInfo> methods;
 	p_target->get_method_list(&methods);
@@ -77,10 +84,16 @@ bool signature_valid(Object *p_target, const StringName &p_method, const Vector<
 			return invalid(r_error, "method signature does not match its schema", "method.signature");
 		}
 		int index = 0;
+		bool optional_seen = false;
 		for (const PropertyInfo &argument : method.arguments) {
-			if (!compatible(argument, p_arguments[index].value)) {
+			if (!argument_compatible(argument, p_arguments[index])) {
 				return invalid(r_error, "argument type does not match its schema", "method.signature");
 			}
+			const bool optional = p_arguments[index].optional || p_arguments[index].has_default;
+			if (optional_seen && !optional) {
+				return invalid(r_error, "required arguments must precede optional arguments", "method.signature");
+			}
+			optional_seen = optional_seen || optional;
 			if (p_arguments[index].optional && !p_arguments[index].has_default && index < method.arguments.size() - method.default_arguments.size()) {
 				return invalid(r_error, "optional argument requires a script or schema default", "method.signature");
 			}
