@@ -30,7 +30,7 @@ production HTTP and sockets use Godot's native transports.
 | Module contracts | 109 cases, 13,512 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
-| JavaScript contracts, after `npm ci` in both packages | 26 tests passed per package |
+| JavaScript contracts, after `npm ci` in both packages | 28 tests passed per package |
 | Complete headless suite | All 19 discovered manifests passed |
 | Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
 | Formatting, tracked smoke inputs and engine provenance | Passed |
@@ -63,7 +63,13 @@ Further review regressions exercise metadata/data listener failures and successf
 Blob handoff followed by a throwing completion listener, prototype-colliding HTTP
 header names, invalid secure cookie prefix replacements/deletions, and sync/queued
 Object command results with session/capability/destruction checks. The unrelated
-script fixture checks nested/nullable Object arguments, results and signal payloads.
+script fixture checks nested/nullable Object arguments, results and signal payloads,
+and exact `int64` wrappers within and above the JavaScript safe-integer range in both modes.
+Typed Blob URLs retain response header/Blob MIME metadata after source close.
+WebSocket Blob quota exhaustion emits one error/abnormal close, preserves byte accounting
+and releases the peer; adapter tests also cover failed append/finish and sibling events.
+The actual RN application executes the tagged bridgeless immediate shim through native
+Hermes microtasks, verifying cancellation, arguments and nested delivery.
 The HTTP fixture also exercises query-only and root-relative redirects through
 the actual HTTPRequest/fetch path.
 

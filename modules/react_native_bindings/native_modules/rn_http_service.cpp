@@ -722,6 +722,10 @@ public:
 				p_completion.fail(error);
 				return;
 			}
+			const Variant type = descriptor.get("type", String());
+			if (type.get_type() == Variant::STRING && !String(type).is_empty()) {
+				response.headers.push_back("Content-Type: " + String(type));
+			}
 			completed(std::move(response));
 			return;
 		}

@@ -6,10 +6,15 @@ import {utf8Encode, utf8Decode, descriptor, CHUNK_BYTES} from './binary';
 
 let module;
 const blobModes = new Set();
+const failedSockets = new Set();
 function native() {
   if (module == null) {
     module = global.__godotNativeModules.get('GodotWebSocket');
     global.__godotScheduler.withoutOrigin(() => module.onEvent(({name, payload}) => {
+      if (failedSockets.has(payload.id)) {
+        if (name === 'websocketClosed' || name === 'websocketFailed') {failedSockets.delete(payload.id);}
+        return;
+      }
       if (name === 'websocketMessage') {
         const bytes = payload.bytes;
         if (payload.text) {
@@ -17,11 +22,19 @@ function native() {
         } else if (blobModes.has(payload.id)) {
           const service = global.__godotNativeModules.get('GodotBinary');
           const id = 'socket-' + payload.id + '-' + sequence++;
-          service.begin(id, bytes.length);
+          let allocated = false;
           try {
+            service.begin(id, bytes.length); allocated = true;
             for (let offset = 0; offset < bytes.length; offset += CHUNK_BYTES) {service.append(id, offset, bytes.subarray(offset, offset + CHUNK_BYTES));}
             service.finish(id);
-          } catch (error) {service.release(id); throw error;}
+          } catch (error) {
+            if (allocated) {service.release(id);}
+            blobModes.delete(payload.id);
+            failedSockets.add(payload.id);
+            try {module.close(payload.id, 1000, 'Blob conversion failed');}
+            finally {DeviceEventEmitter.emit('websocketFailed', {id: payload.id, message: error.message});}
+            return;
+          }
           payload = {id: payload.id, type: 'blob', data: {blobId: id, offset: 0, size: bytes.length, type: ''}};
         } else { payload = {id: payload.id, type: 'binary', data: fromByteArray(bytes)}; }
       }

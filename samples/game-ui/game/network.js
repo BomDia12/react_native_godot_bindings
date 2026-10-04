@@ -70,10 +70,13 @@ export async function runHTTPChecks(base, https) {
   canceled.readAsText(cancelBlob); canceled.abort(); cancelBlob.close();
   await new Promise(resolve => setTimeout(resolve, 0));
   check(abortCount === 1 && canceled.result == null, 'FileReader abort releases native pin');
-  const objectBlob = new Blob(['URL\0bytes']);
+  const objectBlob = new Blob(['URL\0bytes'], {type: 'text/plain'});
   const objectURL = URL.createObjectURL(objectBlob);
   objectBlob.close();
-  check(await (await fetch(objectURL)).text() === 'URL\0bytes', 'object URL pins closed Blob');
+  const objectResponse = await fetch(objectURL);
+  const objectResponseBlob = await objectResponse.blob();
+  check(objectResponse.headers.get('Content-Type') === 'text/plain' && objectResponseBlob.type === 'text/plain' && await read(objectResponseBlob) === 'URL\0bytes', 'typed object URL pins closed Blob and preserves MIME metadata');
+  objectResponseBlob.close();
   URL.revokeObjectURL(objectURL);
   let revoked = false;
   try {await fetch(objectURL);} catch (error) {revoked = true;}
@@ -110,6 +113,34 @@ export async function runHTTPChecks(base, https) {
 
 export async function runSocketChecks(url, applyUpdate) {
   const extra = [];
+  const baselineBytes = binaryService().stats().bytes;
+  const quotaId = 'socket-quota';
+  const quotaSize = 32 * 1024 * 1024 - baselineBytes;
+  binaryService().begin(quotaId, quotaSize);
+  const quotaChunk = new Uint8Array(1024 * 1024);
+  for (let offset = 0; offset < quotaSize; offset += quotaChunk.length) {
+    binaryService().append(quotaId, offset, quotaChunk.subarray(0, Math.min(quotaChunk.length, quotaSize - offset)));
+  }
+  binaryService().finish(quotaId);
+  try {
+    await new Promise((resolve, reject) => {
+      const limited = new WebSocket(url, ['fixture']);
+      limited.binaryType = 'blob';
+      let errors = 0;
+      let messages = 0;
+      let closes = 0;
+      limited.onopen = () => limited.send(new Uint8Array([65, 0, 66]));
+      limited.onmessage = () => {messages++;};
+      limited.onerror = () => {errors++;};
+      limited.onclose = event => {
+        if (++closes === 1 && errors === 1 && messages === 0 && event.code === 1006 && !event.wasClean) {
+          extra.push('Blob quota failure emits error and close once'); resolve();
+        } else {reject(new Error('Blob quota failure was not terminal: ' + JSON.stringify({errors, messages, closes, code: event.code})));}
+      };
+    });
+  } finally {binaryService().release(quotaId);}
+  if (binaryService().stats().bytes !== baselineBytes) {throw new Error('Socket Blob quota failure retained partial storage');}
+
   await new Promise((resolve, reject) => {
     const opening = new WebSocket(url, ['fixture']);
     let closes = 0;

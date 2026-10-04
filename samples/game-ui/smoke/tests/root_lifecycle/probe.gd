@@ -16,7 +16,7 @@ func adjust(amount: float = 0.5) -> float:
 	return temperature
 
 func object_round_trip(value: Dictionary) -> Dictionary:
-	assert(value.node == self and value.items[0] == self and value.items[1] == null)
+	assert(value.node == self and value.items[0] == self and value.items[1] == null and value.counter == 7 and value.wide == 9223372036854775807)
 	referenced.emit(self)
 	return value
 
@@ -29,7 +29,7 @@ func binding() -> RNSceneBinding:
 	resource.snapshot_method = &"snapshot"
 	resource.snapshot_schema = {"type": "record", "fields": {"temperature": {"type": "number"}, "label": {"type": "string"}}}
 	var object_schema := {"type": "Object", "capability": "ClimateSensor", "nullable": true}
-	var object_record := {"type": "record", "fields": {"node": object_schema, "items": {"type": "array", "element": object_schema}}}
+	var object_record := {"type": "record", "fields": {"node": object_schema, "items": {"type": "array", "element": object_schema}, "counter": {"type": "int64"}, "wide": {"type": "int64"}}}
 	resource.commands = {
 		"adjust": {"method": "adjust", "mode": "sync", "arguments": [{"name": "amount", "value": {"type": "number"}, "optional": true}], "result": {"type": "number"}},
 		"objects": {"method": "object_round_trip", "mode": "sync", "arguments": [{"name": "value", "value": object_record}], "result": object_record},

@@ -62,3 +62,25 @@ test('Keyboard-only consumers instantiate native services before subscribing', (
   subscription({name: 'keyboardDidShow', payload: {height: 100}});
   assert.deepEqual(events, [['keyboardDidShow', {height: 100}]]);
 });
+
+test('tagged bridgeless immediate shim preserves cancellation, arguments and microtask ordering', () => {
+  const {createRequire} = require('node:module');
+  const projectRequire = createRequire(path.resolve(__dirname, '../../../samples/view-text/package.json'));
+  const filename = path.resolve(__dirname, '../../../samples/view-text/node_modules/react-native/Libraries/Core/Timers/immediateShim.js');
+  const transformed = projectRequire('@babel/core').transformSync(fs.readFileSync(filename, 'utf8'), {
+    filename, presets: [[projectRequire.resolve('@react-native/babel-preset'), {enableBabelRuntime: false}]],
+    babelrc: false, configFile: false,
+  }).code;
+  const queue = [];
+  const events = [];
+  const context = {module: {exports: {}}, queueMicrotask: callback => queue.push(callback)};
+  context.exports = context.module.exports; context.global = context;
+  vm.runInNewContext(transformed, context);
+  const {setImmediate, clearImmediate} = context.module.exports;
+  const canceled = setImmediate(() => events.push('canceled')); clearImmediate(canceled);
+  setImmediate((text, number) => {events.push([text, number]); setImmediate(() => events.push('nested'));}, 'ready', 17);
+  assert.deepEqual(events, []);
+  while (queue.length) {queue.shift()();}
+  assert.deepEqual(events, [['ready', 17], 'nested']);
+  assert.throws(() => setImmediate('invalid'), /function/);
+});

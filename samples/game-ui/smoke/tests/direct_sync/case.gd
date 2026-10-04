@@ -6,10 +6,13 @@ func _process(_delta: float) -> void:
 	if not advance(): return
 	match stage:
 		0:
+			HermesRuntime.evaluate("globalThis.immediateEvidence=[];const canceled=setImmediate(()=>immediateEvidence.push('canceled'));clearImmediate(canceled);setImmediate((text,value)=>{immediateEvidence.push([text,value]);setImmediate(()=>immediateEvidence.push(['nested']));},'ready',17);undefined;")
+			check(HermesRuntime.get_last_error().is_empty(), "Public RN immediate globals are unavailable")
 			enemies[1].apply_damage(17)
 			inventory.set_quantity("potion", 8)
 			next_stage()
 		1:
+			check(HermesRuntime.evaluate("immediateEvidence.length===2 && immediateEvidence[0][0]==='ready' && immediateEvidence[0][1]===17 && immediateEvidence[1][0]==='nested'"), "Tagged immediate shim lost cancellation, arguments or nested callbacks")
 			var values: Dictionary = fixture().enemies
 			for index in range(3):
 				check(values[str(panels[index].get_root_tag())].health == (83 if index == 1 else 100), "Damage changed the wrong enemy surface")

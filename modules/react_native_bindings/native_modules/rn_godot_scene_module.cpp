@@ -82,6 +82,11 @@ bool convert_scene_value(const Variant &p_value, const RNValueSchema &p_schema, 
 		wrapper["$godot"] = p_schema.type == RNValueType::OBJECT ? "Object" : "Session";
 		wrapper["handle"] = p_value;
 		r_value = wrapper;
+	} else if (p_mode == SceneValueMode::TO_WRAPPER && p_schema.type == RNValueType::INT64) {
+		Dictionary wrapper;
+		wrapper["$godot"] = "int64";
+		wrapper["value"] = String::num_int64(int64_t(p_value));
+		r_value = wrapper;
 	} else if (p_schema.type == RNValueType::ARRAY && p_value.get_type() == Variant::ARRAY) {
 		const Array source = p_value;
 		if (source.size() > 4096) {

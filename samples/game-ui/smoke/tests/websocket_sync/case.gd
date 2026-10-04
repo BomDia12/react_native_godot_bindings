@@ -16,7 +16,7 @@ func _process(_delta: float) -> void:
 			next_stage()
 		1:
 			if not fixture().has("socketEvidence"): return
-			check(fixture().socketEvidence.size() == 9, "Native WebSocket evidence is incomplete")
+			check(fixture().socketEvidence.size() == 10, "Native WebSocket evidence is incomplete")
 			check(inventory.items[0].quantity == 7 and fixture().inventory.items[0].quantity == 7, "Socket update bypassed Godot authority")
 			var records := FileAccess.get_file_as_string(network.records)
 			check(records.contains('"websocket": "received"') and records.contains('"binary": true'), "Server did not observe binary frames")

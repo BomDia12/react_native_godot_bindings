@@ -122,7 +122,8 @@ are callable; there is no unrestricted reflection from JS. Object-typed argument
 resolve their opaque handles against the current session and declared capability
 before invocation. Object results, snapshot fields and signal fields are registered
 and returned as `{$godot: 'Object', handle}` wrappers, including declared array/record
-fields and nullable values. Godot retains ownership of the objects; destroyed objects
+fields and nullable values. Declared `int64` results preserve their decimal-string
+wrappers through the scene response envelope. Godot retains ownership of the objects; destroyed objects
 fail resolution and session closure invalidates their handles.
 
 `react-native-godot/scene` exports `getBinding`, `read`, `call`, `callAsync`, `onChanged`
@@ -145,7 +146,9 @@ layout invalidation proceeds immediately; notification retries do not repeat it.
 Timers use a generation-owned monotonic clock. Due callback IDs are snapshotted;
 nested registration waits for the next turn, cancellation applies immediately, missed
 intervals skip catch-up bursts, thrown callbacks do not stop later work, and Hermes owns
-microtasks. Recurring timers rotate behind waiting due callbacks to prevent starvation.
+microtasks. Tagged RN supplies `setImmediate`/`clearImmediate` through its bridgeless
+`immediateShim`, backed by the native Hermes microtask queue; cancellation, callback
+arguments and nested immediates are exercised in the real application. Recurring timers rotate behind waiting due callbacks to prevent starvation.
 rAF runs only with a visible eligible root. Timer/native delivery drains are
 bounded; idle deadlines cap configured work by remaining frame time (configured frame
 rate, or a 60 Hz budget when uncapped). Game physics pause does not stop service time.
@@ -169,7 +172,7 @@ HTTPRequest nodes are lazy, bounded, always processing and shared by fetch/XHR/i
 A lease moves through IDLE → LEASED → DRAINING; cancellation releases no slot until the
 old native completion/deferred drain barrier. Queue timeout includes waiting time;
 zero means no caller deadline. Blob response descriptors preserve the case-insensitive
-Content-Type response header. Metadata and data delivery share a response ownership
+Content-Type response header, including synthetic responses for typed Blob object URLs. Metadata and data delivery share a response ownership
 guard: listener failures release storage unless a Blob descriptor was successfully
 handed off. Response headers use a prototype-free record, preserving names such as
 `constructor` and `__proto__`. Image cancellation reports immediate release only for
@@ -197,7 +200,10 @@ overshoot the per-frame byte target once so a legal packet cannot starve. Normal
 failure, cancellation and generation reset release native peers once.
 Open notifications retry when the native event queue is full, before messages are delivered.
 Handshake/connect/packet failures and close notifications retain the peer until terminal
-delivery is accepted, then release it once.
+delivery is accepted, then release it once. If a Blob-mode message cannot allocate or
+finish its binary backing, the facade releases partial storage, closes the native peer
+and emits `websocketFailed`; tagged RN turns that into one error and abnormal close.
+Queued messages and the later native terminal event are suppressed for that socket.
 
 ## Editor service limits
 
