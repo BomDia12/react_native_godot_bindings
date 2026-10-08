@@ -3,6 +3,8 @@
 const path = require('path');
 
 const OVERRIDES = Object.freeze({
+  'Libraries/Alert/Alert': 'adapters/Alert.godot.js',
+  'Libraries/Blob/URL': 'adapters/URL.godot.js',
   'Libraries/Alert/RCTAlertManager': 'adapters/RCTAlertManager.godot.js',
   'Libraries/Components/AccessibilityInfo/legacySendAccessibilityEvent':
     'adapters/legacySendAccessibilityEvent.godot.js',

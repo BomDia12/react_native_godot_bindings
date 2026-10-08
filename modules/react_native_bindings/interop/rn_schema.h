@@ -79,6 +79,7 @@ struct RNMethodSchema {
 };
 
 struct RNEventSchema {
+	bool keeps_runtime_alive = true;
 	StringName name;
 	StringName subscription_name;
 	RNValueSchema payload;
@@ -86,6 +87,9 @@ struct RNEventSchema {
 };
 
 bool rn_validate_value_schema(const RNValueSchema &p_schema, RNError &r_error, const String &p_path = "schema");
+bool rn_parse_value_schema(const Dictionary &p_definition, RNValueSchema &r_schema, RNError &r_error, const String &p_path = "schema");
 bool rn_validate_method_schema(const RNMethodSchema &p_schema, RNError &r_error, const String &p_path = "method");
 bool rn_validate_event_schema(const RNEventSchema &p_schema, RNError &r_error, const String &p_path = "event");
 bool rn_validate_native_value(const Variant &p_value, const RNValueSchema &p_schema, RNError &r_error, const String &p_path);
+
+Variant rn_apply_native_defaults(const Variant &p_value, const RNValueSchema &p_schema);

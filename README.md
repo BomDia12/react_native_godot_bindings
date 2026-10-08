@@ -4,17 +4,31 @@ This repository builds the React Native 0.87.1 component layer as an
 external Godot module. Godot is cloned into the ignored `godot/` working directory; the
 tracked module remains under `modules/react_native_bindings/`.
 
-The tested Linux path includes the Godot Metro platform, explicit RGBA colors, staged
-local assets, C++ host descriptors and native modules, `Pressable` interaction,
-independent React surfaces, public host refs, retained transactional mounting, native
-images, scrolling, editing, Modal, Switch and GodotWindow presentation. The
-[component gallery](samples/game-ui/) exercises upstream FlatList and SectionList.
-Real network, scheduler, Keyboard, Alert and scene-binding integration awaits Phase 6B. See
-the [Godot platform](documentation/godot-platform.md),
-[extension](documentation/extensions.md), [interop](documentation/interop.md),
-[compatibility matrices](documentation/compatibility/), and
-[test coverage](documentation/compatibility/test-coverage.md) for the implemented
-boundary and remaining limitations.
+The tested Linux path includes independent React surfaces, retained native controls,
+images, lists, editing and presentations, a monotonic frame scheduler, pooled Godot
+HTTPRequest, WebSocketPeer and chunked Blob services. The [working game](samples/game-ui/DEMO.md)
+keeps enemy and inventory state in GDScript: signals update four RN surfaces directly,
+and declared RN commands mutate only their bound Godot target. Network scenarios feed
+updates into the same Godot authority.
+
+Build and stage the standalone demo under the workspace's `godotProjects` directory:
+
+```sh
+python3 -m pip install -r requirements-ci.txt
+npm --prefix samples/game-ui ci
+npm --prefix samples/game-ui run build:godot
+python3 scripts/stage_game_demo.py
+"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" --editor --path ../godotProjects/Phase6BGame --import
+"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" --path ../godotProjects/Phase6BGame
+```
+
+Play offline with **1/2/3** to damage enemies and **P** to pick up a potion. An optional
+HTTP endpoint and explicit Refresh button demonstrate remote inventory/icons. Service
+limits use ordinary `react_native/*` Project Settings. Prefer uncontrolled TextInput
+`defaultValue` for native editing; controlled `value` with `onChangeText` is retained.
+The [platform](documentation/godot-platform.md), [extensions](documentation/extensions.md),
+[interop](documentation/interop.md), [compatibility matrices](documentation/compatibility/)
+and [validation](documentation/phase6b_validation.md) describe the tested boundary.
 
 ## Build and test
 

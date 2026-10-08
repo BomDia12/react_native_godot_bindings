@@ -36,6 +36,14 @@ func validate_state(state: Dictionary) -> String:
 		return "removed subscription received a later native signal"
 	return ""
 
+func ready_to_validate() -> bool:
+	var states = HermesRuntime.get_global("__godotNativeModuleStates")
+	if not states is Dictionary or states.size() != 2: return false
+	for state in states.values():
+		if state.get("error") != null: return true
+		if not state.get("result") is Dictionary or not state.get("removedResult") is Dictionary or not state.get("event") is Dictionary or state.get("cancelledCode") == null: return false
+	return true
+
 func validate_smoke() -> String:
 	var states = HermesRuntime.get_global("__godotNativeModuleStates")
 	if not states is Dictionary or states.size() != 2:

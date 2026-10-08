@@ -7,7 +7,7 @@
   "bundle": {
     "mode": "shared",
     "package_dir": "samples/game-ui",
-    "script": "build:godot",
+    "script": "build:gallery",
     "output": "samples/game-ui/dist/godot.bundle.js"
   },
   "inputs": [
@@ -26,6 +26,7 @@
     "samples/game-ui/package.json",
     "samples/game-ui/project.godot",
     "samples/game-ui/smoke/tests/component_contracts/SmokeMain.tscn",
-    "samples/game-ui/smoke/tests/component_contracts/component_contracts.gd"
+    "samples/game-ui/smoke/tests/component_contracts/component_contracts.gd",
+    "samples/game-ui/gallery.entry.js"
   ]
 }

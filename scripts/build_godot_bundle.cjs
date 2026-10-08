@@ -99,6 +99,7 @@ async function main() {
     }
     const stagedDist = path.join(temporaryRoot, 'dist');
     fs.mkdirSync(stagedDist, {recursive: true});
+    if (fs.existsSync(outputDirectory)) {fs.cpSync(outputDirectory, stagedDist, {recursive: true});}
     const bundleName = path.basename(output);
     fs.renameSync(temporaryBundle, path.join(stagedDist, bundleName));
     fs.renameSync(sourceMap, path.join(stagedDist, bundleName + '.map'));

@@ -11,9 +11,17 @@
 #include "examples/rn_example_meter.h"
 #include "examples/rn_example_scene_module.h"
 #include "fabric/rn_shadow_node.h"
+#include "interop/rn_scene_binding.h"
+#include "native_modules/rn_alert_service.h"
+#include "native_modules/rn_application_services.h"
+#include "native_modules/rn_blob_service.h"
 #include "native_modules/rn_builtin_native_modules.h"
+#include "native_modules/rn_godot_scene_module.h"
+#include "native_modules/rn_http_service.h"
+#include "native_modules/rn_websocket_module.h"
 #include "root_view/react_native_root_view.h"
 #include "runtime/react_native_runtime_coordinator.h"
+#include "runtime/rn_service_settings.h"
 #include "singletons/hermes_runtime_singleton.h"
 #include "singletons/react_native_file_singleton.h"
 
@@ -31,6 +39,7 @@
 void rn_force_link_native_module_registry_tests();
 #endif
 
+static GodotAlerts *godot_alerts = nullptr;
 static ReactNativeFileSingleton *react_native_file_singleton = nullptr;
 static HermesRuntimeSingleton *hermes_runtime_singleton = nullptr;
 static ReactNativeRuntimeCoordinator *react_native_runtime_coordinator = nullptr;
@@ -59,6 +68,13 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		GLOBAL_DEF("react_native/text/font_aliases", Dictionary());
 		rn_register_image_settings();
+		rn_register_service_settings();
+		ClassDB::register_class<GodotAlerts>();
+		godot_alerts = memnew(GodotAlerts);
+		godot_alerts->configure(react_native_runtime_coordinator->get_state());
+		Engine::get_singleton()->add_singleton(Engine::Singleton("GodotAlerts", godot_alerts, "GodotAlerts"));
+		ClassDB::register_abstract_class<RNHTTPService>();
+		ClassDB::register_internal_class<RNApplicationLifecycle>();
 		ClassDB::register_abstract_class<RNTextNativeState>();
 		ClassDB::register_class<RNTextControl>();
 		ClassDB::register_class<RNViewControl>();
@@ -76,7 +92,15 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		descriptors->freeze();
 		std::shared_ptr<RNNativeModuleRegistry> modules = react_native_runtime_coordinator->get_native_module_registry();
 		ERR_FAIL_COND_MSG(!modules || !rn_register_builtin_native_modules(*modules, registration_error) || !rn_register_example_scene_module(*modules, registration_error), registration_error.describe());
+		ERR_FAIL_COND_MSG(!rn_register_godot_scene_module(*modules, registration_error), registration_error.describe());
+		ERR_FAIL_COND_MSG(!rn_register_application_services(*modules, react_native_runtime_coordinator->get_state(), registration_error), registration_error.describe());
+		auto state = react_native_runtime_coordinator->get_state();
+		ERR_FAIL_COND_MSG(!rn_register_blob_module(*modules, [state] { return state->blobs; }, registration_error), registration_error.describe());
+		ERR_FAIL_COND_MSG(!rn_register_http_module(*modules, [state] { return ObjectDB::get_instance(state->http_id) ? state->http : nullptr; }, [state] { return state->blobs; }, registration_error), registration_error.describe());
+		ERR_FAIL_COND_MSG(!rn_register_websocket_module(*modules, [state] { return state->service_settings; }, [state] { return state->blobs; }, registration_error), registration_error.describe());
+		ERR_FAIL_COND_MSG(!rn_register_alert_module(*modules, registration_error), registration_error.describe());
 		modules->freeze_definitions();
+		ClassDB::register_class<RNSceneBinding>();
 		ClassDB::register_class<ReactNativeRootView>();
 		ClassDB::register_class<RNExampleCounter>();
 
@@ -100,6 +124,9 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 void uninitialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE && react_native_runtime_coordinator) {
 		react_native_runtime_coordinator->shutdown_scene();
+		Engine::get_singleton()->remove_singleton("GodotAlerts");
+		memdelete(godot_alerts);
+		godot_alerts = nullptr;
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_CORE) {

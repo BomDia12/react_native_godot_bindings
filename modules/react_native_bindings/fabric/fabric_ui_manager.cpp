@@ -2,6 +2,7 @@
 
 #include "../components/rn_host_descriptor_registry.h"
 #include "../interop/rn_value_codec.h"
+#include "../runtime/rn_execution_scope.h"
 #include "rn_event_target.h"
 
 #include "core/error/error_macros.h"
@@ -740,6 +741,7 @@ facebook::jsi::Value FabricUIManager::find_shadow_node_by_tag(facebook::jsi::Run
 }
 
 void FabricUIManager::dispatch_event_locked(facebook::jsi::Runtime &p_runtime, const RNNativeEvent &p_event, uint64_t p_generation) {
+	RNExecutionScope scope({ p_generation, p_event.root_tag, p_event.surface_epoch });
 	auto shared = state.lock();
 	if (!shared || !event_handler || p_event.generation != p_generation || p_event.generation != runtime_generation) {
 		return;

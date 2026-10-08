@@ -63,6 +63,26 @@ class SmokeManifestTests(unittest.TestCase):
         self.assertEqual(manifest.id, "one")
         self.assertEqual(manifest.scene_path, Path("samples/app/smoke/tests/one/SmokeMain.tscn"))
 
+    def test_optional_network_fixture_requires_confined_declared_configuration(self):
+        config = self.root / "samples/app/network.json"
+        config.write_text("{}", encoding="utf-8")
+        data = self.manifest_data()
+        data["fixture"] = {"kind": "local_network", "config": "samples/app/network.json"}
+        with self.assertRaisesRegex(ManifestError, "declared input"):
+            load_manifest(self.root, self.write_manifest(data))
+        data["inputs"].append("samples/app/network.json")
+        self.assertEqual(load_manifest(self.root, self.write_manifest(data)).fixture.kind, "local_network")
+        data["fixture"]["command"] = "arbitrary"
+        with self.assertRaisesRegex(ManifestError, "unknown fields"):
+            load_manifest(self.root, self.write_manifest(data))
+        del data["fixture"]["command"]
+        data["fixture"]["kind"] = "custom"
+        with self.assertRaisesRegex(ManifestError, "unknown fixture"):
+            load_manifest(self.root, self.write_manifest(data))
+        data["fixture"] = {"kind": "local_network", "config": "../network.json"}
+        with self.assertRaisesRegex(ManifestError, "traversal"):
+            load_manifest(self.root, self.write_manifest(data))
+
     def test_rejects_missing_unknown_and_invalid_fields(self):
         missing = self.manifest_data()
         del missing["allowlist"]

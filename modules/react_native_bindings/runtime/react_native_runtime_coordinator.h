@@ -2,6 +2,7 @@
 
 #include "../fabric/rn_native_event.h"
 #include "../fabric/rn_shadow_node.h"
+#include "rn_service_settings.h"
 
 #include "core/math/rect2.h"
 #include "core/math/vector4.h"
@@ -198,6 +199,18 @@ public:
 };
 
 struct RNRuntimeCoordinatorState {
+	RNServiceSettings service_settings;
+	std::shared_ptr<class RNBlobService> blobs;
+	std::shared_ptr<class RNHTTPService> http;
+	ObjectID http_id;
+	std::shared_ptr<class RNImageService> images;
+	double font_scale = 1;
+	bool application_paused = false;
+	bool is_rtl = false;
+	bool force_rtl = false;
+	bool allow_rtl = true;
+	bool swap_rtl = true;
+	uint64_t metrics_revision = 1;
 	std::shared_ptr<RNHostDescriptorRegistry> descriptor_registry;
 	std::unordered_map<int, RNSurfaceRoute> routes;
 	std::unordered_map<uint64_t, String> registered_roots;
@@ -221,13 +234,16 @@ class ReactNativeRuntimeCoordinator : public Object {
 	GDCLASS(ReactNativeRuntimeCoordinator, Object);
 
 	static ReactNativeRuntimeCoordinator *singleton;
+	std::deque<std::function<void()>> pending_lifecycle;
 
 	std::shared_ptr<RNRuntimeCoordinatorState> state;
 	std::shared_ptr<FabricUIManager> ui_manager;
 	std::shared_ptr<NativeDOM> native_dom;
 	std::shared_ptr<class RNHostDescriptorJSIRegistry> descriptor_jsi_registry;
 	std::shared_ptr<RNNativeModuleRegistry> native_module_registry;
+	std::shared_ptr<class RNRuntimeScheduler> scheduler;
 	ObjectID connected_tree_id;
+	ObjectID lifecycle_observer_id;
 	bool frame_connected = false;
 
 	int allocate_root_tag();

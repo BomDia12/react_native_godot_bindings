@@ -216,7 +216,7 @@ func _process(_delta: float) -> void:
 			for index in range(3):
 				require_condition(get_node("Enemy%d" % index).get_instance_id() == initial_enemy_ids[index], "Sibling enemy surface remounted")
 			var health_values: Array = fixture().get("enemies", {}).values()
-			require_condition(health_values.count(100.0) == 2 and health_values.count(45.0) == 1, "Independent presentation state reached the wrong surface: %s" % [health_values])
+			require_condition(health_values.count(100) == 2 and health_values.count(45) == 1, "Independent presentation state reached the wrong surface: %s" % [health_values])
 			require_condition(is_equal_approx(target("health", get_node("Enemy1")).size.x, 81.0), "Enemy presentation did not apply the independent health state")
 			require_condition(fixture().get("windowText") == "Window editor!", "Native Window editing did not reach its React surface")
 			require_condition("window-modal-show" in fixture().get("events", []), "Window-scoped Modal did not show")

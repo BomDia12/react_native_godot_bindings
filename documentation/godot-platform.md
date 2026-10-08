@@ -61,8 +61,7 @@ large as `assetScale`, or the largest available, and returns React Native's loca
 shape.
 
 Explicit `res://` and `user://` objects are supported for local operations. PNG/JPEG/static WebP and base64 images use the bounded native image service;
-getSize, prefetch and queryCache share its source and credential policy. HTTP images
-require an installed RNImageTransport; the real Phase 6B transport is deferred. Paths must use the exact
+getSize, prefetch and queryCache share its source and credential policy. HTTP images use the shared bounded HTTPRequest pool installed before bundle evaluation. Paths must use the exact
 scheme, forward slashes, a nonempty relative path, and no `..` segment or embedded NUL.
 Percent characters remain literal. Missing staged files should be fixed by rebuilding
 the bundle.
@@ -70,7 +69,7 @@ the bundle.
 ## Pending APIs
 
 Imports of pending adapters are safe, but attempted operations report `E_UNSUPPORTED`.
-Network requests, alerts, BackHandler listeners, legacy accessibility
+BackHandler listeners, legacy accessibility
 dispatch, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid are not claimed as
 supported services or components. Bootstrap shims exist only for React Native startup
 dependencies and are not compatibility claims.
@@ -83,8 +82,7 @@ ref methods, selects the unified Godot host for both editor modes, retains Modal
 until its native dismiss event, and feeds sticky-header Animated values from native
 scroll events. The Animated props hook skips the unavailable native queue on Godot.
 Button opacity feedback explicitly uses the upstream JS animation driver on Godot.
-General NativeAnimated support is absent. Lists currently use the existing bootstrap
-queue; real scheduler integration is deferred.
+General NativeAnimated support is absent. Lists use the generation-owned native timer/idle scheduler.
 
 Text inherits the root's Godot RichTextLabel theme font, size and color. Register
 Font resources or res:// font paths under `react_native/text/font_aliases`; an alias
@@ -98,8 +96,7 @@ native event count. Use `defaultValue` for uncontrolled editor state. Native
 LineEdit/TextEdit own Unicode input, selection, undo, clipboard and IME; controlled
 replacement waits while composing. Switching multiline retains the wrapper and
 value/selection while starting a new native editor history. OS candidate-window
-behavior is not covered by the automated replay test. Keyboard service integration
-is deferred. Pointer eligibility applies to the wrapper and active/staged editors
+behavior is not covered by the automated replay test. Keyboard events reflect actual DisplayServer virtual-keyboard geometry; desktop focus does not synthesize visibility. Pointer eligibility applies to the wrapper and active/staged editors
 without changing editable visuals. autoFocus runs once after initial publication. Unsupported secure multiline input fails validation.
 
 ScrollView owns a native ScrollContainer and a separate React content host. The
@@ -122,3 +119,43 @@ indicator; color alpha combines with style opacity. Switch maps to CheckButton w
 appearance is not reproduced. Switch pointer handling honors its own and inherited
 pointerEvents without changing enabled visuals; native focus/keyboard behavior
 remains independent. Full compatibility classifications remain partial.
+
+## Application services
+
+Dimensions/PixelRatio describe the application Window and screen, independently of
+small RN roots. Window resize/scale changes coalesce before JS delivery. `fontScale`
+reaches native Text/TextInput measurement and rendering as well as public metrics.
+Scaling is inherited through Text spans; `allowFontScaling=false` disables it and
+`maxFontSizeMultiplier` null inherits, zero is unlimited, and values ≥1 cap scaling.
+Native sizes round once after scaling; explicit lineHeight uses the same multiplier.
+
+Appearance is application-controlled (`light`/`dark`); null/`auto` clears the override
+and restores the configured default or enabled host preference. `follow_system=false`
+by default.
+AppState tracks application pause/resume and focus independently of SceneTree pause.
+I18nManager direction preferences persist in `user://react_native_direction.cfg` and
+apply on restart/bundle generation. Native authored layout direction remains available.
+RN zIndex orders siblings in one surface; Godot nodes/windows order separate roots.
+
+GodotAppRegistry registration can opt into the same-root native Alert presenter or
+supply a custom JS presenter. Disabled roots, explicit decline and unattributed calls
+bubble to Godot handlers. No sibling is selected. Root-bound callbacks retain their
+origin; stale origins cancel. See [extension APIs](extensions.md). Modal and Window
+continue to use the native controls and publication barrier; headless Window evidence
+proves logical content/lifetime only. SafeAreaView keeps the non-iOS View fallback;
+RefreshControl is pending; use an explicit Refresh button for network data.
+
+HTTP/fetch/XHR support complete responses, status, cancellation/timeout, redirects,
+verified TLS, decompression, multipart strings/Blob/local files, binary byte views and
+bounded in-memory host-only cookies; Domain attributes are rejected. XHR receives response/data/completion in order after native
+completion; incremental responseText/progress streaming is outside this subset.
+Text decoding preserves NUL and replaces invalid UTF-8. Blob/FileReader and object URLs
+use bounded native chunks and explicit/GC ownership. WebSocketPeer handles framing,
+subprotocols, text/binary and graceful CLOSING with a bounded deadline; no automatic
+reconnect is provided.
+
+Clipboard delegates to DisplayServer. Linking.openURL delegates to the host opener;
+initial URL is null without a host delivery provider, and canOpenURL/openSettings report
+unsupported without a capability provider. Vibration requires a handheld host provider;
+desktop controllers are not selected. Keyboard geometry is reported only when the
+backend provides it. Broader mobile/export fidelity remains pending.

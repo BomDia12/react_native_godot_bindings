@@ -17,6 +17,7 @@ export default NativeComponentRegistry.get('GodotTextInput', () => ({
   uiViewClassName: 'GodotTextInput',
   directEventTypes,
   validAttributes: {
+    allowFontScaling: true, maxFontSizeMultiplier: true,
     text: true, multiline: true, mostRecentEventCount: true, selection: true,
     editable: true, readOnly: true, placeholder: true, secureTextEntry: true,
     submitBehavior: true, maxLength: true, autoFocus: true,

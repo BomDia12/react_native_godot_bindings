@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import os
+from contextlib import nullcontext
+from network_fixture import LocalNetworkFixture
 import resource
 import subprocess
 import sys
@@ -132,14 +134,20 @@ def run_test(
     # cache, so tests are parallel across projects and serial within one.
     with project_lock:
         try:
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=manifest.timeout_seconds,
-                check=False,
-            )
+            fixture = LocalNetworkFixture(repo_root, manifest.fixture.config, log_dir / (manifest.id + "-fixture")) if manifest.fixture else nullcontext()
+            with fixture as server:
+                environment = os.environ.copy()
+                if server:
+                    environment["GODOT_SMOKE_NETWORK_FIXTURE"] = str(server.readiness_path)
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    errors="replace",
+                    timeout=manifest.timeout_seconds,
+                    check=False,
+                    env=environment,
+                )
             exit_code = completed.returncode
             log = completed.stdout + completed.stderr
         except subprocess.TimeoutExpired as error:

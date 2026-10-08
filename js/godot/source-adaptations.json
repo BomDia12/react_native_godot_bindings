@@ -4,5 +4,9 @@
   "Libraries/Components/ScrollView/ScrollView.js": "2255279c0a1055c2b594a381e4817b1b9931fdb069272e63fff11086363e02cc",
   "Libraries/Modal/Modal.js": "3d35351a0b1975f2e18fd976cafc2b7e302c7592521ce5a686013bff4d303c25",
   "src/private/animated/createAnimatedPropsHook.js": "0b4bf4cc0a07b4bcd452fff083b3113d5bb694837c99d97b67de75e500c2310d",
-  "Libraries/Components/Touchable/TouchableOpacity.js": "d1e90d0d5846866ccb1cc5ab35c6775379c2deb39bcd2c3e38c0a7b0d1fcd4bb"
+  "Libraries/Components/Touchable/TouchableOpacity.js": "d1e90d0d5846866ccb1cc5ab35c6775379c2deb39bcd2c3e38c0a7b0d1fcd4bb",
+  "Libraries/WebSocket/WebSocket.js": "722508694e0fb0d7cd7878421801d3e9df2b119b79775320ee832870628f2569",
+  "Libraries/Blob/FileReader.js": "a0a1244ea1bd20007bdef6b4b9279ac12a3ad93576dc7914c1e573d3a55c904b",
+  "Libraries/vendor/emitter/EventEmitter.js": "adb61a5de47f0b89f72da0f27a69a9631cf60257beb9b0bc7b5830c081c0e221",
+  "Libraries/Blob/BlobManager.js": "aeaa78b92cb1d5a58773a9deeb44f85f98b3255f8099b2a6b9551e8a70e87ee1"
 }
