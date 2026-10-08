@@ -88,4 +88,27 @@ TEST_CASE("[ReactNativeBindings][Interop] destroyed objects revoke non-owning ha
 	CHECK(error.code == RNErrorCode::OBJECT_GONE);
 }
 
+TEST_CASE("[ReactNativeBindings][Interop] destroyed objects free handle capacity without resolution") {
+	auto state = std::make_shared<RNRuntimeCoordinatorState>();
+	RNSurfaceRoute route;
+	route.root_tag = 11;
+	route.runtime_generation = 2;
+	route.surface_epoch = 8;
+	route.status = RNSurfaceStatus::ACTIVE;
+	state->routes[route.root_tag] = route;
+	RNObjectRegistry registry(state);
+	registry.begin_generation(2);
+	RNError error;
+	const String session = registry.open_session(route.root_tag, error);
+	for (int i = 0; i < 4096; ++i) {
+		Object *transient = memnew(Object);
+		CHECK_FALSE(registry.register_object(session, transient->get_instance_id(), "Counter", error).is_empty());
+		memdelete(transient);
+	}
+	CHECK(registry.object_count() == 4096);
+	Object live;
+	CHECK_FALSE(registry.register_object(session, live.get_instance_id(), "Counter", error).is_empty());
+	CHECK(registry.object_count() == 1);
+}
+
 } // namespace TestRNInterop

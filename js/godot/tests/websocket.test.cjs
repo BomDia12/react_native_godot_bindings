@@ -54,3 +54,23 @@ test('WebSocket Blob begin/write/finish failures release partial storage and ter
     assert.equal(events[1][1].data, 'text');
   }
 });
+
+test('WebSocket close without arguments sends a normal closure', () => {
+  const closed = [];
+  const socket = {onEvent() {}, close(...args) {closed.push(args);}};
+  const context = {module: {exports: {}},
+    __godotScheduler: {withoutOrigin: callback => callback()},
+    __godotNativeModules: {get: () => socket},
+    require(name) {
+      if (name.endsWith('/RCTDeviceEventEmitter')) {return {emit() {}};}
+      if (name === './binary') {return {};}
+      return projectRequire(name);
+    },
+  };
+  context.exports = context.module.exports; context.global = context;
+  vm.runInNewContext(transformed, context);
+  const {websocketFacade} = context.module.exports;
+  websocketFacade.close(undefined, undefined, 4);
+  websocketFacade.close(4000, 'done', 5);
+  assert.deepEqual(closed, [[4, 1000, ''], [5, 4000, 'done']]);
+});

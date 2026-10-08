@@ -118,8 +118,19 @@ String RNObjectRegistry::register_object(const String &p_session_token, ObjectID
 		}
 	}
 	if (objects.size() >= 4096) {
-		r_error = RNError::make(RNErrorCode::LIMIT, "object handle limit exceeded", "registerObject");
-		return String();
+		Vector<String> destroyed;
+		for (const KeyValue<String, RNObjectRecord> &entry : objects) {
+			if (!ObjectDB::get_instance(entry.value.object_id)) {
+				destroyed.push_back(entry.key);
+			}
+		}
+		for (const String &token : destroyed) {
+			objects.erase(token);
+		}
+		if (objects.size() >= 4096) {
+			r_error = RNError::make(RNErrorCode::LIMIT, "object handle limit exceeded", "registerObject");
+			return String();
+		}
 	}
 	RNObjectRecord record;
 	record.token = issue_token("object");

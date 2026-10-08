@@ -279,6 +279,7 @@ bool rn_register_websocket_module(RNNativeModuleRegistry &p_registry, const std:
 		definition.methods.push_back(method);
 	}
 	RNEventSchema event;
+	event.keeps_runtime_alive = false;
 	event.name = "event";
 	event.subscription_name = "onEvent";
 	event.payload = RNValueSchema::value(RNValueType::DYNAMIC);

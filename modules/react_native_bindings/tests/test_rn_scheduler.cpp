@@ -4,6 +4,13 @@
 #include "tests/test_macros.h"
 
 namespace TestRNScheduler {
+struct ClockControl : facebook::jsi::HostObject {
+	double &clock;
+	explicit ClockControl(double &p_clock) :
+			clock(p_clock) {}
+	void set(facebook::jsi::Runtime &, const facebook::jsi::PropNameID &, const facebook::jsi::Value &p_value) override { clock += p_value.getNumber(); }
+};
+
 struct Fixture {
 	HermesRuntimeSingleton *runtime = HermesRuntimeSingleton::get_singleton();
 	double clock = 5000;
@@ -114,6 +121,14 @@ TEST_CASE("[ReactNativeBindings][Scheduler] available frame time bounds idle wor
 	CHECK(f.events() == "[true]");
 	f.runtime->dispatch_scheduler(f.scheduler, true, false, 0.5);
 	CHECK(f.events() == "[true,0.5]");
+}
+TEST_CASE("[ReactNativeBindings][Scheduler] idle timeout status includes time spent by earlier idle callbacks") {
+	Fixture f;
+	f.runtime->install_host_object("__testClock", std::make_shared<ClockControl>(f.clock));
+	f.runtime->evaluate("s.requestIdleCallback(()=>{__testClock.advance=1;});s.requestIdleCallback(d=>events.push(d.didTimeout),{timeout:1});undefined;");
+	f.runtime->dispatch_scheduler(f.scheduler, true, false, 2);
+	f.runtime->uninstall_host_object("__testClock");
+	CHECK(f.events() == "[true]");
 }
 TEST_CASE("[ReactNativeBindings][Scheduler] native callbacks timers and idle share one frame allowance") {
 	Fixture f;

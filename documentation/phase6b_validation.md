@@ -27,10 +27,10 @@ production HTTP and sockets use Godot's native transports.
 | Gate | Result |
 |---|---|
 | Pinned dev editor/module build, tests and warnings as errors | Passed |
-| Module contracts | 114 cases, 13,578 assertions passed |
+| Module contracts | 116 cases, 17,681 assertions passed |
 | Godot TextEdit/RichTextLabel regressions | 15 cases, 4,232 assertions passed |
 | Python script/fixture contracts | 26 tests passed |
-| JavaScript contracts, after `npm ci` in both packages | 32 tests passed per package |
+| JavaScript contracts, after `npm ci` in both packages | 33 tests passed per package |
 | Complete headless suite | All 19 discovered manifests passed |
 | Native Linux display | Gallery, presentations and theme/geometry passed under Xvfb/software OpenGL |
 | Formatting, tracked smoke inputs and engine provenance | Passed |
@@ -91,6 +91,10 @@ fixture verifies tagged BlobRegistry sibling retention and last-close reclamatio
 shared Blob slices, alongside independent Blob copies; collector-only reclamation retains its distinct sibling-lifetime contract.
 The HTTP fixture also exercises query-only and root-relative redirects through
 the actual HTTPRequest/fetch path.
+Argumentless WebSocket `close()` sends a normal closure, and the process-lifetime
+socket listener no longer keeps frame polling alive once every peer has closed.
+Idle callbacks report `didTimeout` against the clock at dispatch, and destroyed
+transient Objects free their handle capacity without being resolved first.
 
 The application suite checks root removal/re-entry/reload and generation cleanup,
 direct inventory commands, lists/editors/assets, application metrics and locale

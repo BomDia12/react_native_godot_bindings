@@ -441,6 +441,10 @@ TEST_CASE("[ReactNativeBindings][WebSocket] failed handshakes and inbound errors
 	CHECK(runtime->evaluate("failedEvents.filter(name=>name==='websocketFailed').length") == Variant(1));
 	CHECK(runtime->evaluate("ws.stats().peers") == Variant(0));
 	CHECK(runtime->evaluate("failedEvents.includes('websocketClosed')") == Variant(false));
+	for (int i = 0; i < 8; ++i) {
+		runtime->dispatch_native_module_deliveries(registry);
+	}
+	CHECK_FALSE(registry->has_pending_work());
 	runtime->reset();
 	runtime->uninstall_host_object("__testFailure");
 }

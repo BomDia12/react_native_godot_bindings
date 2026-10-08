@@ -122,7 +122,7 @@ void RNRuntimeScheduler::drain(jsi::Runtime &p_runtime, bool p_idle, bool p_visu
 			arguments.emplace_back(frame_now);
 		} else if (task.kind == Kind::IDLE) {
 			jsi::Object value(p_runtime);
-			value.setProperty(p_runtime, "didTimeout", task.due <= frame_now);
+			value.setProperty(p_runtime, "didTimeout", task.due <= now());
 			std::weak_ptr<RNRuntimeScheduler> weak = weak_from_this();
 			value.setProperty(p_runtime, "timeRemaining", jsi::Function::createFromHostFunction(p_runtime, jsi::PropNameID::forAscii(p_runtime, "timeRemaining"), 0, [weak, deadline](jsi::Runtime &, const jsi::Value &, const jsi::Value *, size_t) {
 				auto scheduler = weak.lock();

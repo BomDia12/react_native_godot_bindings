@@ -50,7 +50,7 @@ export const websocketFacade = {
   connect: (url, protocols, options, id) => native().connect(url, protocols ?? [], options?.headers ?? {}, id),
   send: (text, id) => native().send(id, utf8Encode(text), true),
   sendBinary: (base64, id) => native().send(id, toByteArray(base64), false),
-  close: (code, reason, id) => native().close(id, code, reason),
+  close: (code, reason, id) => native().close(id, typeof code === 'number' ? code : 1000, typeof reason === 'string' ? reason : ''),
   ping: () => global.__godotUnsupported('WebSocket.ping'),
 };
 export const socketBlobMode = (id, enabled) => enabled ? blobModes.add(id) : blobModes.delete(id);
