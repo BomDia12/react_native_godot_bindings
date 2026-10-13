@@ -29,10 +29,8 @@ if [[ "$CREATED_CHECKOUT" == true || $(git -C "$GODOT_SOURCE_DIR" rev-parse HEAD
 	git -C "$GODOT_SOURCE_DIR" checkout --detach "$GODOT_COMMIT"
 fi
 
-if [[ ${GODOT_APPLY_PATCHES:-1} == 1 ]]; then
-	python3 "$SCRIPT_DIR/godot_patches.py" "$GODOT_SOURCE_DIR" --apply
-elif [[ -n $(git -C "$GODOT_SOURCE_DIR" status --porcelain) ]]; then
-	echo "Clean-source bootstrap requires an unmodified Godot checkout" >&2
+if ! git -C "$GODOT_SOURCE_DIR" diff --quiet HEAD; then
+	echo "Godot checkout has local modifications; the module builds against the unmodified pinned commit: $GODOT_SOURCE_DIR" >&2
 	exit 1
 fi
 

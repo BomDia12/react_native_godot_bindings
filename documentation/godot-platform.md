@@ -84,7 +84,10 @@ scroll events. The Animated props hook skips the unavailable native queue on God
 Button opacity feedback explicitly uses the upstream JS animation driver on Godot.
 General NativeAnimated support is absent. Lists use the generation-owned native timer/idle scheduler.
 
-Text inherits the root's Godot RichTextLabel theme font, size and color. Register
+Text inherits the root's Godot RichTextLabel theme font, size and color. The Text host
+shapes, wraps and draws through TextServer itself, with per-span colors, decorations
+and line heights. The tallest span line height sets each line box, and `numberOfLines`
+trims the last visible line with a tail ellipsis. Register
 Font resources or res:// font paths under `react_native/text/font_aliases`; an alias
 record may contain `font`, `weight` and `style`. Metro fonts use
 `fontFamily(require('./font.woff2'))` from `react-native-godot/fonts`. TTF, OTF,
@@ -95,7 +98,8 @@ Use controlled TextInput `value` with `onChangeText`; updates require the curren
 native event count. Use `defaultValue` for uncontrolled editor state. Native
 LineEdit/TextEdit own Unicode input, selection, undo, clipboard and IME; controlled
 replacement waits while composing. Switching multiline retains the wrapper and
-value/selection while starting a new native editor history. OS candidate-window
+value/selection while starting a new native editor history. A rejected transaction
+restores text, caret, selection and scroll offsets, and drops the editor's undo history. OS candidate-window
 behavior is not covered by the automated replay test. Keyboard events reflect actual DisplayServer virtual-keyboard geometry; desktop focus does not synthesize visibility. Pointer eligibility applies to the wrapper and active/staged editors
 without changing editable visuals. autoFocus runs once after initial publication. Unsupported secure multiline input fails validation.
 

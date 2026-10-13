@@ -7,12 +7,14 @@
 #include "../components/rn_text_input_control.h"
 #include "../fabric/rn_shadow_node.h"
 #include "../mounting/rn_layout_tree.h"
+#include "../native_modules/rn_image_probe.h"
 #include "../runtime/react_native_runtime_coordinator.h"
+#include "rn_test_display_server.h"
 
 #include "core/crypto/crypto_core.h"
+#include "core/input/input.h"
 #include "core/object/message_queue.h"
 #include "scene/main/scene_tree.h"
-#include "tests/display_server_mock.h"
 #include "tests/test_macros.h"
 
 namespace TestRNComponents {
@@ -75,27 +77,51 @@ public:
 		completion(std::move(result));
 	}
 };
-TEST_CASE("[ReactNativeBindings][Images] codec header bounds and reservation lifetime precede allocation") {
-	const auto bytes = png_bytes();
-	Image::LoadLimits limits;
-	limits.max_allocation_bytes = 4;
-	limits.max_encoded_bytes = bytes.size();
-	limits.max_workspace_bytes = 32 * 1024 * 1024;
-	Size2i size;
-	Image::BufferFormat format;
-	{
-		Image::ScopedLoadLimits scope(limits);
-		CHECK(Image::probe_buffer(bytes.ptr(), bytes.size(), size, format) == ERR_OUT_OF_MEMORY);
-		CHECK_FALSE(Image::is_load_size_allowed(UINT64_MAX, UINT64_MAX, 4));
-		Image::LoadLimits tighter = limits;
-		tighter.max_encoded_bytes = 1;
-		{
-			Image::ScopedLoadLimits nested(tighter);
-			CHECK_FALSE(Image::is_load_buffer_allowed(2));
-		}
-		CHECK(Image::is_load_buffer_allowed(2));
+TEST_CASE("[ReactNativeBindings][Images] header probes read PNG JPEG and WebP dimensions and reject truncated or oversized headers") {
+	RNImageHeader header;
+	const auto png = png_bytes();
+	REQUIRE(rn_probe_image(png.ptr(), png.size(), header));
+	CHECK(header.format == RNImageFormat::PNG);
+	CHECK(header.size == Size2i(2, 2));
+	CHECK_FALSE(rn_probe_image(png.ptr(), 20, header));
+
+	Ref<Image> image = Image::create_empty(3, 5, false, Image::FORMAT_RGB8);
+	const Vector<uint8_t> jpeg = image->save_jpg_to_buffer();
+	REQUIRE(rn_probe_image(jpeg.ptr(), jpeg.size(), header));
+	CHECK(header.format == RNImageFormat::JPEG);
+	CHECK(header.size == Size2i(3, 5));
+	CHECK_FALSE(rn_probe_image(jpeg.ptr(), 16, header));
+
+	for (const bool lossy : { false, true }) {
+		const Vector<uint8_t> webp = image->save_webp_to_buffer(lossy);
+		REQUIRE(rn_probe_image(webp.ptr(), webp.size(), header));
+		CHECK(header.format == RNImageFormat::WEBP);
+		CHECK(header.size == Size2i(3, 5));
+		CHECK_FALSE(rn_probe_image(webp.ptr(), 24, header));
 	}
-	CHECK(Image::get_load_limits().max_allocation_bytes == 0);
+
+	Vector<uint8_t> oversized = png;
+	oversized.write[16] = 0x7F;
+	CHECK_FALSE(rn_probe_image(oversized.ptr(), oversized.size(), header));
+	Vector<uint8_t> empty = png;
+	for (int i = 16; i < 20; ++i) {
+		empty.write[i] = 0;
+	}
+	CHECK_FALSE(rn_probe_image(empty.ptr(), empty.size(), header));
+}
+TEST_CASE("[ReactNativeBindings][Images] decoded pixel budget and reservation lifetime precede allocation") {
+	{
+		RNImageLimits tight;
+		tight.decoded_bytes = 4;
+		auto service = std::make_shared<RNImageService>(tight);
+		RNImageSource normalized;
+		RNError error;
+		REQUIRE(RNImageService::normalize(source(data_uri()), normalized, error));
+		RNImageResult rejected;
+		service->request(normalized, [&rejected](RNImageResult loaded) { rejected = loaded; });
+		CHECK(rejected.error.code == RNErrorCode::LIMIT);
+		CHECK(service->used_bytes() == 0);
+	}
 	RNImageLimits config;
 	auto service = std::make_shared<RNImageService>(config);
 	RNImageSource normalized;
@@ -168,47 +194,42 @@ TEST_CASE("[ReactNativeBindings][Images] credentialed sources bypass cache and d
 	CHECK_FALSE(bool(service->cached(stateless)));
 	CHECK(service->used_bytes() == 0);
 }
-TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native edit checkpoints preserve undo and redo without restoring through setters") {
-	LineEdit *line = memnew(LineEdit);
-	SceneTree::get_singleton()->get_root()->add_child(line);
-	line->set_text("start");
+TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] stale deferred editor signals for JS-applied values are ignored") {
+	Dictionary props;
+	props["text"] = "start";
+	auto state = prepare("GodotTextInput", props);
+	state.declarative_prop_revisions["text"] = 1;
+	auto *control = memnew(RNTextInputControl);
+	SceneTree::get_singleton()->get_root()->add_child(control);
+	control->apply(state);
+	auto *line = Object::cast_to<LineEdit>(control->get_editor());
 	line->set_caret_column(5);
-	line->insert_text_at_caret(" one");
+	line->insert_text_at_caret("!");
 	line->delete_text(0, 0);
+	line->emit_signal("text_changed", line->get_text());
+	REQUIRE(control->get_event_count() == 1);
+	control->reconcile(1, "applied", 2, 4);
 	MessageQueue::get_singleton()->flush();
-	line->insert_text_at_caret(" two");
-	line->delete_text(0, 0);
+	CHECK(control->get_text() == "applied");
+	CHECK(control->get_event_count() == 1);
+	CHECK(control->get_selection() == Point2i(2, 4));
+
+	props["multiline"] = true;
+	state = prepare("GodotTextInput", props);
+	control->apply(state);
+	control->publish(state, RNHostContext());
+	auto *edit = Object::cast_to<TextEdit>(control->get_editor());
+	REQUIRE(edit);
+	edit->insert_text_at_caret("?");
+	edit->emit_signal("text_changed");
+	REQUIRE(control->get_event_count() == 2);
+	control->reconcile(2, "multi", 1, 3);
 	MessageQueue::get_singleton()->flush();
-	line->undo();
-	const String retained = line->get_text();
-	auto checkpoint = line->capture_edit_state();
-	line->set_text("discarded");
-	line->restore_edit_state(checkpoint);
-	CHECK(line->get_text() == retained);
-	line->redo();
-	CHECK(line->get_text() == "start one two");
-	line->undo();
-	CHECK(line->get_text() == retained);
-	memdelete(line);
-	TextEdit *edit = memnew(TextEdit);
-	edit->set_text("start");
-	edit->set_caret_column(5);
-	edit->insert_text_at_caret(" one");
-	edit->begin_complex_operation();
-	edit->insert_text_at_caret(" two");
-	edit->end_complex_operation();
-	edit->undo();
-	auto multi = edit->capture_edit_state();
-	const String old = edit->get_text();
-	edit->set_text("discarded");
-	edit->restore_edit_state(multi);
-	CHECK(edit->get_text() == old);
-	CHECK(edit->has_redo());
-	edit->redo();
-	CHECK(edit->get_text().contains("two"));
-	edit->undo();
-	CHECK(edit->get_text() == old);
-	memdelete(edit);
+	control->notification(Node::NOTIFICATION_PROCESS);
+	CHECK(control->get_text() == "multi");
+	CHECK(control->get_event_count() == 2);
+	CHECK(control->get_selection() == Point2i(1, 3));
+	memdelete(control);
 }
 TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] acknowledgments use UTF16 and mode staging rolls back the retained editor") {
 	Dictionary props;
@@ -382,11 +403,9 @@ TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] native wheel honors loca
 	viewport->set_size(Size2i(640, 480));
 	auto *scroll = memnew(RNScrollControl);
 	viewport->add_child(scroll);
-	scroll->set_external_layout_enabled(true);
 	scroll->set_position(Point2(10, 10));
 	scroll->set_size(Size2(240, 100));
 	auto *rows = memnew(Control);
-	rows->set_external_layout_enabled(true);
 	rows->set_mouse_filter(Control::MOUSE_FILTER_PASS);
 	rows->set_size(Size2(200, 1000));
 	scroll->get_content()->add_child(rows);
@@ -425,6 +444,8 @@ TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] native wheel honors loca
 }
 
 TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native preedit defers the latest acknowledged replacement and rollback retains composition") {
+	memdelete(DisplayServer::get_singleton());
+	RNTestDisplayServer *display = memnew(RNTestDisplayServer);
 	Dictionary props;
 	props["text"] = "start";
 	auto state = prepare("GodotTextInput", props);
@@ -436,16 +457,13 @@ TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native preedit defers the
 	line->grab_focus();
 	line->edit();
 	line->notification(Node::NOTIFICATION_WM_WINDOW_FOCUS_IN);
-	auto *display = static_cast<DisplayServerMock *>(DisplayServer::get_singleton());
 	display->simulate_ime(String::utf8("に"), Vector2i(0, 1));
 	line->notification(MainLoop::NOTIFICATION_OS_IME_UPDATE);
 	REQUIRE(control->is_composing());
 	control->reconcile(0, "older", 0, 0);
 	control->reconcile(0, "latest", 0, 0);
 	CHECK(control->get_text() == "start");
-	auto checkpoint = control->capture_state();
-	line->cancel_ime();
-	control->restore_state(checkpoint);
+	control->restore_state(control->capture_state());
 	CHECK(control->is_composing());
 	display->simulate_ime("", Vector2i());
 	line->notification(MainLoop::NOTIFICATION_OS_IME_UPDATE);
@@ -467,7 +485,6 @@ TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native preedit defers the
 TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] independent content layout and native offsets use a constrained usable viewport") {
 	auto *scroll = memnew(RNScrollControl);
 	SceneTree::get_singleton()->get_root()->add_child(scroll);
-	scroll->set_external_layout_enabled(true);
 	scroll->set_size(Size2(240, 100));
 	Dictionary props;
 	props["horizontal"] = false;
@@ -481,7 +498,6 @@ TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] independent content layo
 	CHECK(expected.size.y <= 100);
 	CHECK(scroll->usable_viewport().size.is_equal_approx(expected.size));
 	auto *content = memnew(Control);
-	content->set_external_layout_enabled(true);
 	content->set_size(Size2(expected.size.x, 1000));
 	scroll->get_content()->add_child(content);
 	scroll->publish(state, RNHostContext());
@@ -501,7 +517,6 @@ TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] independent content layo
 TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] visible anchors follow retained rows and explicit offsets take precedence") {
 	auto *scroll = memnew(RNScrollControl);
 	SceneTree::get_singleton()->get_root()->add_child(scroll);
-	scroll->set_external_layout_enabled(true);
 	scroll->set_size(Size2(240, 100));
 	Dictionary anchor;
 	anchor["minIndexForVisible"] = 0;
@@ -512,12 +527,10 @@ TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] visible anchors follow r
 	RNError error;
 	REQUIRE(host->apply(scroll, state, RNHostContext(), error));
 	auto *rows = memnew(Control);
-	rows->set_external_layout_enabled(true);
 	rows->set_size(Size2(200, 1000));
 	scroll->get_content()->add_child(rows);
 	for (int i = 0; i < 3; ++i) {
 		auto *row = memnew(Control);
-		row->set_external_layout_enabled(true);
 		row->set_position(Point2(0, i * 100));
 		row->set_size(Size2(200, 100));
 		rows->add_child(row);
@@ -607,6 +620,67 @@ TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] initial zero prop revisio
 	CHECK(control->get_text() == "native value");
 	CHECK_FALSE(Object::cast_to<TextEdit>(control->get_editor())->has_undo());
 	memdelete(control);
+}
+
+TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] drag and momentum phases follow the stock scroll signals") {
+	Window *viewport = SceneTree::get_singleton()->get_root();
+	viewport->set_size(Size2i(640, 480));
+	Input::get_singleton()->set_emulate_touch_from_mouse(true);
+	auto *scroll = memnew(RNScrollControl);
+	viewport->add_child(scroll);
+	scroll->set_size(Size2(240, 100));
+	auto *rows = memnew(Control);
+	rows->set_mouse_filter(Control::MOUSE_FILTER_PASS);
+	rows->set_size(Size2(200, 1000));
+	scroll->get_content()->add_child(rows);
+	auto host = descriptor("RCTScrollView");
+	auto state = prepare("RCTScrollView", Dictionary());
+	RNError error;
+	REQUIRE(host->apply(scroll, state, RNHostContext(), error));
+	Vector<StringName> phases;
+	auto sink = std::make_shared<RNHostEventSink>();
+	sink->emit = [&phases](int, const StringName &p_name, const Dictionary &, uint64_t) {
+		if (p_name != StringName("topScroll") && p_name != StringName("topContentSizeChange")) {
+			phases.push_back(p_name);
+		}
+	};
+	RNHostContext context;
+	context.event_sink = sink;
+	scroll->publish(state, context);
+	REQUIRE(scroll->get_v_scroll_bar()->get_max() > 100);
+
+	auto button = [&](bool p_pressed, const Point2 &p_position) {
+		Ref<InputEventMouseButton> event;
+		event.instantiate();
+		event->set_position(p_position);
+		event->set_global_position(p_position);
+		event->set_button_index(MouseButton::LEFT);
+		event->set_pressed(p_pressed);
+		viewport->push_input(event, true);
+	};
+	auto motion = [&](const Point2 &p_position, const Vector2 &p_relative) {
+		Ref<InputEventMouseMotion> event;
+		event.instantiate();
+		event->set_position(p_position);
+		event->set_global_position(p_position);
+		event->set_relative(p_relative);
+		event->set_button_mask(MouseButtonMask::LEFT);
+		viewport->push_input(event, true);
+	};
+	button(true, Point2(50, 80));
+	motion(Point2(50, 40), Vector2(0, -40));
+	button(false, Point2(50, 40));
+	CHECK(phases == Vector<StringName>({ "topScrollBeginDrag", "topScrollEndDrag" }));
+	CHECK(scroll->get_v_scroll() > 0);
+
+	phases.clear();
+	scroll->emit_signal("scroll_started");
+	button(true, Point2(50, 40));
+	button(false, Point2(50, 40));
+	scroll->emit_signal("scroll_ended");
+	CHECK(phases == Vector<StringName>({ "topScrollBeginDrag", "topScrollEndDrag", "topMomentumScrollBegin", "topMomentumScrollEnd" }));
+	Input::get_singleton()->set_emulate_touch_from_mouse(false);
+	memdelete(scroll);
 }
 
 } //namespace TestRNComponents

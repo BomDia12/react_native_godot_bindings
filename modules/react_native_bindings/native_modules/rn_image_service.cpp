@@ -1,5 +1,6 @@
 #include "rn_image_service.h"
 
+#include "rn_image_probe.h"
 #include "rn_native_module_registry.h"
 
 #include "core/config/project_settings.h"
@@ -8,7 +9,6 @@
 #include "core/io/resource_loader.h"
 #include "core/math/math_funcs.h"
 #include "core/os/thread.h"
-#include "scene/resources/compressed_texture.h"
 #include "scene/resources/image_texture.h"
 
 namespace {
@@ -17,13 +17,6 @@ RNImageResult failure(const String &p_code, const String &p_message) {
 	RNImageResult result;
 	result.error = RNError::make(p_code, p_message, "image.load");
 	return result;
-}
-Image::LoadLimits codec_limits(const RNImageLimits &p_limits) {
-	Image::LoadLimits limits;
-	limits.max_encoded_bytes = p_limits.encoded_bytes;
-	limits.max_allocation_bytes = p_limits.decoded_bytes;
-	limits.max_workspace_bytes = WORKSPACE_BYTES;
-	return limits;
 }
 } //namespace
 bool RNImageLimits::valid() const {
@@ -239,13 +232,15 @@ RNImageResult RNImageService::decode(const RNImageSource &p_source, const Vector
 	if (active_decodes >= limits.concurrent_decodes || p_bytes.size() <= 0 || uint64_t(p_bytes.size()) > limits.encoded_bytes) {
 		return failure(RNErrorCode::LIMIT, "Image encoded/concurrent decode limit exceeded");
 	}
-	Image::ScopedLoadLimits codec_scope(codec_limits(limits));
-	Size2i dimensions;
-	Image::BufferFormat format;
-	if (Image::probe_buffer(p_bytes.ptr(), p_bytes.size(), dimensions, format) != OK) {
+	RNImageHeader header;
+	if (!rn_probe_image(p_bytes.ptr(), p_bytes.size(), header)) {
 		return failure(RNErrorCode::LIMIT, "Unsupported, corrupt or oversized image header");
 	}
+	const Size2i dimensions = header.size;
 	const uint64_t pixels = uint64_t(dimensions.x) * uint64_t(dimensions.y);
+	if (pixels * 4 > limits.decoded_bytes) {
+		return failure(RNErrorCode::LIMIT, "Unsupported, corrupt or oversized image header");
+	}
 	const uint64_t retained = pixels * 32 + 1024;
 	const uint64_t required = WORKSPACE_BYTES + uint64_t(p_bytes.size()) * 3 + pixels * 64 + 1024;
 	if (!evict(required > p_reservation->bytes ? required - p_reservation->bytes : 0) || !p_reservation->resize(required)) {
@@ -254,8 +249,8 @@ RNImageResult RNImageService::decode(const RNImageSource &p_source, const Vector
 	++active_decodes;
 	Ref<Image> image;
 	image.instantiate();
-	Error error = format == Image::BUFFER_PNG ? image->load_png_from_buffer(p_bytes) : format == Image::BUFFER_JPEG ? image->load_jpg_from_buffer(p_bytes)
-																													: image->load_webp_from_buffer(p_bytes);
+	Error error = header.format == RNImageFormat::PNG ? image->load_png_from_buffer(p_bytes) : header.format == RNImageFormat::JPEG ? image->load_jpg_from_buffer(p_bytes)
+																																	: image->load_webp_from_buffer(p_bytes);
 	--active_decodes;
 	if (error != OK || image->get_size() != dimensions) {
 		return failure(RNErrorCode::NATIVE, "Native image decoding failed");
@@ -272,6 +267,20 @@ RNImageResult RNImageService::decode(const RNImageSource &p_source, const Vector
 	p_reservation->bytes -= retained;
 	image.unref();
 	p_reservation->resize(uint64_t(p_bytes.size()) * 3);
+	RNImageResult result;
+	result.resource = resource;
+	return result;
+}
+RNImageResult RNImageService::load_imported(const RNImageSource &p_source) {
+	Ref<Texture2D> texture = ResourceLoader::load(p_source.uri, "Texture2D", ResourceLoader::CACHE_MODE_IGNORE);
+	if (texture.is_null()) {
+		return failure(RNErrorCode::NATIVE, "Native imported texture load failed");
+	}
+	auto resource = std::make_shared<RNImageResource>();
+	resource->texture = texture;
+	resource->pixels = texture->get_size();
+	resource->reservation = std::make_shared<RNImageReservation>();
+	resource->reservation->budget = budget;
 	RNImageResult result;
 	result.resource = resource;
 	return result;
@@ -304,7 +313,10 @@ RNImageResult RNImageService::load_local(const RNImageSource &p_source) {
 		}
 		bytes.resize(decoded);
 	} else {
-		String path = ResourceLoader::import_remap(p_source.uri);
+		const String path = ResourceLoader::import_remap(p_source.uri);
+		if (path != p_source.uri) {
+			return load_imported(p_source);
+		}
 		Ref<FileAccess> file = FileAccess::open(path, FileAccess::READ);
 		if (file.is_null()) {
 			return failure(RNErrorCode::NATIVE, "Image file cannot be opened");
@@ -316,41 +328,6 @@ RNImageResult RNImageService::load_local(const RNImageSource &p_source) {
 		reservation = reserve(WORKSPACE_BYTES + size * 3);
 		if (!reservation) {
 			return failure(RNErrorCode::LIMIT, "Insufficient image input/workspace memory");
-		}
-		if (path.get_extension().to_lower() == "ctex") {
-			if (size < 52 || file->get_32() != 0x32545347 || file->get_32() > CompressedTexture2D::FORMAT_VERSION) {
-				return failure(RNErrorCode::VALIDATION, "Invalid imported texture header");
-			}
-			const uint32_t logical_width = file->get_32();
-			const uint32_t logical_height = file->get_32();
-			file->seek(36);
-			const uint32_t storage = file->get_32();
-			const uint32_t width = file->get_16();
-			const uint32_t height = file->get_16();
-			const uint32_t mips = file->get_32();
-			const uint32_t format = file->get_32();
-			Image::ScopedLoadLimits codec_scope(codec_limits(limits));
-			if (!Image::is_load_size_allowed(width, height, 16, true) || !Image::is_load_size_allowed(logical_width, logical_height, 16, true) || storage > CompressedTexture2D::DATA_FORMAT_WEBP || format >= Image::FORMAT_MAX || mips > 32) {
-				return failure(RNErrorCode::LIMIT, "Imported texture exceeds bounds or uses an unbounded codec");
-			}
-			const uint64_t pixels = uint64_t(width) * height;
-			const uint64_t retained = pixels * 64 + 1024;
-			const uint64_t required = WORKSPACE_BYTES + size * 3 + pixels * 128 + 1024;
-			if (!evict(required - reservation->bytes) || !reservation->resize(required)) {
-				return failure(RNErrorCode::LIMIT, "Imported texture exceeds aggregate memory");
-			}
-			Ref<Texture2D> texture = ResourceLoader::load(p_source.uri, "Texture2D", ResourceLoader::CACHE_MODE_IGNORE);
-			if (texture.is_null()) {
-				return failure(RNErrorCode::NATIVE, "Native imported texture load failed");
-			}
-			auto resource = std::make_shared<RNImageResource>();
-			resource->texture = texture;
-			resource->pixels = Size2i(width, height);
-			resource->reservation = reservation;
-			reservation->resize(retained);
-			RNImageResult result;
-			result.resource = resource;
-			return result;
 		}
 		bytes.resize(size);
 		if (file->get_buffer(bytes.ptrw(), size) != size) {

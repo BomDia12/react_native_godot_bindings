@@ -5,7 +5,6 @@
 #include "../root_view/react_native_root_view.h"
 
 #include "core/object/callable_mp.h"
-#include "scene/gui/progress_bar.h"
 
 #include <cmath>
 
@@ -57,7 +56,7 @@ public:
 
 	Control *create_host(const RNHostContext &p_context) const override {
 		(void)p_context;
-		ProgressBar *meter = memnew(ProgressBar);
+		ProgressBar *meter = memnew(RNExampleMeterControl);
 		meter->set_min(0);
 		meter->set_max(1);
 		meter->set_step(0.001);

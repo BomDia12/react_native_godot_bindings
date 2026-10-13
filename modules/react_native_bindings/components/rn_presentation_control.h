@@ -7,7 +7,26 @@
 struct RNPresentationData : RNComponentData {
 	Size2 viewport;
 };
-class RNModalControl;
+class RNModalOverlay : public Panel {
+	GDCLASS(RNModalOverlay, Panel);
+
+protected:
+	static void _bind_methods() {}
+
+public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
+};
+class RNWindowContent : public Control {
+	GDCLASS(RNWindowContent, Control);
+
+protected:
+	static void _bind_methods() {}
+
+public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
+};
 struct RNModalDomain {
 	Vector<ObjectID> stack;
 	ObjectID saved_focus;
@@ -15,7 +34,7 @@ struct RNModalDomain {
 };
 class RNModalControl : public Control {
 	GDCLASS(RNModalControl, Control);
-	Panel *overlay = nullptr;
+	RNModalOverlay *overlay = nullptr;
 	ObjectID overlay_id;
 	RNHostContext published_context;
 	std::shared_ptr<RNModalDomain> domain;
@@ -29,9 +48,11 @@ protected:
 	void input(const Ref<InputEvent> &p_event) override;
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNModalControl();
 	~RNModalControl();
-	Panel *get_overlay() const { return overlay; }
+	RNModalOverlay *get_overlay() const { return overlay; }
 	bool is_top() const;
 	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 	void request_close();
@@ -40,7 +61,7 @@ public:
 class RNWindowControl : public Control {
 	GDCLASS(RNWindowControl, Control);
 	Window *window = nullptr;
-	Control *content = nullptr;
+	RNWindowContent *content = nullptr;
 	RNHostContext published_context;
 	Size2 declared_size;
 	bool publishing = false;
@@ -51,9 +72,11 @@ protected:
 	static void _bind_methods() {}
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNWindowControl();
 	Window *get_native_window() const { return window; }
-	Control *get_content() const { return content; }
+	RNWindowContent *get_content() const { return content; }
 	Size2 resolve_size(const Size2 &p_declared) const;
 	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 };

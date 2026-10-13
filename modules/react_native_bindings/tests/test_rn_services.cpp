@@ -298,12 +298,11 @@ TEST_CASE("[ReactNativeBindings][FontScale][SceneTree] inherited capped disabled
 	constraints.width_mode = RNMeasureMode::AT_MOST;
 	const Size2 measured = text->descriptor->measure(prepared, constraints);
 	auto native = memnew(RNTextControl);
-	native->set_external_layout_enabled(true);
 	native->apply_document(document);
 	native->set_size(Size2(600, measured.y));
-	REQUIRE(native->validate_detached_layout());
-	CHECK(native->get_content_height() == measured.y);
-	CHECK(native->get_line_height(0) == 36);
+	REQUIRE(native->get_layout().get_lines().size() == 1);
+	CHECK(native->get_layout().get_size().y == measured.y);
+	CHECK(native->get_layout().get_lines()[0].bounds.size.y == 48);
 	memdelete(native);
 }
 TEST_CASE("[ReactNativeBindings][HTTP] redirects resolve query fragment relative paths and dot segments") {

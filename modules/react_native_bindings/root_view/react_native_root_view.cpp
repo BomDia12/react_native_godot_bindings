@@ -50,7 +50,6 @@ void ReactNativeRootView::_notification(int p_what) {
 	}
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
-			get_viewport()->connect("gui_input_dispatched", callable_mp(this, &ReactNativeRootView::_on_gui_input_dispatched));
 			ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &ReactNativeRootView::_invalidate_host_layout));
 			if (!registered) {
 				if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
@@ -82,7 +81,6 @@ void ReactNativeRootView::_notification(int p_what) {
 			_invalidate_host_layout();
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
-			get_viewport()->disconnect("gui_input_dispatched", callable_mp(this, &ReactNativeRootView::_on_gui_input_dispatched));
 			ProjectSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &ReactNativeRootView::_invalidate_host_layout));
 			if (registered) {
 				if (ReactNativeRuntimeCoordinator *coordinator = ReactNativeRuntimeCoordinator::get_singleton()) {
@@ -444,15 +442,35 @@ void ReactNativeRootView::_set_focused_tag(int p_tag, const RNSurfaceSnapshot *p
 	_enqueue_events(events);
 }
 
-void ReactNativeRootView::input(const Ref<InputEvent> &) {}
+void ReactNativeRootView::input(const Ref<InputEvent> &p_event) {
+	_begin_input(p_event, get_viewport()->get_instance_id());
+}
 
-void ReactNativeRootView::_on_gui_input_dispatched(const Ref<InputEvent> &p_event, uint64_t p_control_id, uint64_t p_event_id) {
-	(void)p_event_id;
-	Control *selected = Object::cast_to<Control>(ObjectDB::get_instance(ObjectID(p_control_id)));
-	const int tag = mounting_manager->tag_for_input_control(selected);
-	if (tag != 0 || Ref<InputEventMouseMotion>(p_event).is_valid()) {
-		_route_input(p_event, tag, selected ? selected->get_viewport() : get_viewport());
+void ReactNativeRootView::_begin_input(const Ref<InputEvent> &p_event, ObjectID p_viewport_id) {
+	++input_serial;
+	if (Ref<InputEventMouseMotion>(p_event).is_valid()) {
+		callable_mp(this, &ReactNativeRootView::_route_unclaimed_motion).call_deferred(p_event, input_serial, p_viewport_id);
 	}
+}
+
+void ReactNativeRootView::_route_unclaimed_motion(const Ref<InputEvent> &p_event, uint64_t p_serial, ObjectID p_viewport_id) {
+	Viewport *viewport = Object::cast_to<Viewport>(ObjectDB::get_instance(p_viewport_id));
+	if (viewport && claimed_input_serial != p_serial) {
+		_route_input(p_event, 0, viewport);
+	}
+}
+
+void ReactNativeRootView::_on_host_gui_input(const Ref<InputEvent> &p_event, ObjectID p_control_id) {
+	Control *control = Object::cast_to<Control>(ObjectDB::get_instance(p_control_id));
+	if (!control || claimed_input_serial == input_serial) {
+		return;
+	}
+	const int tag = mounting_manager->tag_for_input_control(control);
+	if (tag == 0 && Ref<InputEventMouseMotion>(p_event).is_null()) {
+		return;
+	}
+	claimed_input_serial = input_serial;
+	_route_input(p_event->xformed_by(control->get_global_transform_with_canvas()), tag, control->get_viewport());
 }
 
 void ReactNativeRootView::_route_input(const Ref<InputEvent> &p_event, int p_native_tag, Viewport *p_viewport) {

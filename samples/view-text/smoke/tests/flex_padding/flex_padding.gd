@@ -36,7 +36,7 @@ func validate_smoke() -> String:
 		return "expected the sentinel RNTextControl as the direct flex View child, got %s" % ", ".join(child_types)
 
 	var label := flex_panel.get_child(0) as RNTextControl
-	if label.get_parsed_text() != SENTINEL:
+	if label.get_text() != SENTINEL:
 		return "direct RNTextControl does not contain the sentinel text"
 	if label.position.distance_to(EXPECTED_OFFSET) > TOLERANCE:
 		return "padding did not place the sentinel RNTextControl at (16, 16)"

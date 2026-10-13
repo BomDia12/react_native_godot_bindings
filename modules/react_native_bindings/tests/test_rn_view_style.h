@@ -1,13 +1,17 @@
 #pragma once
 
+#include "../components/rn_small_controls.h"
+#include "../components/rn_view_control.h"
 #include "../components/rn_visual_style.h"
 #include "../fabric/rn_view_style.h"
 
+#include "scene/main/scene_tree.h"
+#include "scene/main/window.h"
 #include "tests/test_macros.h"
 
 namespace TestRNViewStyle {
 
-TEST_CASE("[ReactNativeBindings][VisualStyle] affine transforms compose in RN order around the center") {
+TEST_CASE("[ReactNativeBindings][VisualStyle] transform lists compose in RN order around the origin") {
 	Dictionary props;
 	Array operations;
 	Dictionary translation;
@@ -19,10 +23,15 @@ TEST_CASE("[ReactNativeBindings][VisualStyle] affine transforms compose in RN or
 	props["transform"] = operations;
 	RNError error;
 	REQUIRE(RNVisualStyle::validate(props, error));
-	const Transform2D transform = RNVisualStyle::transform(props, Size2(100, 40));
-	CHECK(transform.xform(Point2(50, 20)).is_equal_approx(Point2(100, 20)));
-	CHECK(transform.xform(Point2(0, 0)).is_equal_approx(Point2(0, -20)));
-	CHECK(transform.affine_inverse().xform(Point2(100, 20)).is_equal_approx(Point2(50, 20)));
+	const Transform2D matrix = RNVisualStyle::transform_matrix(props, Size2(100, 40));
+	CHECK(matrix.get_origin().is_equal_approx(Point2(50, 0)));
+	CHECK(matrix.get_scale().is_equal_approx(Size2(2, 2)));
+	CHECK(RNVisualStyle::transform_origin(props, Size2(100, 40)).is_equal_approx(Point2(50, 20)));
+	Array origin;
+	origin.push_back("25%");
+	origin.push_back(10);
+	props["transformOrigin"] = origin;
+	CHECK(RNVisualStyle::transform_origin(props, Size2(100, 40)).is_equal_approx(Point2(25, 10)));
 
 	Dictionary perspective;
 	perspective["perspective"] = 300;
@@ -33,17 +42,67 @@ TEST_CASE("[ReactNativeBindings][VisualStyle] affine transforms compose in RN or
 	CHECK_FALSE(RNVisualStyle::validate(props, error));
 }
 
-TEST_CASE("[ReactNativeBindings][VisualStyle][SceneTree] renderer layout mode preserves native defaults and honors Yoga constraints") {
-	Control *control = memnew(Control);
+TEST_CASE("[ReactNativeBindings][VisualStyle][SceneTree] transforms use the stock offset transform around the origin") {
+	RNViewControl *control = memnew(RNViewControl);
+	SceneTree::get_singleton()->get_root()->add_child(control);
+	control->set_position(Point2(10, 20));
+	control->set_size(Size2(100, 40));
+	Dictionary props;
+	Array operations;
+	Dictionary translation;
+	translation["translateX"] = 5;
+	Dictionary rotation;
+	rotation["rotate"] = "90deg";
+	Dictionary scale;
+	scale["scale"] = 2;
+	operations.push_back(translation);
+	operations.push_back(rotation);
+	operations.push_back(scale);
+	props["transform"] = operations;
+	RNVisualStyle::apply(control, props);
+	CHECK(control->is_offset_transform_enabled());
+	CHECK_FALSE(control->is_offset_transform_visual_only());
+	CHECK(control->get_position() == Point2(10, 20));
+	const Transform2D expected = Transform2D(0, Point2(10, 20)) * Transform2D(0, Point2(50, 20)) * RNVisualStyle::transform_matrix(props, control->get_size()) * Transform2D(0, Point2(-50, -20));
+	const Transform2D actual = control->get_transform();
+	for (const Point2 &point : { Point2(), Point2(100, 0), Point2(30, 40) }) {
+		CHECK(actual.xform(point).is_equal_approx(expected.xform(point)));
+	}
+	RNVisualStyle::apply(control, Dictionary());
+	CHECK_FALSE(control->is_offset_transform_enabled());
+	memdelete(control);
+}
+
+TEST_CASE("[ReactNativeBindings][VisualStyle][SceneTree] skew applies its rotation and scale and reports once per host") {
+	RNViewControl *control = memnew(RNViewControl);
+	control->set_size(Size2(100, 40));
+	Dictionary props;
+	Array operations;
+	Dictionary skew;
+	skew["skewX"] = "30deg";
+	operations.push_back(skew);
+	props["transform"] = operations;
+	RNError error;
+	REQUIRE(RNVisualStyle::validate(props, error));
+	ERR_PRINT_OFF;
+	RNVisualStyle::apply(control, props);
+	ERR_PRINT_ON;
+	CHECK(control->is_offset_transform_enabled());
+	CHECK(control->has_meta("_react_native_skew_reported"));
+	CHECK(control->get_offset_transform().get_skew() == doctest::Approx(0.0));
+	memdelete(control);
+}
+
+TEST_CASE("[ReactNativeBindings][VisualStyle][SceneTree] host controls accept Yoga sizes below their native minimum") {
+	RNViewControl *control = memnew(RNViewControl);
 	control->set_custom_minimum_size(Size2(100, 80));
 	control->set_size(Size2(5, 4));
-	CHECK(control->get_size() == Size2(100, 80));
-	control->set_external_layout_enabled(true);
-	control->set_size(Size2(5, 4));
 	CHECK(control->get_size() == Size2(5, 4));
-	control->set_external_layout_enabled(false);
-	CHECK(control->get_size() == Size2(100, 80));
 	memdelete(control);
+	RNSwitchControl *toggle = memnew(RNSwitchControl);
+	toggle->set_size(Size2(2, 2));
+	CHECK(toggle->get_size() == Size2(2, 2));
+	memdelete(toggle);
 }
 
 TEST_CASE("[ReactNativeBindings][RNViewStyle] reads explicit RGBA channels") {

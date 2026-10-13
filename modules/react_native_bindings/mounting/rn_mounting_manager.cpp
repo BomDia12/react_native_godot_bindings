@@ -9,6 +9,7 @@
 #include "core/object/callable_mp.h"
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
+#include "scene/scene_string_names.h"
 
 namespace {
 
@@ -279,7 +280,6 @@ void RNMountingManager::apply_layout(Control *p_host, const Rect2 &p_layout) {
 	if (!p_host) {
 		return;
 	}
-	p_host->set_external_layout_enabled(true);
 	p_host->set_position(p_layout.position);
 	p_host->set_size(p_layout.size);
 	stats.layout_boxes_applied++;
@@ -369,7 +369,7 @@ bool RNMountingManager::prepare_transaction(RNMountingTransaction &r_transaction
 	}
 	for (const KeyValue<int, Rect2> &entry : r_transaction.prepared_layouts) {
 		const RNPreparedHostState *state = r_transaction.prepared_states.getptr(entry.key);
-		if (!entry.value.is_finite() || (state && !RNVisualStyle::transform(state->props, entry.value.size).is_finite())) {
+		if (!entry.value.is_finite() || (state && !RNVisualStyle::transform_matrix(state->props, entry.value.size).is_finite())) {
 			r_error = "Resolved host geometry must be finite";
 			return false;
 		}
@@ -890,10 +890,21 @@ void RNMountingManager::activate_published_hosts() {
 		Control *host = entry ? Object::cast_to<Control>(ObjectDB::get_instance(entry->object_id)) : nullptr;
 		if (host && entry->descriptor) {
 			entry->descriptor->after_publish(host, entry->prepared_state, host_context(node->tag, entry->last_changed_revision));
+			connect_input(host);
+			for (Control *control : entry->descriptor->get_input_controls(host)) {
+				connect_input(control);
+			}
 		}
 		for (int i = node->children.size() - 1; i >= 0; --i) {
 			pending.push_back(node->children[i]);
 		}
+	}
+}
+
+void RNMountingManager::connect_input(Control *p_control) {
+	const Callable observer = callable_mp(owner, &ReactNativeRootView::_on_host_gui_input).bind(p_control->get_instance_id());
+	if (!p_control->is_connected(SceneStringName(gui_input), observer)) {
+		p_control->connect(SceneStringName(gui_input), observer);
 	}
 }
 

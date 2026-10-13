@@ -45,7 +45,7 @@ func border_width_of(panel: Panel) -> int:
 	return 0 if style == null else style.get_border_width(SIDE_TOP)
 
 func find_label_text(node: Node, value: String) -> RNTextControl:
-	if node is RNTextControl and node.get_parsed_text() == value:
+	if node is RNTextControl and node.get_text() == value:
 		return node
 	for child in node.get_children():
 		var found := find_label_text(child, value)

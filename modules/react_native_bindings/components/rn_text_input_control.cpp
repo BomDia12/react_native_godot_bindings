@@ -125,6 +125,7 @@ public:
 	}
 	Control *focus_control(Control *p_host) const override { return Object::cast_to<RNTextInputControl>(p_host)->get_editor(); }
 	bool owns_native_activation(const RNPreparedHostState &) const override { return true; }
+	Vector<Control *> get_input_controls(Control *p_host) const override { return { Object::cast_to<RNTextInputControl>(p_host)->get_editor() }; }
 	bool owns_input_control(Control *p_host, Control *p_control) const override {
 		auto *input = Object::cast_to<RNTextInputControl>(p_host);
 		return p_control == input || p_control == input->get_editor() || input->get_editor()->is_ancestor_of(p_control);
@@ -162,18 +163,17 @@ RNTextInputControl::~RNTextInputControl() {
 Control *RNTextInputControl::_create_editor(bool p_multiline) {
 	Control *result;
 	if (p_multiline) {
-		auto *edit = memnew(TextEdit);
+		auto *edit = memnew(RNTextEditor);
 		edit->set_line_wrapping_mode(TextEdit::LINE_WRAPPING_BOUNDARY);
 		edit->connect("text_changed", callable_mp(this, &RNTextInputControl::_native_changed));
 		edit->connect("caret_changed", callable_mp(this, &RNTextInputControl::_selection_changed));
 		result = edit;
 	} else {
-		auto *line = memnew(LineEdit);
+		auto *line = memnew(RNLineEditor);
 		line->connect("text_changed", callable_mp(this, &RNTextInputControl::_line_changed));
 		line->connect("text_submitted", callable_mp(this, &RNTextInputControl::_submitted));
 		result = line;
 	}
-	result->set_external_layout_enabled(true);
 	result->connect("focus_entered", callable_mp(this, &RNTextInputControl::_focus_entered));
 	result->connect("focus_exited", callable_mp(this, &RNTextInputControl::_focus_exited));
 	result->connect("gui_input", callable_mp(this, &RNTextInputControl::_editor_input));
@@ -205,13 +205,6 @@ bool RNTextInputControl::is_composing() const {
 	}
 	return Object::cast_to<TextEdit>(editor)->has_ime_text();
 }
-void RNTextInputControl::_discard_notifications() {
-	if (auto *line = Object::cast_to<LineEdit>(editor)) {
-		line->discard_pending_edit_notifications();
-	} else {
-		Object::cast_to<TextEdit>(editor)->discard_pending_edit_notifications();
-	}
-}
 void RNTextInputControl::_set_text(const String &p_text) {
 	if (p_text == get_text()) {
 		return;
@@ -221,7 +214,6 @@ void RNTextInputControl::_set_text(const String &p_text) {
 	} else {
 		Object::cast_to<TextEdit>(editor)->set_text(p_text);
 	}
-	_discard_notifications();
 	observed_text = get_text();
 }
 void RNTextInputControl::_set_selection(int p_start, int p_end) {
@@ -250,7 +242,6 @@ void RNTextInputControl::_set_selection(int p_start, int p_end) {
 			edit->select(from.y, from.x, to.y, to.x);
 		}
 	}
-	_discard_notifications();
 	observed_selection = get_selection();
 }
 void RNTextInputControl::reconcile(int p_ack, const Variant &p_text, int p_start, int p_end) {
@@ -404,10 +395,21 @@ Ref<RNTextInputState> RNTextInputControl::capture_state() const {
 	state->editor_id = editor->get_instance_id();
 	state->wrapper_mouse_filter = get_mouse_filter();
 	state->editor_mouse_filter = editor->get_mouse_filter();
+	state->text = get_text();
 	if (auto *line = Object::cast_to<LineEdit>(editor)) {
-		state->line = line->capture_edit_state();
+		state->caret = Point2i(line->get_caret_column(), 0);
+		state->has_selection = line->has_selection();
+		if (state->has_selection) {
+			state->selection_origin = Point2i(line->get_caret_column() == line->get_selection_to_column() ? line->get_selection_from_column() : line->get_selection_to_column(), 0);
+		}
 	} else {
-		state->multiline = Object::cast_to<TextEdit>(editor)->capture_edit_state();
+		auto *edit = Object::cast_to<TextEdit>(editor);
+		state->caret = Point2i(edit->get_caret_column(), edit->get_caret_line());
+		state->has_selection = edit->has_selection();
+		if (state->has_selection) {
+			state->selection_origin = Point2i(edit->get_selection_origin_column(), edit->get_selection_origin_line());
+		}
+		state->scroll = Vector2(edit->get_h_scroll(), edit->get_v_scroll());
 	}
 	state->props = props.duplicate(true);
 	state->deferred = deferred_replacement.duplicate(true);
@@ -429,9 +431,29 @@ void RNTextInputControl::restore_state(const Ref<RNTextInputState> &p_state) {
 		staged_editor = nullptr;
 	}
 	if (auto *line = Object::cast_to<LineEdit>(editor)) {
-		line->restore_edit_state(p_state->line);
+		if (line->get_text() != p_state->text) {
+			line->set_text(p_state->text);
+		}
+		line->set_caret_column(p_state->caret.x);
+		if (p_state->has_selection) {
+			line->select(MIN(p_state->selection_origin.x, p_state->caret.x), MAX(p_state->selection_origin.x, p_state->caret.x));
+		} else {
+			line->deselect();
+		}
 	} else {
-		Object::cast_to<TextEdit>(editor)->restore_edit_state(p_state->multiline);
+		auto *edit = Object::cast_to<TextEdit>(editor);
+		if (edit->get_text() != p_state->text) {
+			edit->set_text(p_state->text);
+		}
+		edit->set_caret_line(p_state->caret.y);
+		edit->set_caret_column(p_state->caret.x);
+		if (p_state->has_selection) {
+			edit->select(p_state->selection_origin.y, p_state->selection_origin.x, p_state->caret.y, p_state->caret.x);
+		} else {
+			edit->deselect();
+		}
+		edit->set_h_scroll(p_state->scroll.x);
+		edit->set_v_scroll(p_state->scroll.y);
 	}
 	set_mouse_filter(p_state->wrapper_mouse_filter);
 	editor->set_mouse_filter(p_state->editor_mouse_filter);
@@ -472,7 +494,6 @@ void RNTextInputControl::_native_changed() {
 			Point2i to = line_column(text, text.length());
 			edit->remove_text(from.y, from.x, to.y, to.x);
 		}
-		_discard_notifications();
 		changing = false;
 	}
 	observed_text = get_text();

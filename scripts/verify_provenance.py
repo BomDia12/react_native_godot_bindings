@@ -6,7 +6,6 @@ import re
 import subprocess
 from pathlib import Path
 
-from godot_patches import validate as validate_godot_patches
 from smoke_manifest import ManifestError, discover_manifests
 
 
@@ -88,10 +87,10 @@ def main() -> int:
         if actual != expected:
             failures.append(f"{name} revision: expected {expected}, got {actual or 'missing'}")
 
-    try:
-        print(f"Godot patch identity: {validate_godot_patches(godot_dir)}")
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
-        failures.append(f"Godot patches: {error}")
+    if godot_dir.exists():
+        modified = subprocess.run(["git", "-C", str(godot_dir), "diff", "--quiet", "HEAD"], check=False)
+        if modified.returncode != 0:
+            failures.append("Godot checkout has local changes; the module builds against the unmodified pinned commit")
 
     for required in (yoga_root / "LICENSE", yoga_root / "UPSTREAM.md", hermes_dir / "LICENSE"):
         if not required.is_file():

@@ -141,11 +141,14 @@ Resource resolution runs on the main thread before Yoga and produces immutable
 component data and a dependency revision. Measured leaves and independent scroll
 or presentation child layouts use descriptor policies. Internal controls are owned
 by the descriptor's child container; renderer ordering touches only React children.
-The external-layout native opt-in lets Yoga constrain controls without changing
-ordinary Godot minimum-size behavior.
+Hosts and their internal controls are module subclasses that return an empty combined
+minimum size and an unbounded combined maximum size, so Yoga sizes them exactly while
+engine controls elsewhere keep their native minimum sizes. Measurement calls the engine
+base class directly, for example `LineEdit::get_minimum_size()`.
 
-Capture native state before mutation. Editor checkpoints include native undo/redo,
-preedit and pending notification state; string setters are not a rollback mechanism.
+Capture native state before mutation. Editor checkpoints record public editor state:
+text, caret, selection and scroll offsets. Restoring one loses the editor's undo
+history.
 `after_publish` runs parent first only after publication and owns asynchronous work,
 subscriptions and presentation activation. The copied event sink checks generation,
 surface epoch, tag, native object identity and revision. Completion code must also

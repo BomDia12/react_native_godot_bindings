@@ -31,9 +31,9 @@ func _process(_delta: float) -> void:
 		1:
 			check(fixture().dimensions.fontScale == 2.0, "Public fontScale did not update")
 			check(fixture().dimensions.width == metrics.width and fixture().dimensions.height == metrics.height, "Small root changed application Dimensions")
-			check(target("scaled-text").get_instance_id() == text_id and target("scaled-text").get_theme_font_size("normal_font_size") == 40, "Unchanged React text did not remeasure with native font scaling")
+			check(target("scaled-text").get_instance_id() == text_id and target("scaled-text").get_font_size() == 40, "Unchanged React text did not remeasure with native font scaling")
 			check(target("inventory-editor").get_child(0).get_instance_id() == editor_id, "Metrics update replaced editor identity")
-			check(target("imported-font").get_theme_font_size("normal_font_size") == 44, "Imported font scale was not consumed")
+			check(target("imported-font").get_font_size() == 44, "Imported font scale was not consumed")
 			check(HermesRuntime.evaluate("__godotNativeModules.get('GodotServices').getState().colorScheme") == "dark", "Explicit Appearance override did not reach native services")
 			action("scheme", [null])
 			get_tree().paused = true

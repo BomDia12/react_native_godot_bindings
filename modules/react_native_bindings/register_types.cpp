@@ -84,6 +84,12 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		ClassDB::register_class<RNSwitchControl>();
 		ClassDB::register_class<RNActivityIndicatorControl>();
 		ClassDB::register_class<RNScrollControl>();
+		ClassDB::register_internal_class<RNScrollContentControl>();
+		ClassDB::register_internal_class<RNModalOverlay>();
+		ClassDB::register_internal_class<RNWindowContent>();
+		ClassDB::register_internal_class<RNLineEditor>();
+		ClassDB::register_internal_class<RNTextEditor>();
+		ClassDB::register_internal_class<RNExampleMeterControl>();
 		ClassDB::register_abstract_class<RNTextInputState>();
 		ClassDB::register_class<RNTextInputControl>();
 		RNError registration_error;

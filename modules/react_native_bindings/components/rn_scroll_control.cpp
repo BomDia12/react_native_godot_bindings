@@ -64,6 +64,10 @@ public:
 		auto *scroll = Object::cast_to<RNScrollControl>(p_host);
 		return p_control == scroll || p_control == scroll->get_content() || p_control == scroll->get_h_scroll_bar() || p_control == scroll->get_v_scroll_bar();
 	}
+	Vector<Control *> get_input_controls(Control *p_host) const override {
+		auto *scroll = Object::cast_to<RNScrollControl>(p_host);
+		return { scroll->get_h_scroll_bar(), scroll->get_v_scroll_bar() };
+	}
 	Control *create_host(const RNHostContext &) const override { return memnew(RNScrollControl); }
 	Control *get_child_container(Control *p_host, const RNHostContext &) const override { return Object::cast_to<RNScrollControl>(p_host)->get_content(); }
 	RNChildLayoutPolicy get_child_layout_policy(const RNPreparedHostState &p_state) const override { return std::static_pointer_cast<const RNScrollData>(p_state.component_data)->horizontal ? RNChildLayoutPolicy::SCROLL_HORIZONTAL : RNChildLayoutPolicy::SCROLL_VERTICAL; }
@@ -151,12 +155,12 @@ public:
 	RNScrollContentDescriptor(const StringName &p_name) :
 			RNHostDescriptor(p_name, RNHostTraits{ true, true, true, false, false, false, false, false, true, true, true }) {}
 	Control *create_host(const RNHostContext &) const override {
-		auto *control = memnew(Panel);
+		auto *control = memnew(RNScrollContentControl);
 		control->set_mouse_filter(Control::MOUSE_FILTER_PASS);
 		return control;
 	}
 	bool apply(Control *p_host, const RNPreparedHostState &p_state, const RNHostContext &, RNError &) const override {
-		auto *panel = Object::cast_to<Panel>(p_host);
+		auto *panel = Object::cast_to<RNScrollContentControl>(p_host);
 		panel->set_visible(String(p_state.props.get("display", "flex")) != "none");
 		panel->set_modulate(Color(1, 1, 1, RNViewStyle::opacity_of(p_state.props)));
 		panel->add_theme_style_override("panel", RNViewStyle::build_stylebox(p_state.props, p_state.layout_rtl));
@@ -267,20 +271,6 @@ void RNScrollControl::refresh_content() {
 	}
 }
 void RNScrollControl::_notification(int p_what) {
-	if (p_what == NOTIFICATION_PROCESS) {
-		if (dragging && !is_drag_scrolling()) {
-			dragging = false;
-			_emit_scroll("topScrollEndDrag");
-		}
-		if (is_momentum_scrolling() && !momentum) {
-			momentum = true;
-			_emit_scroll("topMomentumScrollBegin");
-		}
-		if (momentum && !is_momentum_scrolling()) {
-			momentum = false;
-			_emit_scroll("topMomentumScrollEnd");
-		}
-	}
 	if (p_what == NOTIFICATION_SORT_CHILDREN) {
 		get_h_scroll_bar()->set_page(usable_viewport().size.x);
 		get_v_scroll_bar()->set_page(usable_viewport().size.y);
@@ -325,7 +315,6 @@ void RNScrollControl::_scroll_changed(double) {
 }
 void RNScrollControl::_scroll_started() {
 	dragging = true;
-	set_process(true);
 	if (scroll_tween.is_valid()) {
 		scroll_tween->kill();
 		scroll_tween.unref();
@@ -336,16 +325,12 @@ void RNScrollControl::_scroll_started() {
 	_emit_scroll("topScrollBeginDrag");
 }
 void RNScrollControl::_scroll_ended() {
-	if (dragging) {
-		_emit_scroll("topScrollEndDrag");
-		dragging = false;
-	}
+	ended_during_input = true;
 	if (momentum) {
-		_emit_scroll("topMomentumScrollEnd");
 		momentum = false;
+		_emit_scroll("topMomentumScrollEnd");
+		_snap();
 	}
-	set_process(false);
-	_snap();
 }
 std::shared_ptr<const RNHostDescriptor> rn_scroll_descriptor(const StringName &p_name, bool p_horizontal) {
 	return std::make_shared<RNScrollDescriptor>(p_name, p_horizontal);
@@ -417,5 +402,18 @@ void RNScrollControl::gui_input(const Ref<InputEvent> &p_event) {
 			scroll_tween.unref();
 		}
 	}
+	const bool was_dragging = dragging;
+	const bool drag_release = button.is_valid() && button->get_button_index() == MouseButton::LEFT && !button->is_pressed();
+	ended_during_input = false;
 	ScrollContainer::gui_input(p_event);
+	if (was_dragging && drag_release) {
+		dragging = false;
+		_emit_scroll("topScrollEndDrag");
+		if (ended_during_input) {
+			_snap();
+		} else {
+			momentum = true;
+			_emit_scroll("topMomentumScrollBegin");
+		}
+	}
 }

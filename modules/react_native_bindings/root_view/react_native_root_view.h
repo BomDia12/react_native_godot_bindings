@@ -34,6 +34,8 @@ class ReactNativeRootView : public Control {
 	Vector<RNNativeEvent> descriptor_events;
 	uint64_t native_resource_revision = 1;
 	bool native_layout_pending = false;
+	uint64_t input_serial = 1;
+	uint64_t claimed_input_serial = 0;
 
 	void _clear_scene_state(bool p_keep_container = false);
 	void _enqueue_events(Vector<RNNativeEvent> p_events);
@@ -42,6 +44,7 @@ class ReactNativeRootView : public Control {
 	void _publish_mounted_result(Vector<RNNativeEvent> p_events, const std::shared_ptr<const RNSurfaceSnapshot> &p_old_snapshot = nullptr);
 	void _publish_transform_snapshot();
 	void _route_input(const Ref<InputEvent> &p_event, int p_native_tag = 0, Viewport *p_viewport = nullptr);
+	void _route_unclaimed_motion(const Ref<InputEvent> &p_event, uint64_t p_serial, ObjectID p_viewport_id);
 	void _refresh_native_dependencies();
 
 protected:
@@ -77,7 +80,8 @@ public:
 	void _on_focus_entered(int p_tag, ObjectID p_control_id);
 	void _on_focus_exited(int p_tag, ObjectID p_control_id);
 	void _cancel_host_input();
-	void _on_gui_input_dispatched(const Ref<InputEvent> &p_event, uint64_t p_control_id, uint64_t p_event_id);
+	void _begin_input(const Ref<InputEvent> &p_event, ObjectID p_viewport_id);
+	void _on_host_gui_input(const Ref<InputEvent> &p_event, ObjectID p_control_id);
 	void _on_descriptor_value_changed(double p_value, int p_tag, ObjectID p_control_id);
 	void _emit_host_event(uint64_t p_generation, uint64_t p_epoch, int p_tag, ObjectID p_host, const StringName &p_name, const Dictionary &p_payload, uint64_t p_revision);
 	void _invalidate_host_geometry();

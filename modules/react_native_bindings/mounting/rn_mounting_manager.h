@@ -80,6 +80,7 @@ class RNMountingManager {
 	std::shared_ptr<RNSurfaceSnapshot> build_snapshot(const Ref<RNShadowNode> &p_root, const Ref<RNShadowNode> &p_declarative_root, const HashMap<int, Dictionary> &p_overrides, const HashMap<int, Rect2> &p_layouts, const HashMap<int, RNPreparedHostState> &p_prepared_states, const Transform2D &p_window_transform, uint64_t p_revision, HashMap<int, RNMountedNode> &r_records, String &r_error) const;
 	bool build_snapshot_node(const Ref<RNShadowNode> &p_node, int p_logical_parent, int p_native_parent, const Point2 &p_parent_origin, bool p_branch_targetable, const HashMap<int, Dictionary> &p_overrides, const HashMap<int, Rect2> &p_layouts, const HashMap<int, RNPreparedHostState> &p_prepared_states, const Transform2D &p_window_transform, uint64_t p_revision, RNSurfaceSnapshot &r_snapshot, HashMap<int, RNMountedNode> &r_records, HashMap<int, int> &r_native_indices, String &r_error) const;
 	bool hierarchy_matches(const HashMap<int, RNMountedNode> &p_records) const;
+	void connect_input(Control *p_control);
 	void queue_layout_events(const std::shared_ptr<const RNSurfaceSnapshot> &p_old_snapshot, const RNSurfaceSnapshot &p_new_snapshot, Vector<RNNativeEvent> &r_events) const;
 
 public:

@@ -6,6 +6,8 @@
 
 namespace {
 
+constexpr const char *SKEW_REPORTED_META = "_react_native_skew_reported";
+
 bool numeric(const Variant &p_value) {
 	return (p_value.get_type() == Variant::INT || p_value.get_type() == Variant::FLOAT) && std::isfinite(double(p_value));
 }
@@ -191,13 +193,13 @@ bool RNVisualStyle::validate(const Dictionary &p_props, RNError &r_error) {
 			return reject("props.transformOrigin");
 		}
 	}
-	if (!transform(p_props, Size2(1, 1)).is_finite()) {
+	if (!transform_matrix(p_props, Size2(1, 1)).is_finite()) {
 		return reject("props.transform");
 	}
 	return true;
 }
 
-Transform2D RNVisualStyle::transform(const Dictionary &p_props, const Size2 &p_size) {
+Transform2D RNVisualStyle::transform_matrix(const Dictionary &p_props, const Size2 &p_size) {
 	Transform2D result;
 	const Array transforms = p_props.get("transform", Array());
 	for (int i = 0; i < transforms.size(); ++i) {
@@ -205,16 +207,30 @@ Transform2D RNVisualStyle::transform(const Dictionary &p_props, const Size2 &p_s
 		const String key = entry.keys()[0];
 		result *= operation(key, entry[key], p_size);
 	}
-	Point2 origin = p_size / 2;
-	if (p_props.has("transformOrigin")) {
-		const Array value = p_props["transformOrigin"];
-		origin = Point2(resolve_length(value[0], p_size.x), resolve_length(value[1], p_size.y));
+	return result;
+}
+
+Point2 RNVisualStyle::transform_origin(const Dictionary &p_props, const Size2 &p_size) {
+	if (!p_props.has("transformOrigin")) {
+		return p_size / 2;
 	}
-	return Transform2D(0, origin) * result * Transform2D(0, -origin);
+	const Array value = p_props["transformOrigin"];
+	return Point2(resolve_length(value[0], p_size.x), resolve_length(value[1], p_size.y));
 }
 
 void RNVisualStyle::apply(Control *p_host, const Dictionary &p_props) {
-	p_host->set_affine_transform(transform(p_props, p_host->get_size()));
+	const Transform2D matrix = transform_matrix(p_props, p_host->get_size());
+	p_host->set_offset_transform_enabled(matrix != Transform2D());
+	p_host->set_offset_transform_visual_only(false);
+	p_host->set_offset_transform_pivot_ratio(Vector2());
+	p_host->set_offset_transform_pivot(transform_origin(p_props, p_host->get_size()));
+	p_host->set_offset_transform_position(matrix.get_origin());
+	p_host->set_offset_transform_rotation(matrix.get_rotation());
+	p_host->set_offset_transform_scale(matrix.get_scale());
+	if (!Math::is_zero_approx(matrix.get_skew()) && !p_host->has_meta(SKEW_REPORTED_META)) {
+		p_host->set_meta(SKEW_REPORTED_META, true);
+		WARN_PRINT(vformat("E_UNSUPPORTED_TRANSFORM: %s skew is not supported by Godot controls; only translation, rotation and scale apply.", p_host->get_name()));
+	}
 	const String direction = p_props.get("direction", "inherit");
 	p_host->set_layout_direction(direction == "rtl" ? Control::LAYOUT_DIRECTION_RTL : direction == "ltr" ? Control::LAYOUT_DIRECTION_LTR
 																										 : Control::LAYOUT_DIRECTION_INHERITED);

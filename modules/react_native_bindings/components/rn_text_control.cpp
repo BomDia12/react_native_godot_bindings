@@ -4,6 +4,9 @@
 #include "../fabric/rn_view_style.h"
 
 #include "core/object/callable_mp.h"
+#include "core/object/class_db.h"
+#include "servers/display/accessibility_server.h"
+#include "servers/display/display_server.h"
 
 #include <cmath>
 
@@ -30,14 +33,16 @@ Dictionary inherit(const Dictionary &p_parent, const Dictionary &p_child) {
 	return result;
 }
 
-bool collect(const RNShadowNode &p_node, const Dictionary &p_inherited, RNTextDocument &r_document, RNError &r_error) {
+bool collect(const RNShadowNode &p_node, const Dictionary &p_inherited, int p_span_tag, RNTextDocument &r_document, RNError &r_error) {
 	const Dictionary props = inherit(p_inherited, p_node.props);
 	const int from = r_document.text.length();
+	const int span_tag = p_node.view_name == "RCTVirtualText" ? p_node.tag : p_span_tag;
 	if (p_node.descriptor && p_node.descriptor->get_traits().contributes_text) {
 		RNTextRun run;
 		run.text = p_node.props.get("text", String());
 		run.props = props;
 		run.from = from;
+		run.tag = span_tag;
 		r_document.text += run.text;
 		run.to = r_document.text.length();
 		r_document.runs.push_back(run);
@@ -46,7 +51,7 @@ bool collect(const RNShadowNode &p_node, const Dictionary &p_inherited, RNTextDo
 		return false;
 	}
 	for (const Ref<RNShadowNode> &child : p_node.children) {
-		if (child.is_valid() && !collect(*child.ptr(), props, r_document, r_error)) {
+		if (child.is_valid() && !collect(*child.ptr(), props, span_tag, r_document, r_error)) {
 			return false;
 		}
 	}
@@ -78,7 +83,7 @@ public:
 		}
 		auto document = std::make_shared<RNTextDocument>();
 		document->props = r_state.props;
-		if (!collect(p_node, Dictionary(), *document, r_error)) {
+		if (!collect(p_node, Dictionary(), p_node.tag, *document, r_error)) {
 			return false;
 		}
 		document->utf16_offsets.push_back(0);
@@ -135,7 +140,7 @@ public:
 		state.instantiate();
 		state->document = control->get_document();
 		state->from = control->get_selection_from();
-		state->to = control->get_selection_to() + 1;
+		state->to = control->get_selection_to();
 		state->visible = control->is_visible();
 		state->modulate = control->get_modulate();
 		return state;
@@ -165,14 +170,9 @@ public:
 		if (!document || document->font.font.is_null()) {
 			return Size2();
 		}
-		RNTextControl *scratch = memnew(RNTextControl);
-		scratch->set_external_layout_enabled(true);
-		scratch->apply_document(document);
-		const float width = p_constraints.width_mode == RNMeasureMode::UNDEFINED ? 1048576 : p_constraints.width;
-		scratch->set_size(Size2(width, 1048576));
-		scratch->validate_detached_layout();
-		Size2 measured(scratch->get_content_width(), scratch->get_content_height());
-		memdelete(scratch);
+		RNParagraphLayout layout;
+		rn_shape_text_document(*document, p_constraints.width_mode == RNMeasureMode::UNDEFINED ? -1 : p_constraints.width, layout);
+		Size2 measured = layout.get_size().ceil();
 		if (p_constraints.width_mode == RNMeasureMode::EXACTLY) {
 			measured.x = p_constraints.width;
 		} else if (p_constraints.width_mode == RNMeasureMode::AT_MOST) {
@@ -195,13 +195,9 @@ public:
 		if (!document || document->font.font.is_null()) {
 			return p_size.y;
 		}
-		RNTextControl *scratch = memnew(RNTextControl);
-		scratch->set_external_layout_enabled(true);
-		scratch->apply_document(document);
-		scratch->set_size(p_size);
-		const Array lines = scratch->get_text_layout_snapshot().get("lines", Array());
-		const float result = lines.is_empty() ? p_size.y : float(Dictionary(lines[0])["baseline"]);
-		memdelete(scratch);
+		RNParagraphLayout layout;
+		rn_shape_text_document(*document, p_size.x, layout);
+		const float result = layout.get_lines().is_empty() ? p_size.y : layout.get_lines()[0].baseline;
 		return CLAMP(result, 0.0f, p_size.y);
 	}
 
@@ -232,11 +228,59 @@ int RNTextDocument::character_at(int p_utf16) const {
 	return character;
 }
 
+void rn_shape_text_document(const RNTextDocument &p_document, float p_width, RNParagraphLayout &r_layout) {
+	Vector<RNParagraphLayout::Fragment> fragments;
+	for (const RNTextRun &run : p_document.runs) {
+		RNParagraphLayout::Fragment fragment;
+		fragment.text = run.text;
+		fragment.font = run.font.font;
+		fragment.font_size = run.font.size;
+		fragment.color = run.font.color;
+		fragment.line_height = double(run.props.get("lineHeight", 0.0)) * run.font.multiplier;
+		const String decorations = run.props.get("textDecorationLine", "none");
+		if (decorations.contains("underline")) {
+			fragment.decorations |= RNParagraphLayout::DECORATION_UNDERLINE;
+		}
+		if (decorations.contains("line-through")) {
+			fragment.decorations |= RNParagraphLayout::DECORATION_STRIKETHROUGH;
+		}
+		fragment.tag = run.tag;
+		fragments.push_back(fragment);
+	}
+	RNParagraphLayout::Attributes attributes;
+	attributes.width = p_width;
+	attributes.max_lines = p_document.props.get("numberOfLines", 0);
+	const String alignment = p_document.props.get("textAlign", "left");
+	attributes.alignment = alignment == "center" ? HORIZONTAL_ALIGNMENT_CENTER : alignment == "right" ? HORIZONTAL_ALIGNMENT_RIGHT
+			: alignment == "justify"																  ? HORIZONTAL_ALIGNMENT_FILL
+																									  : HORIZONTAL_ALIGNMENT_LEFT;
+	const String direction = p_document.props.get("writingDirection", p_document.props.get("direction", "auto"));
+	attributes.direction = direction == "rtl" ? TextServer::DIRECTION_RTL : direction == "ltr" ? TextServer::DIRECTION_LTR
+																							   : TextServer::DIRECTION_AUTO;
+	r_layout.shape(fragments, attributes);
+}
+
+void RNTextControl::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("get_text"), &RNTextControl::get_text);
+	ClassDB::bind_method(D_METHOD("get_font_size"), &RNTextControl::get_font_size);
+	ClassDB::bind_method(D_METHOD("get_text_color"), &RNTextControl::get_text_color);
+}
+
+String RNTextControl::get_text() const {
+	return document ? document->text : String();
+}
+
+int RNTextControl::get_font_size() const {
+	return document ? document->font.size : 0;
+}
+
+Color RNTextControl::get_text_color() const {
+	return document ? document->font.color : Color();
+}
+
 RNTextControl::RNTextControl() {
-	set_threaded(false);
-	set_scroll_active(false);
-	set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
 	set_clip_contents(true);
+	set_focus_mode(FOCUS_ACCESSIBILITY);
 }
 
 RNTextControl::~RNTextControl() {
@@ -246,15 +290,90 @@ RNTextControl::~RNTextControl() {
 }
 
 void RNTextControl::_notification(int p_what) {
-	if (p_what == NOTIFICATION_RESIZED && sink) {
-		callable_mp(this, &RNTextControl::_publish_layout).call_deferred();
+	switch (p_what) {
+		case NOTIFICATION_RESIZED: {
+			_shape();
+			if (sink) {
+				callable_mp(this, &RNTextControl::_publish_layout).call_deferred();
+			}
+		} break;
+		case NOTIFICATION_DRAW: {
+			if (selection_to > selection_from) {
+				Color color = get_theme_color(SNAME("selection_color"), SNAME("RichTextLabel"));
+				RNViewStyle::color_of(document->props, "selectionColor", color);
+				for (const Rect2 &rect : layout.get_range_rects(selection_from, selection_to)) {
+					draw_rect(rect, color);
+				}
+			}
+			layout.draw(get_canvas_item(), Point2());
+		} break;
+		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
+			const RID element = get_accessibility_element();
+			ERR_FAIL_COND(element.is_null());
+			const String alignment = document ? String(document->props.get("textAlign", "left")) : String("left");
+			AccessibilityServer::get_singleton()->update_set_role(element, AccessibilityServerEnums::AccessibilityRole::ROLE_STATIC_TEXT);
+			AccessibilityServer::get_singleton()->update_set_value(element, document ? document->text : String());
+			AccessibilityServer::get_singleton()->update_set_text_align(element, alignment == "center" ? HORIZONTAL_ALIGNMENT_CENTER : alignment == "right" ? HORIZONTAL_ALIGNMENT_RIGHT
+							: alignment == "justify"																										? HORIZONTAL_ALIGNMENT_FILL
+																																							: HORIZONTAL_ALIGNMENT_LEFT);
+		} break;
 	}
+}
+
+void RNTextControl::gui_input(const Ref<InputEvent> &p_event) {
+	if (!is_selectable()) {
+		return;
+	}
+	Ref<InputEventMouseButton> button = p_event;
+	if (button.is_valid() && button->get_button_index() == MouseButton::LEFT) {
+		selecting = button->is_pressed();
+		if (selecting) {
+			selection_anchor = layout.hit_test(button->get_position());
+			set_selection_range(-1, -1);
+		}
+		return;
+	}
+	Ref<InputEventMouseMotion> motion = p_event;
+	if (motion.is_valid() && selecting) {
+		const int position = layout.hit_test(motion->get_position());
+		set_selection_range(MIN(selection_anchor, position), MAX(selection_anchor, position));
+		return;
+	}
+	if (p_event->is_action_pressed(SNAME("ui_copy"), false, true) && selection_to > selection_from) {
+		DisplayServer::get_singleton()->clipboard_set(document->text.substr(selection_from, selection_to - selection_from));
+		accept_event();
+	}
+}
+
+void RNTextControl::_shape() {
+	if (document) {
+		rn_shape_text_document(*document, get_size().x, layout);
+	}
+	queue_redraw();
+	queue_accessibility_update();
 }
 
 void RNTextControl::_font_changed() {
 	if (sink && sink->invalidate_layout) {
 		sink->invalidate_layout();
 	}
+}
+
+bool RNTextControl::is_selectable() const {
+	return document && bool(document->props.get("selectable", false));
+}
+
+void RNTextControl::set_selection_range(int p_from, int p_to) {
+	const int length = document ? document->text.length() : 0;
+	const bool valid = is_selectable() && p_from >= 0 && p_to > p_from;
+	const int from = valid ? MIN(p_from, length) : -1;
+	const int to = valid ? MIN(p_to, length) : -1;
+	if (from == selection_from && to == selection_to) {
+		return;
+	}
+	selection_from = from;
+	selection_to = to;
+	queue_redraw();
 }
 
 void RNTextControl::apply_document(const std::shared_ptr<const RNTextDocument> &p_document) {
@@ -264,54 +383,15 @@ void RNTextControl::apply_document(const std::shared_ptr<const RNTextDocument> &
 	if (document && document->revision == p_document->revision && document->text == p_document->text) {
 		return;
 	}
-	int from = get_selection_from();
-	int to = get_selection_to() + 1;
+	int from = selection_from;
+	int to = selection_to;
 	if (document && from >= 0) {
 		from = p_document->character_at(document->utf16_at(from));
 		to = p_document->character_at(document->utf16_at(to));
 	}
 	document = p_document;
-	clear();
-	add_theme_font_override("normal_font", document->font.font);
-	add_theme_font_size_override("normal_font_size", document->font.size);
-	add_theme_color_override("default_color", document->font.color);
-	add_theme_constant_override("line_separation", 0);
-	add_theme_constant_override("paragraph_separation", 0);
-	Ref<StyleBoxEmpty> empty;
-	empty.instantiate();
-	add_theme_style_override("normal", empty);
-	add_theme_style_override("focus", empty);
-	const String alignment = document->props.get("textAlign", "left");
-	set_horizontal_alignment(alignment == "center" ? HORIZONTAL_ALIGNMENT_CENTER : alignment == "right" ? HORIZONTAL_ALIGNMENT_RIGHT
-					: alignment == "justify"															? HORIZONTAL_ALIGNMENT_FILL
-																										: HORIZONTAL_ALIGNMENT_LEFT);
-	const String direction = document->props.get("writingDirection", document->props.get("direction", "auto"));
-	set_text_direction(direction == "rtl" ? TEXT_DIRECTION_RTL : direction == "ltr" ? TEXT_DIRECTION_LTR
-																					: TEXT_DIRECTION_AUTO);
-	set_line_height_override(double(document->props.get("lineHeight", 0.0)) * document->font.multiplier);
-	const int line_limit = document->props.get("numberOfLines", 0);
-	set_visible_line_limit(line_limit > 0 ? line_limit : -1);
-	set_selection_enabled(document->props.get("selectable", false));
-	for (const RNTextRun &run : document->runs) {
-		push_font(run.font.font, run.font.size);
-		push_color(run.font.color);
-		const String decorations = run.props.get("textDecorationLine", "none");
-		if (decorations.contains("underline")) {
-			push_underline();
-		}
-		if (decorations.contains("line-through")) {
-			push_strikethrough();
-		}
-		add_text(run.text);
-		if (decorations.contains("line-through")) {
-			pop();
-		}
-		if (decorations.contains("underline")) {
-			pop();
-		}
-		pop();
-		pop();
-	}
+	set_focus_mode(is_selectable() ? FOCUS_ALL : FOCUS_ACCESSIBILITY);
+	_shape();
 	set_selection_range(from, to);
 }
 
@@ -340,54 +420,41 @@ void RNTextControl::_publish_layout() {
 	if (!sink || !document || !is_inside_tree()) {
 		return;
 	}
-	const Dictionary layout = get_text_layout_snapshot();
-	if (layout == published_layout) {
-		return;
-	}
-	published_layout = layout.duplicate(true);
 	Array lines;
-	const Array native_lines = layout.get("lines", Array());
-	for (const Dictionary line : native_lines) {
-		const Rect2 bounds = line["bounds"];
+	const Ref<Font> metric_font = document->font.font;
+	const int metric_size = document->font.size;
+	const TypedArray<RID> font_rids = metric_font->get_rids();
+	for (const RNParagraphLayout::Line &line : layout.get_lines()) {
 		Dictionary record;
-		record["x"] = bounds.position.x;
-		record["y"] = bounds.position.y;
-		record["width"] = bounds.size.x;
-		record["height"] = bounds.size.y;
-		record["ascender"] = real_t(line["baseline"]) - bounds.position.y;
-		record["descender"] = bounds.size.y - real_t(record["ascender"]);
-		const Ref<Font> metric_font = document->font.font;
-		const int metric_size = document->font.size;
-		const TypedArray<RID> font_rids = metric_font->get_rids();
+		record["x"] = line.bounds.position.x;
+		record["y"] = line.bounds.position.y;
+		record["width"] = line.bounds.size.x;
+		record["height"] = line.bounds.size.y;
+		record["ascender"] = line.baseline - line.bounds.position.y;
+		record["descender"] = line.bounds.size.y - real_t(record["ascender"]);
 		record["xHeight"] = font_rids.is_empty() ? 0.0 : TS->font_get_glyph_size(font_rids[0], Vector2i(metric_size, 0), TS->font_get_glyph_index(font_rids[0], metric_size, 'x', 0)).y;
 		record["capHeight"] = font_rids.is_empty() ? 0.0 : TS->font_get_glyph_size(font_rids[0], Vector2i(metric_size, 0), TS->font_get_glyph_index(font_rids[0], metric_size, 'H', 0)).y;
-		record["text"] = document->text.substr(int(line["from"]), int(line["to"]) - int(line["from"]));
+		record["text"] = document->text.substr(line.range.x, line.range.y - line.range.x);
 		lines.push_back(record);
 	}
 	Dictionary payload;
 	payload["lines"] = lines;
+	if (payload == published_layout) {
+		return;
+	}
+	published_layout = payload;
 	if (sink->emit) {
 		sink->emit(tag, "topTextLayout", payload, published_revision);
 	}
 }
 
-HashMap<int, Vector<Rect2>> RNTextControl::get_span_bounds() {
+HashMap<int, Vector<Rect2>> RNTextControl::get_span_bounds() const {
 	HashMap<int, Vector<Rect2>> result;
 	if (!document) {
 		return result;
 	}
-	Array ranges;
-	Vector<int> tags;
 	for (const KeyValue<int, Vector2i> &span : document->spans) {
-		ranges.push_back(span.value);
-		tags.push_back(span.key);
-	}
-	const Array bounds = get_text_layout_snapshot(ranges).get("ranges", Array());
-	for (int i = 0; i < tags.size(); ++i) {
-		const Array rectangles = bounds[i];
-		for (const Rect2 rect : rectangles) {
-			result[tags[i]].push_back(rect);
-		}
+		result[span.key] = layout.get_range_rects(span.value.x, span.value.y);
 	}
 	return result;
 }

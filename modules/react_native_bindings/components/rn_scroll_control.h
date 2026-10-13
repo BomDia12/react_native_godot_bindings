@@ -2,6 +2,7 @@
 #include "rn_host_descriptor.h"
 
 #include "scene/animation/tween.h"
+#include "scene/gui/panel.h"
 #include "scene/gui/scroll_container.h"
 
 struct RNScrollData : RNComponentData {
@@ -20,6 +21,7 @@ class RNScrollControl : public ScrollContainer {
 	bool suppress_events = false;
 	bool dragging = false;
 	bool momentum = false;
+	bool ended_during_input = false;
 	ObjectID anchor;
 	Point2 anchor_position;
 	Point2 anchor_offset;
@@ -36,6 +38,8 @@ protected:
 	void gui_input(const Ref<InputEvent> &p_event) override;
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNScrollControl();
 	Control *get_content() const { return content; }
 	Rect2 usable_viewport() const;
@@ -44,6 +48,16 @@ public:
 	void scroll_to(const Point2 &p_offset, bool p_animated);
 	void set_offset(const Point2 &p_offset);
 	void prepare_anchor() { _capture_anchor(); }
+};
+class RNScrollContentControl : public Panel {
+	GDCLASS(RNScrollContentControl, Panel);
+
+protected:
+	static void _bind_methods() {}
+
+public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 };
 std::shared_ptr<const RNHostDescriptor> rn_scroll_descriptor(const StringName &p_name = "RCTScrollView", bool p_horizontal = false);
 std::shared_ptr<const RNHostDescriptor> rn_scroll_content_descriptor(const StringName &p_name);

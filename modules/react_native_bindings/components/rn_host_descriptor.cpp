@@ -142,6 +142,10 @@ bool RNHostDescriptor::owns_input_control(Control *p_host, Control *p_control) c
 	return p_host == p_control;
 }
 
+Vector<Control *> RNHostDescriptor::get_input_controls(Control *) const {
+	return Vector<Control *>();
+}
+
 Control *RNHostDescriptor::focus_control(Control *p_host) const {
 	return p_host;
 }

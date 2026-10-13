@@ -128,6 +128,7 @@ public:
 	virtual Control *focus_control(Control *p_host) const;
 	virtual bool owns_native_activation(const RNPreparedHostState &p_state) const;
 	virtual bool owns_input_control(Control *p_host, Control *p_control) const;
+	virtual Vector<Control *> get_input_controls(Control *p_host) const;
 	virtual void attach_signals(Control *p_host, const RNHostContext &p_context) const;
 	virtual void detach_signals(Control *p_host, const RNHostContext &p_context) const;
 	virtual void dispose_state(Control *p_host, const RNHostContext &p_context) const;

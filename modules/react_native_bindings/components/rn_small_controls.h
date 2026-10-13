@@ -14,6 +14,8 @@ protected:
 	static void _bind_methods() {}
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNSwitchControl();
 	void publish(const RNHostContext &p_context) { published_context = p_context; }
 };
@@ -25,6 +27,8 @@ protected:
 	static void _bind_methods() {}
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNActivityIndicatorControl();
 };
 

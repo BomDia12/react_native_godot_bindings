@@ -18,6 +18,8 @@ protected:
 	void gui_input(const Ref<InputEvent> &p_event) override;
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	void publish_menu(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 };
 

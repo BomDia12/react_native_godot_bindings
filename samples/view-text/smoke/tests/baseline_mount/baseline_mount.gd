@@ -10,7 +10,7 @@ func smoke_id() -> String:
 	return "baseline-mount"
 
 func find_sentinel(node: Node) -> RNTextControl:
-	if node is RNTextControl and node.get_parsed_text() == SENTINEL:
+	if node is RNTextControl and node.get_text() == SENTINEL:
 		return node
 
 	for child in node.get_children():
@@ -66,9 +66,9 @@ func validate_smoke() -> String:
 		return "styled View has an empty Yoga layout"
 	if label.size.x <= 0.0 or label.size.y <= 0.0:
 		return "sentinel Text has an empty Yoga layout"
-	if not label.get_theme_color("default_color").is_equal_approx(EXPECTED_TEXT_COLOR):
+	if not label.get_text_color().is_equal_approx(EXPECTED_TEXT_COLOR):
 		return "sentinel Text color does not match the fixture"
-	if label.get_theme_font_size("normal_font_size") != EXPECTED_FONT_SIZE:
+	if label.get_font_size() != EXPECTED_FONT_SIZE:
 		return "sentinel Text font size does not match the fixture"
 	if not is_equal_approx(styled_panel.modulate.a, EXPECTED_OPACITY):
 		return "styled View opacity does not match the fixture"

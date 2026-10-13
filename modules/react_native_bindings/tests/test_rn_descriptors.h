@@ -42,14 +42,12 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] detached native measurement pr
 	CHECK(measured.x > 0);
 	CHECK(measured.y == 30);
 	RNTextControl *native = memnew(RNTextControl);
-	native->set_external_layout_enabled(true);
 	native->apply_document(document);
 	native->set_size(Size2(300, 30));
-	REQUIRE(native->validate_detached_layout());
-	CHECK(native->get_content_height() == measured.y);
+	CHECK(native->get_layout().get_size().y == measured.y);
 	native->set_selection_range(1, 4);
 	CHECK(native->get_selection_from() == 1);
-	CHECK(native->get_selection_to() == 3);
+	CHECK(native->get_selection_to() == 4);
 	const Variant retained = text->descriptor->capture_state(native);
 	Ref<RNShadowNode> changed = text->clone(false, nullptr);
 	changed->props["fontSize"] = 26;
@@ -58,11 +56,11 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] detached native measurement pr
 	REQUIRE(text->descriptor->resolve_resources(changed_state, RNHostContext(), error));
 	REQUIRE(text->descriptor->apply(native, changed_state, RNHostContext(), error));
 	CHECK(native->get_selection_from() == 1);
-	CHECK(native->get_selection_to() == 3);
+	CHECK(native->get_selection_to() == 4);
 	text->descriptor->restore_state(native, retained);
 	CHECK(bool(native->get_document() == document));
 	CHECK(native->get_selection_from() == 1);
-	CHECK(native->get_selection_to() == 3);
+	CHECK(native->get_selection_to() == 4);
 	memdelete(native);
 }
 

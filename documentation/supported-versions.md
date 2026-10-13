@@ -5,7 +5,7 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 
 | Component | Support | Enforcement |
 |---|---|---|
-| Godot | `4.7.2`, exact commit `ed1daf0bf001b61586d9930840f2f1394092c079` | `bootstrap.sh`, patch-manifest/provenance validation |
+| Godot | `4.7.2`, exact commit `ed1daf0bf001b61586d9930840f2f1394092c079`, unmodified | `bootstrap.sh`, provenance validation |
 | Hermes | Exact commit `3477757eb2475555cf8d8df24bfb1deb0613880d` (`hermes-v250829098.0.17`) | Git submodule, build script |
 | React Native | `0.87.1` | Package manifest and lockfile |
 | React | `19.2.3` | Package manifest and lockfile |
@@ -25,12 +25,12 @@ adapter map is pinned to the React Native 0.87.1 public module layout and must b
 with every React Native update. Other build/export targets remain pending in the
 compatibility matrix.
 
-The pinned engine includes the exact additive source changes in
-`patches/godot/manifest.json`. Bootstrap/build apply them idempotently; unrelated
-engine changes fail validation. Clean source and compiler cache keys include the
-patch workflow identity. Native dependencies require advanced TextServer, JPEG and
-WebP; PNG support is provided by Godot core. HTTP/TLS/WebSocket require core HTTPRequest plus the WebSocket and mbedTLS modules.
-No base pins or additive engine patch bytes changed in the native services milestone.
+The module builds against the unmodified pinned engine. Behavior that stock controls
+lack comes from module subclasses of the engine classes. Bootstrap refuses a Godot
+checkout with local changes, and provenance validation fails on any engine edit.
+Native dependencies require advanced TextServer, JPEG and WebP; PNG support is provided
+by Godot core. HTTP/TLS/WebSocket require core HTTPRequest plus the WebSocket and mbedTLS
+modules.
 
 The Linux component display gate uses Xvfb and software OpenGL in CI. Automated
 IME notification replay verifies composition ownership and rollback; platform IME
@@ -39,5 +39,3 @@ candidate presentation and other export targets remain unverified.
 The display gate uses its own exact warning allowlist for Xvfb's missing XIM server
 and GLX swap-interval extension. Headless diagnostics retain the baseline allowlist;
 other native warnings or errors fail either gate.
-
-The declared Godot patch-set digest is `8a31c29161c6326aa93ae6bf1a3f7e4e4605d5ca29ecc757122808711234bd25`; provenance validates it against the pinned source.

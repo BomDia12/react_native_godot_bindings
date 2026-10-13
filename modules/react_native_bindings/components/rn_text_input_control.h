@@ -7,6 +7,26 @@
 struct RNTextInputData : RNComponentData {
 	RNFontSnapshot font;
 };
+class RNLineEditor : public LineEdit {
+	GDCLASS(RNLineEditor, LineEdit);
+
+protected:
+	static void _bind_methods() {}
+
+public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
+};
+class RNTextEditor : public TextEdit {
+	GDCLASS(RNTextEditor, TextEdit);
+
+protected:
+	static void _bind_methods() {}
+
+public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
+};
 class RNTextInputState : public RefCounted {
 	GDCLASS(RNTextInputState, RefCounted);
 
@@ -17,8 +37,11 @@ public:
 	ObjectID editor_id;
 	Control::MouseFilter wrapper_mouse_filter = Control::MOUSE_FILTER_PASS;
 	Control::MouseFilter editor_mouse_filter = Control::MOUSE_FILTER_STOP;
-	std::shared_ptr<const LineEdit::EditState> line;
-	std::shared_ptr<const TextEdit::EditState> multiline;
+	String text;
+	Point2i caret;
+	Point2i selection_origin;
+	bool has_selection = false;
+	Vector2 scroll;
 	Dictionary props;
 	Dictionary deferred;
 	uint64_t text_revision = UINT64_MAX;
@@ -55,7 +78,6 @@ class RNTextInputControl : public Control {
 	Control *_create_editor(bool p_multiline);
 	void _configure_editor(Control *p_editor, const RNPreparedHostState &p_state);
 	void _emit(const StringName &p_event, Dictionary p_payload = Dictionary());
-	void _discard_notifications();
 	void _set_text(const String &p_text);
 	void _set_selection(int p_start, int p_end);
 
@@ -64,6 +86,8 @@ protected:
 	void _notification(int p_what);
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNTextInputControl();
 	~RNTextInputControl();
 	Control *get_editor() const { return editor; }

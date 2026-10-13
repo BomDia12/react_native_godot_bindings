@@ -63,7 +63,7 @@ public:
 	}
 	Size2 presentation_size(const RNPreparedHostState &p_state, const Size2 &p_inherited) const override { return native_window ? std::static_pointer_cast<const RNPresentationData>(p_state.component_data)->viewport : p_inherited; }
 	Control *create_host(const RNHostContext &) const override { return native_window ? static_cast<Control *>(memnew(RNWindowControl)) : static_cast<Control *>(memnew(RNModalControl)); }
-	Control *get_child_container(Control *p_host, const RNHostContext &) const override { return native_window ? Object::cast_to<RNWindowControl>(p_host)->get_content() : Object::cast_to<RNModalControl>(p_host)->get_overlay(); }
+	Control *get_child_container(Control *p_host, const RNHostContext &) const override { return native_window ? static_cast<Control *>(Object::cast_to<RNWindowControl>(p_host)->get_content()) : static_cast<Control *>(Object::cast_to<RNModalControl>(p_host)->get_overlay()); }
 	RNChildLayoutPolicy get_child_layout_policy(const RNPreparedHostState &) const override { return RNChildLayoutPolicy::PRESENTATION; }
 	Rect2 get_child_layout_viewport(const RNPreparedHostState &p_state, const Size2 &) const override { return Rect2(Point2(), std::static_pointer_cast<const RNPresentationData>(p_state.component_data)->viewport); }
 	bool apply(Control *, const RNPreparedHostState &, const RNHostContext &, RNError &) const override { return true; }
@@ -91,6 +91,7 @@ public:
 		return geometry;
 	}
 	bool owns_input_control(Control *p_host, Control *p_control) const override { return p_host == p_control || get_child_container(p_host, RNHostContext()) == p_control; }
+	Vector<Control *> get_input_controls(Control *p_host) const override { return { get_child_container(p_host, RNHostContext()) }; }
 };
 Control *presentation_container(RNModalControl *p_modal, const RNHostContext &p_context) {
 	Control *container = p_context.owner;
@@ -137,7 +138,7 @@ void focusable_controls(Node *p_node, Vector<Control *> &r_controls) {
 } //namespace
 RNModalControl::RNModalControl() {
 	set_mouse_filter(MOUSE_FILTER_IGNORE);
-	overlay = memnew(Panel);
+	overlay = memnew(RNModalOverlay);
 	overlay_id = overlay->get_instance_id();
 	overlay->set_as_top_level(true);
 	overlay->set_mouse_filter(MOUSE_FILTER_STOP);
@@ -217,7 +218,6 @@ void RNModalControl::publish(const RNPreparedHostState &p_state, const RNHostCon
 		overlay->reparent(container, false);
 	}
 	overlay->set_position(Point2());
-	overlay->set_external_layout_enabled(true);
 	overlay->set_size(component->viewport);
 	Dictionary backdrop;
 	backdrop["backgroundColor"] = bool(p_state.props.get("transparent", false)) ? Variant(Color(0, 0, 0, 0)) : p_state.props.get("backdropColor", Variant(Color(1, 1, 1, 1)));
@@ -277,7 +277,7 @@ RNWindowControl::RNWindowControl() {
 	window->set_title("React Native");
 	window->set_transient(true);
 	add_child(window);
-	content = memnew(Control);
+	content = memnew(RNWindowContent);
 	content->set_mouse_filter(MOUSE_FILTER_PASS);
 	window->add_child(content);
 	window->connect("close_requested", callable_mp(this, &RNWindowControl::_close_requested));
@@ -293,7 +293,6 @@ void RNWindowControl::publish(const RNPreparedHostState &p_state, const RNHostCo
 	publishing = true;
 	window->set_size(component->viewport);
 	declared_size = Size2(p_state.props.get("windowWidth", 640), p_state.props.get("windowHeight", 480));
-	content->set_external_layout_enabled(true);
 	content->set_size(component->viewport);
 	publishing = false;
 	const bool should_show = p_state.props.get("visible", true);
@@ -303,9 +302,9 @@ void RNWindowControl::publish(const RNPreparedHostState &p_state, const RNHostCo
 		p_context.event_sink->emit(p_context.tag, should_show ? "topShow" : "topDismiss", Dictionary(), p_context.revision);
 	}
 	if (p_context.owner) {
-		const Callable observer = callable_mp(p_context.owner, &ReactNativeRootView::_on_gui_input_dispatched);
-		if (!window->is_connected("gui_input_dispatched", observer)) {
-			window->connect("gui_input_dispatched", observer);
+		const Callable observer = callable_mp(p_context.owner, &ReactNativeRootView::_begin_input).bind(window->get_instance_id());
+		if (!window->is_connected("window_input", observer)) {
+			window->connect("window_input", observer);
 		}
 	}
 	if (p_context.event_sink && p_context.event_sink->invalidate_geometry) {
