@@ -41,9 +41,11 @@ changes under its MIT license.
 included as `assets/LICENSE.OpenSans.txt`. This is a deterministic sample font;
 applications inherit their Godot theme by default.
 
-React Native files are not vendored or modified in references. Narrow Metro source
-adaptations are guarded by SHA-256 of the installed 0.87.1 source bytes in
-`js/godot/source-adaptations.json`, under the upstream React Native MIT license.
+React Native files are not vendored or modified in references. The `react-native-godot`
+package contains whole-file derived copies of TextInput, TextInputState and Modal, each
+guarded by the SHA-256 of its 0.87.1 base file in `overrides.json`, and narrow Metro
+source adaptations guarded the same way in `source-adaptations.json`. Both remain under
+the upstream React Native MIT license.
 
 ## Local network fixture
 

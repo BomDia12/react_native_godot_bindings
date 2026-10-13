@@ -3,8 +3,8 @@ import {AppRegistry, Text, View} from 'react-native';
 import {RootTagContext} from 'react-native/Libraries/ReactNative/RootTag';
 import * as TurboModuleRegistry from 'react-native/Libraries/TurboModule/TurboModuleRegistry';
 
-import {callAsync, closeSession, openSession} from '../../js/godot/modules';
-import {color, int64, vector2} from '../../js/godot/values';
+import {callAsync, closeSession, openSession} from 'react-native-godot/modules';
+import {color, int64, vector2} from 'react-native-godot/values';
 
 function NativeModuleApp() {
   const rootTag = useContext(RootTagContext);

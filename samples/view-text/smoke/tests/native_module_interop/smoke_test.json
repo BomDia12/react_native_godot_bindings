@@ -11,8 +11,8 @@
     "samples/view-text/package-lock.json",
     "samples/view-text/godot.entry.js",
     "samples/view-text/native_module.entry.js",
-    "js/godot/modules.js",
-    "js/godot/values.js",
+    "packages/react-native-godot/src/modules.js",
+    "packages/react-native-godot/src/values.js",
     "documentation/expected-warnings.txt",
     "samples/view-text/smoke/tests/native_module_interop/NativeModuleInterop.tscn",
     "samples/view-text/smoke/tests/native_module_interop/native_module_interop.gd"

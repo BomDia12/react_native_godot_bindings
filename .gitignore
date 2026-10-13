@@ -17,3 +17,5 @@ __pycache__/
 /samples/game-ui/dist/
 /samples/game-ui/.godot/
 /samples/game-ui/**/*.uid
+
+/packages/react-native-godot/node_modules/

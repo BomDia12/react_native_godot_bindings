@@ -11,7 +11,7 @@
     "samples/view-text/package-lock.json",
     "samples/view-text/godot.entry.js",
     "samples/view-text/descriptor.entry.js",
-    "js/godot/adapters/BaseViewConfig.godot.js",
+    "packages/react-native-godot/Libraries/NativeComponent/BaseViewConfig.godot.js",
     "documentation/expected-warnings.txt",
     "samples/view-text/smoke/tests/descriptor_registry/DescriptorRegistry.tscn",
     "samples/view-text/smoke/tests/descriptor_registry/descriptor_registry.gd"

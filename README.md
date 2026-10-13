@@ -41,8 +41,10 @@ cd react_native_godot_bindings
 scripts/bootstrap.sh
 scripts/build_hermes.sh
 scripts/build_godot.sh
+npm --prefix packages/react-native-godot ci
+node packages/react-native-godot/scripts/check-overrides.cjs
+npm --prefix packages/react-native-godot test
 npm --prefix samples/view-text ci
-npm --prefix samples/view-text run test:godot
 scripts/run_baseline.sh
 scripts/run_component_display.sh
 ```
@@ -55,7 +57,9 @@ declared headless smoke test. Shared manifests with the same package, npm script
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the
 default concurrency of two Godot processes.
 
-The sample's `build:godot` script uses the repository-owned Metro config and stages its
+The JavaScript platform is the `react-native-godot` package in `packages/react-native-godot/`.
+Samples depend on it through `file:../../packages/react-native-godot`, and the sample's
+`build:godot` script uses the package's Metro config and stages its
 bundle, source map, dependency evidence, and local asset variants under
 `samples/view-text/dist/`. Application resolution prefers `.godot.*`, then `.native.*`,
 then generic files; the supported graph does not select Android/iOS platform files.

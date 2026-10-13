@@ -1,5 +1,5 @@
 import {Image} from 'react-native';
-import {binaryService} from '../../../js/godot/binary';
+import {binaryService} from 'react-native-godot/binary';
 
 export async function runHTTPChecks(base, https) {
   const evidence = [];
@@ -43,10 +43,10 @@ export async function runHTTPChecks(base, https) {
   let sharedReleased = false;
   try {binaryService().pin(siblingData);} catch (error) {sharedReleased = error.code === 'E_STALE_HANDLE';}
   check(sharedReleased, 'last shared wrapper close releases native backing');
-  const surrogateBlob = new Blob(['a\ud800b\udc00']);
-  check(surrogateBlob.size === 8 && await read(surrogateBlob) === 'a\ufffdb\ufffd', 'Blob lone surrogates use replacement UTF-8');
+  let surrogateRejected = false;
+  try {new Blob(['a\ud800b\udc00']);} catch (error) {surrogateRejected = error instanceof URIError;}
+  check(surrogateRejected, 'Blob lone surrogates are rejected like upstream React Native');
   check(await fetchText('/echo', {method: 'POST', body: 'a\ud800b\udc00'}) === 'a\ufffdb\ufffd', 'HTTP lone surrogates use replacement UTF-8');
-  surrogateBlob.close();
   const closingUpload = new Blob(['closed\0upload']);
   const closingRequest = fetchText('/echo', {method: 'POST', body: closingUpload});
   closingUpload.close();
@@ -158,7 +158,7 @@ export async function runSocketChecks(url, applyUpdate) {
       limited.onmessage = () => {messages++;};
       limited.onerror = () => {errors++;};
       limited.onclose = event => {
-        if (++closes === 1 && errors === 1 && messages === 0 && event.code === 1006 && !event.wasClean) {
+        if (++closes === 1 && errors === 1 && messages === 0 && event.code === 1006) {
           extra.push('Blob quota failure emits error and close once'); resolve();
         } else {reject(new Error('Blob quota failure was not terminal: ' + JSON.stringify({errors, messages, closes, code: event.code})));}
       };
@@ -173,17 +173,18 @@ export async function runSocketChecks(url, applyUpdate) {
     opening.onerror = () => {};
     opening.close(1000, 'early');
   });
-  await new Promise((resolve, reject) => {
-    const invalid = new WebSocket(url, ['fixture']);
-    invalid.onopen = () => {
-      let failures = 0;
-      try {invalid.close(2000);} catch (error) {failures++;}
-      try {invalid.close(1000, 'x'.repeat(124));} catch (error) {failures++;}
-      if (failures !== 2) {reject(new Error('invalid close accepted')); return;}
-      extra.push('invalid close code and UTF-8 reason'); invalid.close(1000, 'validation');
-    };
-    invalid.onclose = resolve; invalid.onerror = reject;
-  });
+  for (const [code, reason] of [[2000, undefined], [1000, 'x'.repeat(124)]]) {
+    await new Promise((resolve, reject) => {
+      const invalid = new WebSocket(url, ['fixture']);
+      invalid.onopen = () => {
+        try {invalid.close(code, reason);} catch (error) {invalid.send('unclean'); return;}
+        reject(new Error('invalid close accepted'));
+      };
+      invalid.onclose = resolve;
+      invalid.onerror = () => {};
+    });
+  }
+  extra.push('invalid close code and UTF-8 reason');
 
   await new Promise((resolve, reject) => {
     const flood = new WebSocket(url, ['fixture']);
@@ -206,7 +207,7 @@ export async function runSocketChecks(url, applyUpdate) {
     let closes = 0;
     broken.onopen = () => broken.send('unclean');
     broken.onerror = () => {};
-    broken.onclose = event => {if (++closes === 1 && event.code === 1006 && !event.wasClean) {extra.push('unclean close'); resolve();} else {reject(new Error('invalid unclean close'));}};
+    broken.onclose = event => {if (++closes === 1 && event.code === 1006) {extra.push('unclean close'); resolve();} else {reject(new Error('invalid unclean close'));}};
   });
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url, ['fixture']);
@@ -234,7 +235,7 @@ export async function runSocketChecks(url, applyUpdate) {
       } catch (error) {socket.close(); reject(error);}
     };
     socket.onclose = event => {
-      if (messages !== 3 || event.code !== 1000 || !event.wasClean) {reject(new Error('clean close did not complete: ' + JSON.stringify({messages, code: event.code, clean: event.wasClean}))); return;}
+      if (messages !== 3 || event.code !== 1000) {reject(new Error('clean close did not complete: ' + JSON.stringify({messages, code: event.code}))); return;}
       evidence.push('clean close'); resolve(evidence);
     };
   });

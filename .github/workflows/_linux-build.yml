@@ -37,7 +37,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'samples/view-text/package-lock.json', 'samples/game-ui/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'packages/react-native-godot/package-lock.json', 'samples/view-text/package-lock.json', 'samples/game-ui/package-lock.json') }}
           restore-keys: |
             npm-${{ runner.os }}-
 
@@ -121,10 +121,11 @@ jobs:
 
       - name: Test Godot JavaScript platform
         run: |
+          npm --prefix packages/react-native-godot ci
+          node packages/react-native-godot/scripts/check-overrides.cjs
+          npm --prefix packages/react-native-godot test
           npm --prefix samples/view-text ci
-          npm --prefix samples/view-text run test:godot
           npm --prefix samples/game-ui ci
-          npm --prefix samples/game-ui run test:godot
 
       - name: Build Hermes
         if: steps.hermes-libraries.outputs.available != 'true'

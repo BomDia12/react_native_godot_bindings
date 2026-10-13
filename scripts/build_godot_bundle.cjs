@@ -4,8 +4,6 @@
 const fs = require('fs');
 const path = require('path');
 const {createRequire} = require('module');
-const {stageAssets} = require('../js/godot/assets.cjs');
-const {isForeignPlatformModule} = require('../js/godot/resolver.cjs');
 
 function parseArgs(argv) {
   const options = {
@@ -67,6 +65,8 @@ async function main() {
   const outputDirectory = path.dirname(output);
   const projectRequire = createRequire(path.join(projectRoot, 'package.json'));
   const Metro = projectRequire('metro');
+  const {stageAssets} = projectRequire('react-native-godot/assets');
+  const {isForeignPlatformModule} = projectRequire('react-native-godot/resolver');
   const config = require(path.join(projectRoot, 'metro.config.godot.js'));
   const temporaryRoot = fs.mkdtempSync(
     path.join(projectRoot, '.godot-build-'),

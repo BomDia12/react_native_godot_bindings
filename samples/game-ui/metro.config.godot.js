@@ -1,3 +1,1 @@
-const {createGodotMetroConfig} = require('../../js/godot/metro.cjs');
-
-module.exports = createGodotMetroConfig(__dirname);
+module.exports = require('react-native-godot/metro').createGodotMetroConfig(__dirname);

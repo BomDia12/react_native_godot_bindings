@@ -2,7 +2,7 @@ import React, {useState, useRef, useEffect} from 'react';
 import {AppRegistry, View, Text, Image, ScrollView, FlatList, SectionList, TextInput, Button, Pressable, Modal, Switch, ActivityIndicator} from 'react-native';
 import GodotWindow from 'react-native-godot/GodotWindow';
 import {fontFamily} from 'react-native-godot/fonts';
-import '../../js/godot/bootstrap-finalize';
+import 'react-native-godot/setup';
 
 const itemIcon = require('./assets/item.png');
 const importedFont = fontFamily(require('./assets/OpenSans.woff2'));

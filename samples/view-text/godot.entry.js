@@ -1,6 +1,6 @@
 import React from 'react';
 import {AppRegistry, StyleSheet, Text, View} from 'react-native';
-import '../../js/godot/bootstrap-finalize';
+import 'react-native-godot/setup';
 
 import './interaction.entry';
 import './multi_root.entry';

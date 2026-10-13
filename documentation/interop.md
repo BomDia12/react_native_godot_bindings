@@ -67,7 +67,7 @@ that touches a scene opens an explicit root session. A frame processes copied na
 jobs, queues copied completions/events, then reacquires Hermes to deliver callbacks and
 run a microtask checkpoint after each callback. Late or duplicate completions are ignored.
 
-`callAsync(module, method, args, {signal})` in `js/godot/modules.js` connects an
+`callAsync(module, method, args, {signal})` in `packages/react-native-godot/src/modules.js` connects an
 `AbortSignal` to the native request token. An already-aborted signal rejects with
 `E_CANCELLED`; later abort, session closure, surface removal, and runtime reset settle or
 discard work once according to their lifetime. Subscription callbacks remain strong JSI

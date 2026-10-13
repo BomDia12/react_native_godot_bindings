@@ -1,8 +1,16 @@
 # Godot JavaScript platform
 
-The tested platform target is `godot` on the Linux editor/headless build. The sample
-config calls `createGodotMetroConfig(projectRoot)` from `js/godot/metro.cjs`, and its
-bundle command is:
+The tested platform target is `godot` on the Linux editor/headless build. The JavaScript
+platform ships as the `react-native-godot` package in `packages/react-native-godot/`.
+Applications depend on it and use its Metro config:
+
+```js
+module.exports = require('react-native-godot/metro').createGodotMetroConfig(__dirname);
+```
+
+The application entry imports `react-native-godot/setup`, which keeps the platform's
+pre-main modules in the bundle and installs Godot asset resolution through
+`resolveAssetSource.setCustomSourceTransformer`. The sample bundle command is:
 
 ```sh
 npm --prefix samples/view-text run build:godot
@@ -18,12 +26,23 @@ Metro uses its normal per-extension order: `.godot`, then `.native`, then the ge
 file. This applies independently to `.js`, `.jsx`, `.ts`, and `.tsx`. Unmapped imports
 delegate once to Metro's normal Godot resolver; there is no Android or iOS retry.
 
-`js/godot/rn-overrides.cjs` maps exact files inside the installed React Native package.
-The current adapters cover Platform, color processing, BaseViewConfig, local asset
-resolution, Image, BackHandler, networking, alerts, legacy accessibility sending,
-DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid. This map is coupled to React
-Native 0.87.1 and must be re-audited when that pin changes. A same-named application file
-outside that package is never remapped.
+For a file inside the installed `react-native/Libraries/<path>`, the resolver uses
+`packages/react-native-godot/Libraries/<path>.godot.js` when that file exists; file
+presence is the only rule. A same-named application file outside React Native is never
+remapped. Bare imports made by the package resolve from the application, so the bundle
+always contains one React Native installation.
+
+The `Libraries/` files are of three kinds:
+
+- Platform files implement modules that React Native splits by platform: Platform,
+  Image, RCTAlertManager, BaseViewConfig, RCTNetworking, PlatformColorValueTypes,
+  BackHandler, legacySendAccessibilityEvent, and the DrawerLayoutAndroid and
+  ToastAndroid fallbacks.
+- Derived overrides are whole-file copies of generic upstream files with a Godot branch:
+  TextInput, TextInputState and Modal. `overrides.json` records the SHA-256 of each base
+  file, and `scripts/check-overrides.cjs` fails when the installed React Native differs.
+  Re-derive the copy from the new source when that happens.
+- Alert, URL and processColor keep Godot adapters until native TurboModules cover them.
 
 `Platform.OS` is `godot`. `Platform.select()` checks `godot`, then `native`, then
 `default` by property presence, so an explicitly present `undefined` is preserved.
@@ -35,7 +54,7 @@ outside that package is never remapped.
 - `assetScale`, the startup screen scale or `1` in headless mode.
 
 `isTV` and `isVision` are false. These constants are startup values, not live viewport
-metrics. Godot-specific TypeScript declarations are in `js/godot/godot.d.ts`.
+metrics. Godot-specific TypeScript declarations are in `packages/react-native-godot/godot.d.ts`.
 
 ## Colors
 
@@ -61,7 +80,7 @@ large as `assetScale`, or the largest available, and returns React Native's loca
 shape.
 
 Explicit `res://` and `user://` objects are supported for local operations. PNG/JPEG/static WebP and base64 images use the bounded native image service;
-getSize, prefetch and queryCache share its source and credential policy. HTTP images use the shared bounded HTTPRequest pool installed before bundle evaluation. Paths must use the exact
+getSize, prefetch and queryCache share its source and credential policy. HTTP images use the shared bounded HTTPRequest pool installed before bundle evaluation. The native image service requires the exact
 scheme, forward slashes, a nonempty relative path, and no `..` segment or embedded NUL.
 Percent characters remain literal. Missing staged files should be fixed by rebuilding
 the bundle.
@@ -70,16 +89,18 @@ the bundle.
 
 Imports of pending adapters are safe, but attempted operations report `E_UNSUPPORTED`.
 BackHandler listeners, legacy accessibility
-dispatch, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid are not claimed as
+dispatch, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid (upstream's
+non-Android fallbacks) are not claimed as
 supported services or components. Bootstrap shims exist only for React Native startup
 dependencies and are not compatibility claims.
 
 ## Native components and upstream source adaptations
 
-`source-adaptations.cjs` changes only exact installed RN 0.87.1 paths and rejects a
-source digest mismatch. It preserves upstream TextInput state synchronization and
-ref methods, selects the unified Godot host for both editor modes, retains Modal
-until its native dismiss event, and feeds sticky-header Animated values from native
+The TextInput override preserves upstream state synchronization and ref methods and
+selects the unified Godot host for both editor modes; the Modal override retains Modal
+until its native dismiss event. `source-adaptations.cjs` changes only exact installed
+RN 0.87.1 paths and rejects a source digest mismatch. It feeds sticky-header Animated
+values from native
 scroll events. The Animated props hook skips the unavailable native queue on Godot.
 Button opacity feedback explicitly uses the upstream JS animation driver on Godot.
 General NativeAnimated support is absent. Lists use the generation-owned native timer/idle scheduler.
