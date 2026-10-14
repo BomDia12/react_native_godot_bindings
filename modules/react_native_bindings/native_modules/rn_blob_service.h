@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <map>
+#include <mutex>
 
 struct RNBlobCollectorState {
 	std::atomic<uint32_t> references{ 0 };
@@ -25,6 +26,7 @@ class RNBlobService : public std::enable_shared_from_this<RNBlobService> {
 	uint64_t used = 0;
 	uint64_t next_id = 1;
 	bool closed = false;
+	mutable std::recursive_mutex mutex;
 	void reclaim(const String &p_id);
 
 public:

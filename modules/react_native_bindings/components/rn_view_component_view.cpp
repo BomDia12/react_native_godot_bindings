@@ -1,5 +1,7 @@
 #include "rn_view_component_view.h"
 
+#include "../interop/rn_dynamic.h"
+
 #include <react/renderer/components/view/ViewEventEmitter.h>
 
 RNViewComponentView::RNViewComponentView(facebook::react::Tag p_tag) :

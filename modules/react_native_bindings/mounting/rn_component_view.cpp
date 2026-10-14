@@ -1,5 +1,7 @@
 #include "rn_component_view.h"
 
+#include "../interop/rn_dynamic.h"
+
 #include <react/renderer/graphics/Color.h>
 
 using namespace facebook::react;
@@ -13,35 +15,6 @@ bool is_component_control(Node *p_node) {
 }
 
 } // namespace
-
-Variant rn_variant_from_dynamic(const folly::dynamic &p_value) {
-	switch (p_value.type()) {
-		case folly::dynamic::BOOL:
-			return p_value.getBool();
-		case folly::dynamic::INT64:
-			return p_value.getInt();
-		case folly::dynamic::DOUBLE:
-			return p_value.getDouble();
-		case folly::dynamic::STRING:
-			return String::utf8(p_value.getString().c_str());
-		case folly::dynamic::ARRAY: {
-			Array array;
-			for (const folly::dynamic &item : p_value) {
-				array.push_back(rn_variant_from_dynamic(item));
-			}
-			return array;
-		}
-		case folly::dynamic::OBJECT: {
-			Dictionary dictionary;
-			for (const auto &[key, value] : p_value.items()) {
-				dictionary[String::utf8(key.asString().c_str())] = rn_variant_from_dynamic(value);
-			}
-			return dictionary;
-		}
-		default:
-			return Variant();
-	}
-}
 
 ::Color rn_godot_color(const SharedColor &p_color, const ::Color &p_default) {
 	if (!p_color) {

@@ -503,6 +503,144 @@ bool append_blob(PackedByteArray &r_body, const Dictionary &p_data, const std::s
 	}
 	return true;
 }
+} //namespace
+
+bool rn_build_http_request(const Variant &p_data, const std::shared_ptr<RNBlobService> &p_blobs, uint64_t p_upload_limit, const String &p_boundary, RNHTTPRequest &r_request, RNError &r_error) {
+	if (p_data.get_type() != Variant::DICTIONARY) {
+		r_error = http_error("HTTP request requires a record", RNErrorCode::VALIDATION);
+		return false;
+	}
+	const Dictionary data = p_data;
+	if (data.get("url", Variant()).get_type() != Variant::STRING || data.get("method", Variant()).get_type() != Variant::STRING || data.get("credentials", Variant()).get_type() != Variant::BOOL || (data.get("timeout", Variant()).get_type() != Variant::FLOAT && data.get("timeout", Variant()).get_type() != Variant::INT)) {
+		r_error = http_error("Invalid HTTP request fields", RNErrorCode::VALIDATION);
+		return false;
+	}
+	r_request.url = data.get("url", String());
+	r_request.method = String(data.get("method", "GET")).to_upper();
+	r_request.timeout_ms = data.get("timeout", 0.0);
+	r_request.credentials = data.get("credentials", true);
+	if (data.get("headers", Variant()).get_type() != Variant::DICTIONARY) {
+		r_error = http_error("HTTP headers require a record", RNErrorCode::VALIDATION);
+		return false;
+	}
+	const Dictionary headers = data["headers"];
+	for (const Variant &key : headers.keys()) {
+		if (headers[key].get_type() != Variant::STRING) {
+			r_error = http_error("HTTP header values must be strings", RNErrorCode::VALIDATION);
+			return false;
+		}
+		r_request.headers.push_back(String(key) + ": " + String(headers[key]));
+	}
+	const uint64_t upload_limit = p_upload_limit;
+	const Variant body = data.get("body", Variant());
+	if (body.get_type() == Variant::PACKED_BYTE_ARRAY) {
+		r_request.body = body;
+	} else if (body.get_type() == Variant::DICTIONARY) {
+		const Dictionary descriptor = body;
+		bool loaded = false;
+		if (descriptor.has("uri") && descriptor["uri"].get_type() == Variant::STRING) {
+			String path;
+			if (rn_normalize_local_resource_path(descriptor["uri"], path, r_error)) {
+				Ref<FileAccess> file = FileAccess::open(path, FileAccess::READ);
+				if (file.is_valid() && file->get_length() <= upload_limit) {
+					r_request.body = file->get_buffer(file->get_length());
+					loaded = true;
+				} else {
+					r_error = http_error("Upload file is unavailable or too large", RNErrorCode::LIMIT);
+				}
+			}
+		} else {
+			loaded = append_blob(r_request.body, body, p_blobs, upload_limit, r_error);
+		}
+		if (!loaded) {
+			return false;
+		}
+	} else if (body.get_type() != Variant::NIL) {
+		r_error = http_error("HTTP body must be bytes or a Blob descriptor", RNErrorCode::VALIDATION);
+		return false;
+	}
+	if (data.has("formData")) {
+		if (data["formData"].get_type() != Variant::ARRAY) {
+			r_error = http_error("Multipart requires an array", RNErrorCode::VALIDATION);
+			return false;
+		}
+		const String boundary = p_boundary;
+		const Array parts = data["formData"];
+		for (const Variant &part_value : parts) {
+			if (part_value.get_type() != Variant::DICTIONARY) {
+				r_error = http_error("Invalid multipart part", RNErrorCode::VALIDATION);
+				return false;
+			}
+			const Dictionary part = part_value;
+			if (part.get("headers", Variant()).get_type() != Variant::DICTIONARY) {
+				r_error = http_error("Multipart headers require a record", RNErrorCode::VALIDATION);
+				return false;
+			}
+			const Dictionary part_headers = part["headers"];
+			String prefix = "--" + boundary + "\r\n";
+			for (const Variant &key : part_headers.keys()) {
+				if (key.get_type() != Variant::STRING || part_headers[key].get_type() != Variant::STRING) {
+					r_error = http_error("Multipart header names and values must be strings", RNErrorCode::VALIDATION);
+					return false;
+				}
+				const String header = String(key) + ": " + String(part_headers[key]);
+				if (!header_valid(header)) {
+					r_error = http_error("Invalid multipart header", RNErrorCode::VALIDATION);
+					return false;
+				}
+				prefix += header + "\r\n";
+			}
+			prefix += "\r\n";
+			if (!append_bytes(r_request.body, prefix.to_utf8_buffer(), upload_limit, r_error)) {
+				return false;
+			}
+			if (part.has("blob")) {
+				if (!append_blob(r_request.body, part["blob"], p_blobs, upload_limit, r_error)) {
+					return false;
+				}
+			} else if (part.has("uri")) {
+				String path;
+				if (!rn_normalize_local_resource_path(part["uri"], path, r_error)) {
+					return false;
+				}
+				Ref<FileAccess> file = FileAccess::open(path, FileAccess::READ);
+				if (file.is_null() || file->get_length() > upload_limit) {
+					r_error = http_error("Multipart file is unavailable or exceeds limit", RNErrorCode::LIMIT);
+					return false;
+				}
+				while (file->get_position() < file->get_length()) {
+					if (!append_bytes(r_request.body, file->get_buffer(std::min<uint64_t>(1024 * 1024, file->get_length() - file->get_position())), upload_limit, r_error)) {
+						return false;
+					}
+				}
+			} else if (part.has("bytes")) {
+				if (!append_bytes(r_request.body, part["bytes"], upload_limit, r_error)) {
+					return false;
+				}
+			} else {
+				r_error = http_error("Multipart part has no body", RNErrorCode::VALIDATION);
+				return false;
+			}
+			if (!append_bytes(r_request.body, String("\r\n").to_utf8_buffer(), upload_limit, r_error)) {
+				return false;
+			}
+		}
+		if (!append_bytes(r_request.body, ("--" + boundary + "--\r\n").to_utf8_buffer(), upload_limit, r_error)) {
+			return false;
+		}
+		PackedStringArray retained;
+		for (const auto &header : r_request.headers) {
+			if (header.get_slice(":", 0).to_lower() != "content-type") {
+				retained.push_back(header);
+			}
+		}
+		retained.push_back("Content-Type: multipart/form-data; boundary=" + boundary);
+		r_request.headers = retained;
+	}
+	return true;
+}
+
+namespace {
 class RNHTTPModule : public RNNativeModule {
 	std::shared_ptr<int> lifetime = std::make_shared<int>(0);
 	std::function<std::shared_ptr<RNHTTPService>()> service;
@@ -540,146 +678,11 @@ public:
 			p_completion.fail(http_error("HTTP service unavailable"));
 			return;
 		}
-		if (p_args[0].get_type() != Variant::DICTIONARY) {
-			p_completion.fail(http_error("HTTP request requires a record", RNErrorCode::VALIDATION));
-			return;
-		}
-		const Dictionary data = p_args[0];
-		if (data.get("url", Variant()).get_type() != Variant::STRING || data.get("method", Variant()).get_type() != Variant::STRING || data.get("credentials", Variant()).get_type() != Variant::BOOL || (data.get("timeout", Variant()).get_type() != Variant::FLOAT && data.get("timeout", Variant()).get_type() != Variant::INT)) {
-			p_completion.fail(http_error("Invalid HTTP request fields", RNErrorCode::VALIDATION));
-			return;
-		}
 		RNHTTPRequest request;
-		request.url = data.get("url", String());
-		request.method = String(data.get("method", "GET")).to_upper();
-		request.timeout_ms = data.get("timeout", 0.0);
-		request.credentials = data.get("credentials", true);
-		if (data.get("headers", Variant()).get_type() != Variant::DICTIONARY) {
-			p_completion.fail(http_error("HTTP headers require a record", RNErrorCode::VALIDATION));
-			return;
-		}
-		const Dictionary headers = data["headers"];
-		for (const Variant &key : headers.keys()) {
-			if (headers[key].get_type() != Variant::STRING) {
-				p_completion.fail(http_error("HTTP header values must be strings", RNErrorCode::VALIDATION));
-				return;
-			}
-			request.headers.push_back(String(key) + ": " + String(headers[key]));
-		}
 		RNError error;
-		const uint64_t upload_limit = owner->upload_limit();
-		const Variant body = data.get("body", Variant());
-		if (body.get_type() == Variant::PACKED_BYTE_ARRAY) {
-			request.body = body;
-		} else if (body.get_type() == Variant::DICTIONARY) {
-			const Dictionary descriptor = body;
-			bool loaded = false;
-			if (descriptor.has("uri") && descriptor["uri"].get_type() == Variant::STRING) {
-				String path;
-				if (rn_normalize_local_resource_path(descriptor["uri"], path, error)) {
-					Ref<FileAccess> file = FileAccess::open(path, FileAccess::READ);
-					if (file.is_valid() && file->get_length() <= upload_limit) {
-						request.body = file->get_buffer(file->get_length());
-						loaded = true;
-					} else {
-						error = http_error("Upload file is unavailable or too large", RNErrorCode::LIMIT);
-					}
-				}
-			} else {
-				loaded = append_blob(request.body, body, binary, upload_limit, error);
-			}
-			if (!loaded) {
-				p_completion.fail(error);
-				return;
-			}
-		} else if (body.get_type() != Variant::NIL) {
-			p_completion.fail(http_error("HTTP body must be bytes or a Blob descriptor", RNErrorCode::VALIDATION));
+		if (!rn_build_http_request(p_args[0], binary, owner->upload_limit(), "godot-" + p_context.request_token, request, error)) {
+			p_completion.fail(error);
 			return;
-		}
-		if (data.has("formData")) {
-			if (data["formData"].get_type() != Variant::ARRAY) {
-				p_completion.fail(http_error("Multipart requires an array", RNErrorCode::VALIDATION));
-				return;
-			}
-			const String boundary = "godot-" + p_context.request_token;
-			const Array parts = data["formData"];
-			for (const Variant &part_value : parts) {
-				if (part_value.get_type() != Variant::DICTIONARY) {
-					p_completion.fail(http_error("Invalid multipart part", RNErrorCode::VALIDATION));
-					return;
-				}
-				const Dictionary part = part_value;
-				if (part.get("headers", Variant()).get_type() != Variant::DICTIONARY) {
-					p_completion.fail(http_error("Multipart headers require a record", RNErrorCode::VALIDATION));
-					return;
-				}
-				const Dictionary part_headers = part["headers"];
-				String prefix = "--" + boundary + "\r\n";
-				for (const Variant &key : part_headers.keys()) {
-					if (key.get_type() != Variant::STRING || part_headers[key].get_type() != Variant::STRING) {
-						p_completion.fail(http_error("Multipart header names and values must be strings", RNErrorCode::VALIDATION));
-						return;
-					}
-					const String header = String(key) + ": " + String(part_headers[key]);
-					if (!header_valid(header)) {
-						p_completion.fail(http_error("Invalid multipart header", RNErrorCode::VALIDATION));
-						return;
-					}
-					prefix += header + "\r\n";
-				}
-				prefix += "\r\n";
-				if (!append_bytes(request.body, prefix.to_utf8_buffer(), upload_limit, error)) {
-					p_completion.fail(error);
-					return;
-				}
-				if (part.has("blob")) {
-					if (!append_blob(request.body, part["blob"], binary, upload_limit, error)) {
-						p_completion.fail(error);
-						return;
-					}
-				} else if (part.has("uri")) {
-					String path;
-					if (!rn_normalize_local_resource_path(part["uri"], path, error)) {
-						p_completion.fail(error);
-						return;
-					}
-					Ref<FileAccess> file = FileAccess::open(path, FileAccess::READ);
-					if (file.is_null() || file->get_length() > upload_limit) {
-						p_completion.fail(http_error("Multipart file is unavailable or exceeds limit", RNErrorCode::LIMIT));
-						return;
-					}
-					while (file->get_position() < file->get_length()) {
-						if (!append_bytes(request.body, file->get_buffer(std::min<uint64_t>(1024 * 1024, file->get_length() - file->get_position())), upload_limit, error)) {
-							p_completion.fail(error);
-							return;
-						}
-					}
-				} else if (part.has("bytes")) {
-					if (!append_bytes(request.body, part["bytes"], upload_limit, error)) {
-						p_completion.fail(error);
-						return;
-					}
-				} else {
-					p_completion.fail(http_error("Multipart part has no body", RNErrorCode::VALIDATION));
-					return;
-				}
-				if (!append_bytes(request.body, String("\r\n").to_utf8_buffer(), upload_limit, error)) {
-					p_completion.fail(error);
-					return;
-				}
-			}
-			if (!append_bytes(request.body, ("--" + boundary + "--\r\n").to_utf8_buffer(), upload_limit, error)) {
-				p_completion.fail(error);
-				return;
-			}
-			PackedStringArray retained;
-			for (const auto &header : request.headers) {
-				if (header.get_slice(":", 0).to_lower() != "content-type") {
-					retained.push_back(header);
-				}
-			}
-			retained.push_back("Content-Type: multipart/form-data; boundary=" + boundary);
-			request.headers = retained;
 		}
 		const auto completion_ran = std::make_shared<bool>(false);
 		auto completed = [this, completion_ran, lifetime_guard = std::weak_ptr<int>(lifetime), p_completion, binary, token = p_context.request_token](RNHTTPResponse response) {

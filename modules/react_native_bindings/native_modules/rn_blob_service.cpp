@@ -60,6 +60,7 @@ public:
 };
 } //namespace
 bool RNBlobService::begin(const String &p_id, int64_t p_size, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	if (closed || p_id.is_empty() || blobs.count(p_id)) {
 		return failure(r_error, "Blob ID is stale or already allocated", RNErrorCode::STALE_HANDLE);
 	}
@@ -73,6 +74,7 @@ bool RNBlobService::begin(const String &p_id, int64_t p_size, RNError &r_error) 
 	return true;
 }
 bool RNBlobService::append(const String &p_id, int64_t p_offset, const PackedByteArray &p_bytes, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	auto found = blobs.find(p_id);
 	if (found == blobs.end() || found->second.complete) {
 		return failure(r_error, "Blob construction is unavailable", RNErrorCode::STALE_HANDLE);
@@ -88,6 +90,7 @@ bool RNBlobService::append(const String &p_id, int64_t p_offset, const PackedByt
 	return true;
 }
 bool RNBlobService::finish(const String &p_id, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	auto found = blobs.find(p_id);
 	if (found == blobs.end() || found->second.written != found->second.bytes.size()) {
 		return failure(r_error, "Blob construction is incomplete");
@@ -96,6 +99,7 @@ bool RNBlobService::finish(const String &p_id, RNError &r_error) {
 	return true;
 }
 Dictionary RNBlobService::store(const PackedByteArray &p_bytes, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	const String id = vformat("native-%016x", next_id++);
 	if (!begin(id, p_bytes.size(), r_error)) {
 		return Dictionary();
@@ -112,6 +116,7 @@ Dictionary RNBlobService::store(const PackedByteArray &p_bytes, RNError &r_error
 	return data;
 }
 bool RNBlobService::read(const Dictionary &p_data, int64_t p_offset, int64_t p_length, PackedByteArray &r_bytes, RNError &r_error) const {
+	std::lock_guard lock(mutex);
 	const String id = blob_id(p_data);
 	auto found = blobs.find(id);
 	if (closed || found == blobs.end() || !found->second.complete || (!found->second.owner && !found->second.pins)) {
@@ -131,6 +136,7 @@ bool RNBlobService::read(const Dictionary &p_data, int64_t p_offset, int64_t p_l
 	return true;
 }
 bool RNBlobService::pin(const Dictionary &p_data, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	PackedByteArray empty;
 	if (!read(p_data, 0, 0, empty, r_error)) {
 		return false;
@@ -146,6 +152,7 @@ void RNBlobService::reclaim(const String &p_id) {
 	}
 }
 void RNBlobService::unpin(const String &p_id) {
+	std::lock_guard lock(mutex);
 	auto found = blobs.find(p_id);
 	if (found != blobs.end() && found->second.pins) {
 		--found->second.pins;
@@ -153,6 +160,7 @@ void RNBlobService::unpin(const String &p_id) {
 	}
 }
 void RNBlobService::release(const String &p_id) {
+	std::lock_guard lock(mutex);
 	auto found = blobs.find(p_id);
 	if (found != blobs.end()) {
 		found->second.owner = false;
@@ -160,10 +168,12 @@ void RNBlobService::release(const String &p_id) {
 	}
 }
 std::weak_ptr<RNBlobCollectorState> RNBlobService::collector_state(const String &p_id) const {
+	std::lock_guard lock(mutex);
 	auto found = blobs.find(p_id);
 	return found != blobs.end() ? std::weak_ptr<RNBlobCollectorState>(found->second.collectors) : std::weak_ptr<RNBlobCollectorState>();
 }
 void RNBlobService::drain_releases() {
+	std::lock_guard lock(mutex);
 	std::vector<String> collected;
 	for (const auto &entry : blobs) {
 		if (entry.second.collectors->collected.exchange(false) && entry.second.collectors->references.load() == 0) {
@@ -175,6 +185,7 @@ void RNBlobService::drain_releases() {
 	}
 }
 bool RNBlobService::has_pending_work() const {
+	std::lock_guard lock(mutex);
 	for (const auto &entry : blobs) {
 		if (entry.second.collectors->collected.load()) {
 			return true;
@@ -183,6 +194,7 @@ bool RNBlobService::has_pending_work() const {
 	return false;
 }
 String RNBlobService::create_url(const Dictionary &p_data, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	if (urls.size() >= 4096) {
 		failure(r_error, "Object URL count limit exceeded", RNErrorCode::LIMIT);
 		return String();
@@ -195,6 +207,7 @@ String RNBlobService::create_url(const Dictionary &p_data, RNError &r_error) {
 	return url;
 }
 void RNBlobService::revoke_url(const String &p_url) {
+	std::lock_guard lock(mutex);
 	auto found = urls.find(p_url);
 	if (found != urls.end()) {
 		const String id = blob_id(found->second);
@@ -203,6 +216,7 @@ void RNBlobService::revoke_url(const String &p_url) {
 	}
 }
 bool RNBlobService::resolve_url(const String &p_url, Dictionary &r_data, RNError &r_error) const {
+	std::lock_guard lock(mutex);
 	auto found = urls.find(p_url);
 	if (found == urls.end()) {
 		return failure(r_error, "Object URL is revoked or stale", RNErrorCode::STALE_HANDLE);
@@ -211,6 +225,7 @@ bool RNBlobService::resolve_url(const String &p_url, Dictionary &r_data, RNError
 	return true;
 }
 void RNBlobService::shutdown() {
+	std::lock_guard lock(mutex);
 	closed = true;
 	urls.clear();
 	blobs.clear();

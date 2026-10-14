@@ -12,7 +12,6 @@
 
 #include <memory>
 
-Variant rn_variant_from_dynamic(const folly::dynamic &p_value);
 ::Color rn_godot_color(const facebook::react::SharedColor &p_color, const ::Color &p_default = ::Color(0, 0, 0, 0));
 Ref<StyleBoxFlat> rn_view_stylebox(const facebook::react::ViewProps &p_props, const facebook::react::LayoutMetrics &p_layout);
 
