@@ -6,6 +6,7 @@ Import("env")
 Import("env_modules")
 
 import os
+import sys
 
 env_rn = env_modules.Clone()
 
@@ -28,12 +29,16 @@ for required_path in [hermes_api_dir, hermes_include_dir, hermes_lib, hermes_jsi
 			% required_path
 		)
 
-yoga_dir = os.path.join(module_dir, "thirdparty", "yoga")
+sys.path.insert(0, module_dir)
+import react_native_sources
 
-env_rn.Prepend(CPPPATH=[yoga_dir])
+react_native_sources.configure_third_party()
+
 env_rn.Append(
-	CXXFLAGS=["-isystem%s" % path for path in [hermes_api_dir, hermes_jsi_dir, hermes_public_dir, hermes_include_dir]]
+	CXXFLAGS=["-isystem%s" % path for path in react_native_sources.hermes_include_dirs() + react_native_sources.include_dirs()[1:]]
 )
+env_rn.Prepend(CPPPATH=[react_native_sources.REACT_PLATFORM_DIR])
+env_rn.Append(CPPDEFINES=react_native_sources.REACT_NATIVE_DEFINES)
 
 env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
 env.AppendUnique(LIBS=["hermesvm", "jsi"])
@@ -42,7 +47,7 @@ env.AppendUnique(LINKFLAGS=["-Wl,-rpath,\\$$ORIGIN"])
 if env["platform"] == "linuxbsd" and env["library_type"] == "executable":
 	env["LINKCOM"] = env["LINKCOM"].replace("$_LIBFLAGS", "-Wl,--start-group $_LIBFLAGS -Wl,--end-group")
 
-env_rn.Append(CXXFLAGS=["-fexceptions"], CCFLAGS=["-fexceptions"])
+env_rn.Append(CXXFLAGS=["-std=c++20", "-fexceptions", "-frtti"], CCFLAGS=["-fexceptions"])
 
 # Module sources. Listed explicitly: SCons' Glob has no recursive "**", so the old
 # "**/*.cpp" only ever matched one directory deep. An explicit list is what keeps
@@ -74,16 +79,38 @@ if env["tests"]:
 env_rn.Depends(module_objects, [hermes_lib, hermes_jsi_lib])
 env.modules_sources.extend(module_objects)
 
-# Yoga (vendored from react-native/ReactCommon/yoga). Built in its own cloned env so
-# its warnings stay out of the module build. Header-only: style/, enums/, numeric/.
-env_yoga = env_modules.Clone()
-env_yoga.disable_warnings()
-env_yoga.Prepend(CPPPATH=[yoga_dir])
-env_yoga.Append(CXXFLAGS=["-fexceptions", "-std=c++20"], CCFLAGS=["-fexceptions"])
-env_yoga.add_source_files(env.modules_sources, "thirdparty/yoga/yoga/*.cpp")
+# Upstream React Native and its third-party libraries build in their own cloned
+# environment so their warnings stay out of the module build.
+def relative_sources(paths):
+	return [os.path.relpath(path, module_dir) for path in paths]
 
-for subdir in ["algorithm", "config", "debug", "event", "node"]:
-	env_yoga.add_source_files(env.modules_sources, "thirdparty/yoga/yoga/%s/*.cpp" % subdir)
+
+env_upstream = env_modules.Clone()
+env_upstream.disable_warnings()
+env_upstream.Prepend(CPPPATH=react_native_sources.include_dirs())
+env_upstream.Append(CXXFLAGS=["-isystem%s" % path for path in react_native_sources.hermes_include_dirs()])
+env_upstream.Append(CPPDEFINES=react_native_sources.REACT_NATIVE_DEFINES)
+env_upstream.Append(CXXFLAGS=["-std=c++20", "-fexceptions", "-frtti"], CCFLAGS=["-fexceptions"])
+# Upstream builds with libc++, whose headers provide the fixed-width integer types
+# that several React Native sources use without including <cstdint>.
+env_upstream.Append(CXXFLAGS=["-include", "cstdint"])
+
+upstream_objects = []
+env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.react_native_sources()))
+env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.generated_sources()))
+env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.react_platform_sources()))
+
+third_party = react_native_sources.third_party_sources()
+for name in ("folly", "fmt", "double-conversion"):
+	env_upstream.add_source_files(upstream_objects, relative_sources(third_party[name]))
+
+env_glog = env_upstream.Clone()
+env_glog.Prepend(CPPPATH=react_native_sources.glog_private_include_dirs())
+env_glog.Append(CPPDEFINES=["HAVE_PREAD=1"])
+env_glog.add_source_files(upstream_objects, relative_sources(third_party["glog"]))
+
+env_upstream.Depends(upstream_objects, [hermes_lib, hermes_jsi_lib])
+env.modules_sources.extend(upstream_objects)
 
 shared_libs = [hermes_lib, hermes_jsi_lib]
 bin_dir = env.Dir("#bin").abspath

@@ -42,6 +42,7 @@ scripts/bootstrap.sh
 scripts/build_hermes.sh
 scripts/build_godot.sh
 npm --prefix packages/react-native-godot ci
+node packages/react-native-godot/scripts/codegen.cjs
 node packages/react-native-godot/scripts/check-overrides.cjs
 npm --prefix packages/react-native-godot test
 npm --prefix samples/view-text ci
@@ -49,8 +50,11 @@ scripts/run_baseline.sh
 scripts/run_component_display.sh
 ```
 
-`bootstrap.sh` creates or verifies the pinned `godot/` checkout. `build_hermes.sh` builds
-the pinned Hermes submodule from source. `build_godot.sh` attaches `modules/` through
+`bootstrap.sh` creates or verifies the pinned `godot/` checkout, initializes the pinned
+React Native, folly, glog, fmt, double-conversion, fast_float and nlohmann/json submodules,
+and downloads the Boost headers. `build_hermes.sh` builds the pinned Hermes submodule
+against React Native's JSI. `codegen.cjs` regenerates the committed React Native codegen
+output in `modules/react_native_bindings/generated/`. `build_godot.sh` attaches `modules/` through
 Godot's `custom_modules` option. `run_baseline.sh` discovers the restricted manifests at
 `samples/*/smoke/tests/*/smoke_test.json`, creates fresh Metro bundles, and runs every
 declared headless smoke test. Shared manifests with the same package, npm script, and

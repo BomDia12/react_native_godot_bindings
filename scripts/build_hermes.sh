@@ -28,6 +28,8 @@ cmake \
 	-DBUILD_SHARED_LIBS=ON \
 	-DHERMES_BUILD_SHARED_JSI=ON \
 	-DHERMESVM_GCKIND=HADES \
+	-DHERMES_ENABLE_DEBUGGER=ON \
+	-DJSI_DIR="$REPO_ROOT/modules/react_native_bindings/thirdparty/react-native/packages/react-native/ReactCommon/jsi" \
 	-DHERMES_ENABLE_TEST_SUITE=OFF
 
 cmake --build "$HERMES_BUILD_DIR" --target hermesvm jsi

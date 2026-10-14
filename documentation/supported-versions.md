@@ -10,7 +10,9 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 | React Native | `0.87.1` | Package manifest and lockfile |
 | React | `19.2.3` | Package manifest and lockfile |
 | Metro | `0.87.0` | Direct dependency and lockfile |
-| Yoga | React Native `v0.87.1` commit `a59eff64fa907ed6e919fafe6cbd26d1d54c2de3` | Vendored-tree digest |
+| React Native core | `v0.87.1` commit `a59eff64fa907ed6e919fafe6cbd26d1d54c2de3`, including Yoga and JSI | Git submodule, provenance validation |
+| folly, glog, fmt, double-conversion, fast_float, nlohmann/json | React Native 0.87.1 pins | Git submodules, provenance validation |
+| Boost | `1.83.0` headers | `bootstrap.sh` SHA-256 check |
 | Node.js | CI `22.13.0`; local `>=22.13.0` | `.nvmrc`, package engines |
 | Python | CI `3.12` | Workflow |
 | SCons | CI `4.8.1` | `requirements-ci.txt` |

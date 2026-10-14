@@ -64,7 +64,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: modules/react_native_bindings/engines/build_release
-          key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh') }}
+          key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh', 'baseline.env') }}
           restore-keys: |
             hermes-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', '.gitmodules', 'scripts/build_hermes.sh') }}
 
@@ -84,7 +84,7 @@ jobs:
           path: |
             .scons-cache
             .ccache
-          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'requirements-ci.txt', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/config.py', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/examples/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/runtime/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/thirdparty/yoga/**', '.github/workflows/_linux-build.yml') }}
+          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'requirements-ci.txt', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/config.py', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/examples/**', 'modules/react_native_bindings/fabric/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/runtime/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/react_native_sources.py', 'modules/react_native_bindings/react_platform/**', 'modules/react_native_bindings/generated/**', 'modules/react_native_bindings/host/**', 'modules/react_native_bindings/turbomodules/**', '.github/workflows/_linux-build.yml') }}
           restore-keys: |
             compiler-${{ runner.os }}-gcc13-
 
@@ -102,6 +102,12 @@ jobs:
           sudo apt-get "${APT_OPTIONS[@]}" update
           sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache clang-format cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
           python -m pip install --requirement requirements-ci.txt
+
+      - name: Restore Boost headers
+        uses: actions/cache@v5
+        with:
+          path: modules/react_native_bindings/thirdparty/boost
+          key: boost-${{ hashFiles('baseline.env') }}
 
       - name: Bootstrap pinned sources
         run: scripts/bootstrap.sh
@@ -122,6 +128,8 @@ jobs:
       - name: Test Godot JavaScript platform
         run: |
           npm --prefix packages/react-native-godot ci
+          node packages/react-native-godot/scripts/codegen.cjs
+          git diff --exit-code modules/react_native_bindings/generated
           node packages/react-native-godot/scripts/check-overrides.cjs
           npm --prefix packages/react-native-godot test
           npm --prefix samples/view-text ci

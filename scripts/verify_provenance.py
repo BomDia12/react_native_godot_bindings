@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-import hashlib
 import json
 import os
-import re
 import subprocess
 from pathlib import Path
 
@@ -32,16 +30,6 @@ def git_head(path: Path) -> str | None:
         text=True,
     )
     return result.stdout.strip() if result.returncode == 0 else None
-
-
-def yoga_digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    for source in sorted(item for item in path.rglob("*") if item.is_file()):
-        digest.update(source.relative_to(path).as_posix().encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(source.read_bytes())
-        digest.update(b"\0")
-    return digest.hexdigest()
 
 
 def check_tracked_file(relative_path: Path, failures: list[str]) -> None:
@@ -75,12 +63,18 @@ def main() -> int:
     failures = []
     godot_dir = Path(os.environ.get("GODOT_SOURCE_DIR", REPO_ROOT / "godot")).resolve()
     hermes_dir = REPO_ROOT / "modules/react_native_bindings/engines/hermes"
-    yoga_root = REPO_ROOT / "modules/react_native_bindings/thirdparty/yoga"
-    yoga_source = yoga_root / "yoga"
+    thirdparty = REPO_ROOT / "modules/react_native_bindings/thirdparty"
 
     revisions = (
         ("Godot", godot_dir, baseline["GODOT_COMMIT"]),
         ("Hermes", hermes_dir, baseline["HERMES_COMMIT"]),
+        ("React Native", thirdparty / "react-native", baseline["REACT_NATIVE_COMMIT"]),
+        ("folly", thirdparty / "folly", baseline["FOLLY_COMMIT"]),
+        ("glog", thirdparty / "glog", baseline["GLOG_COMMIT"]),
+        ("fmt", thirdparty / "fmt", baseline["FMT_COMMIT"]),
+        ("double-conversion", thirdparty / "double-conversion", baseline["DOUBLE_CONVERSION_COMMIT"]),
+        ("fast_float", thirdparty / "fast_float", baseline["FAST_FLOAT_COMMIT"]),
+        ("nlohmann/json", thirdparty / "nlohmann_json", baseline["NLOHMANN_JSON_COMMIT"]),
     )
     for name, path, expected in revisions:
         actual = git_head(path)
@@ -92,20 +86,9 @@ def main() -> int:
         if modified.returncode != 0:
             failures.append("Godot checkout has local changes; the module builds against the unmodified pinned commit")
 
-    for required in (yoga_root / "LICENSE", yoga_root / "UPSTREAM.md", hermes_dir / "LICENSE"):
+    for required in (hermes_dir / "LICENSE", thirdparty / "react-native/LICENSE", thirdparty / "boost/boost/version.hpp"):
         if not required.is_file():
             failures.append(f"missing provenance file: {required.relative_to(REPO_ROOT)}")
-
-    upstream_path = yoga_root / "UPSTREAM.md"
-    if upstream_path.is_file():
-        upstream = upstream_path.read_text(encoding="utf-8")
-        revision_match = re.search(r"^Revision: `([0-9a-f]{40})`$", upstream, re.MULTILINE)
-        digest_match = re.search(r"^Tree SHA-256: `([0-9a-f]{64})`$", upstream, re.MULTILINE)
-        if not revision_match or revision_match.group(1) != baseline["YOGA_REACT_NATIVE_COMMIT"]:
-            failures.append("Yoga UPSTREAM.md revision does not match baseline.env")
-        actual_digest = yoga_digest(yoga_source)
-        if not digest_match or digest_match.group(1) != actual_digest:
-            failures.append(f"Yoga tree digest: expected {digest_match.group(1) if digest_match else 'missing'}, got {actual_digest}")
 
     expected_packages = {
         "react": baseline["REACT_VERSION"],

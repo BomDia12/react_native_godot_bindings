@@ -20,7 +20,8 @@
   "types": "./godot.d.ts",
   "scripts": {
     "test": "node --test tests/*.test.cjs",
-    "check-overrides": "node scripts/check-overrides.cjs"
+    "check-overrides": "node scripts/check-overrides.cjs",
+    "codegen": "node scripts/codegen.cjs"
   },
   "peerDependencies": {
     "react": "19.2.3",
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@react-native/babel-preset": "0.87.1",
+    "@react-native/codegen": "0.87.1",
     "@react-native/metro-config": "0.87.1",
     "metro": "0.87.0",
     "react": "19.2.3",

@@ -9,6 +9,7 @@ source "$REPO_ROOT/baseline.env"
 
 GODOT_SOURCE_DIR=${GODOT_SOURCE_DIR:-"$REPO_ROOT/godot"}
 HERMES_DIR="$REPO_ROOT/modules/react_native_bindings/engines/hermes"
+THIRDPARTY_DIR="$REPO_ROOT/modules/react_native_bindings/thirdparty"
 CREATED_CHECKOUT=false
 
 if [[ ! -e "$GODOT_SOURCE_DIR" ]]; then
@@ -35,6 +36,30 @@ if ! git -C "$GODOT_SOURCE_DIR" diff --quiet HEAD; then
 fi
 
 git -C "$REPO_ROOT" submodule update --init --recursive modules/react_native_bindings/engines/hermes
+git -C "$REPO_ROOT" submodule update --init --depth 1 \
+	"$THIRDPARTY_DIR/react-native" "$THIRDPARTY_DIR/folly" "$THIRDPARTY_DIR/glog" \
+	"$THIRDPARTY_DIR/fmt" "$THIRDPARTY_DIR/double-conversion" "$THIRDPARTY_DIR/fast_float" "$THIRDPARTY_DIR/nlohmann_json"
+
+for entry in "react-native:$REACT_NATIVE_COMMIT" "folly:$FOLLY_COMMIT" "glog:$GLOG_COMMIT" "fmt:$FMT_COMMIT" \
+	"double-conversion:$DOUBLE_CONVERSION_COMMIT" "fast_float:$FAST_FLOAT_COMMIT" "nlohmann_json:$NLOHMANN_JSON_COMMIT"; do
+	if [[ $(git -C "$THIRDPARTY_DIR/${entry%%:*}" rev-parse HEAD) != "${entry#*:}" ]]; then
+		echo "Submodule ${entry%%:*} does not match baseline.env" >&2
+		exit 1
+	fi
+done
+
+BOOST_DIR="$THIRDPARTY_DIR/boost"
+if [[ ! -f "$BOOST_DIR/boost/version.hpp" ]]; then
+	BOOST_ARCHIVE=$(mktemp)
+	trap 'rm -f "$BOOST_ARCHIVE"' EXIT
+	curl -sSLf -o "$BOOST_ARCHIVE" "https://archives.boost.io/release/${BOOST_VERSION//_/.}/source/boost_$BOOST_VERSION.tar.gz"
+	echo "$BOOST_SHA256  $BOOST_ARCHIVE" | sha256sum --check --status || {
+		echo "Boost archive does not match BOOST_SHA256" >&2
+		exit 1
+	}
+	mkdir -p "$BOOST_DIR"
+	tar -xzf "$BOOST_ARCHIVE" -C "$BOOST_DIR" --strip-components=1 "boost_$BOOST_VERSION/boost"
+fi
 
 if [[ $(git -C "$GODOT_SOURCE_DIR" rev-parse HEAD) != "$GODOT_COMMIT" ]]; then
 	echo "Godot checkout does not match GODOT_COMMIT" >&2
