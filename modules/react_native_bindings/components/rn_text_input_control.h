@@ -4,6 +4,8 @@
 #include "scene/gui/line_edit.h"
 #include "scene/gui/text_edit.h"
 
+#include <optional>
+
 struct RNTextInputData : RNComponentData {
 	RNFontSnapshot font;
 };
@@ -27,6 +29,22 @@ public:
 	Size2 get_combined_minimum_size() const override { return Size2(); }
 	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 };
+struct RNTextInputConfig {
+	Ref<Font> font;
+	int font_size = 16;
+	Color font_color = Color(1, 1, 1);
+	std::optional<Color> selection_color;
+	std::optional<Color> cursor_color;
+	std::optional<Color> placeholder_color;
+	bool editable = true;
+	String placeholder;
+	bool secure = false;
+	String submit_behavior;
+	bool multiline = false;
+	int max_length = 0;
+	bool auto_focus = false;
+	bool targetable = true;
+};
 class RNTextInputState : public RefCounted {
 	GDCLASS(RNTextInputState, RefCounted);
 
@@ -42,7 +60,7 @@ public:
 	Point2i selection_origin;
 	bool has_selection = false;
 	Vector2 scroll;
-	Dictionary props;
+	RNTextInputConfig config;
 	Dictionary deferred;
 	uint64_t text_revision = UINT64_MAX;
 	uint64_t selection_revision = UINT64_MAX;
@@ -55,8 +73,9 @@ class RNTextInputControl : public Control {
 	GDCLASS(RNTextInputControl, Control);
 	Control *editor = nullptr;
 	Control *staged_editor = nullptr;
-	Dictionary props;
-	RNHostContext published_context;
+	RNTextInputConfig config;
+	std::function<void(const StringName &, const Dictionary &)> event_callback;
+	std::function<void()> layout_callback;
 	Dictionary deferred_replacement;
 	bool changing = false;
 	bool published = false;
@@ -76,7 +95,9 @@ class RNTextInputControl : public Control {
 	void _editor_input(const Ref<InputEvent> &p_event);
 	void _font_changed();
 	Control *_create_editor(bool p_multiline);
-	void _configure_editor(Control *p_editor, const RNPreparedHostState &p_state);
+	void _configure_editor(Control *p_editor);
+	void _swap_editor();
+	String _submit_behavior() const;
 	void _emit(const StringName &p_event, Dictionary p_payload = Dictionary());
 	void _set_text(const String &p_text);
 	void _set_selection(int p_start, int p_end);
@@ -95,6 +116,8 @@ public:
 	Point2i get_selection() const;
 	bool is_composing() const;
 	int get_event_count() const { return event_count; }
+	void set_callbacks(std::function<void(const StringName &, const Dictionary &)> p_event, std::function<void()> p_layout);
+	void configure(const RNTextInputConfig &p_config);
 	void apply(const RNPreparedHostState &p_state);
 	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 	Ref<RNTextInputState> capture_state() const;

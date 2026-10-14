@@ -426,9 +426,11 @@ TEST_CASE("[ReactNativeBindings][NativeModules] native event and completion orde
 void rn_force_link_scheduler_tests();
 void rn_force_link_service_tests();
 void rn_force_link_react_host_tests();
+void rn_force_link_component_view_tests();
 
 void rn_force_link_native_module_registry_tests() {
 	rn_force_link_scheduler_tests();
 	rn_force_link_service_tests();
 	rn_force_link_react_host_tests();
+	rn_force_link_component_view_tests();
 }

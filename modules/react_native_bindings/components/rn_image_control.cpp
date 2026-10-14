@@ -116,16 +116,43 @@ RNImageControl::~RNImageControl() {
 		service->cancel(subscription);
 	}
 }
-void RNImageControl::_emit(const StringName &p_name, const Dictionary &p_payload) {
-	if (published_context.event_sink && published_context.event_sink->emit) {
-		published_context.event_sink->emit(published_context.tag, p_name, p_payload, published_context.revision);
-	}
-}
 void RNImageControl::publish(const RNPreparedHostState &p_state, const RNHostContext &p_context) {
 	const auto component = std::static_pointer_cast<const RNImageData>(p_state.component_data);
-	published_context = p_context;
-	const String key = component->has_source ? component->source.key : String();
-	if (key == source_key && service == component->service) {
+	auto emit = [p_context](const StringName &p_name, const Dictionary &p_payload) {
+		if (p_context.event_sink && p_context.event_sink->emit && (!p_context.event_sink->is_current || p_context.event_sink->is_current())) {
+			p_context.event_sink->emit(p_context.tag, p_name, p_payload, p_context.revision);
+		}
+	};
+	auto invalidate_layout = [p_context]() {
+		if (p_context.event_sink && p_context.event_sink->invalidate_layout) {
+			p_context.event_sink->invalidate_layout();
+		}
+	};
+	RNImageCallbacks published;
+	published.load_start = [emit]() { emit("topLoadStart", Dictionary()); };
+	published.load = [emit, invalidate_layout](const RNImageSource &p_source, const Size2 &p_size) {
+		Dictionary source;
+		source["uri"] = p_source.uri;
+		source["width"] = p_size.x;
+		source["height"] = p_size.y;
+		Dictionary event;
+		event["source"] = source;
+		emit("topLoad", event);
+		invalidate_layout();
+	};
+	published.error = [emit](const String &p_message) {
+		Dictionary event;
+		event["error"] = p_message;
+		emit("topError", event);
+	};
+	published.load_end = [emit]() { emit("topLoadEnd", Dictionary()); };
+	published.source_changed = invalidate_layout;
+	set_callbacks(published);
+	load(component->has_source ? &component->source : nullptr, component->service);
+}
+void RNImageControl::load(const RNImageSource *p_source, const std::shared_ptr<RNImageService> &p_service) {
+	const String key = p_source ? p_source->key : String();
+	if (key == source_key && service == p_service) {
 		return;
 	}
 	++source_token;
@@ -134,46 +161,43 @@ void RNImageControl::publish(const RNPreparedHostState &p_state, const RNHostCon
 	}
 	subscription = 0;
 	source_key = key;
-	service = component->service;
-	if (!component->has_source) {
+	service = p_service;
+	if (!p_source) {
 		_observe_texture(Ref<Texture2D>());
 		resource.reset();
 		set_texture(Ref<Texture2D>());
 		return;
 	}
-	_emit("topLoadStart");
+	if (callbacks.load_start) {
+		callbacks.load_start();
+	}
 	const uint64_t token = source_token;
 	const ObjectID host_id = get_instance_id();
-	const auto request = service->request(component->source, [host_id, token, source = component->source](RNImageResult result) { auto *host = Object::cast_to<RNImageControl>(ObjectDB::get_instance(host_id)); if (host) { host->_loaded(token, source, result); } });
+	const auto request = service->request(*p_source, [host_id, token, source = *p_source](RNImageResult result) { auto *host = Object::cast_to<RNImageControl>(ObjectDB::get_instance(host_id)); if (host) { host->_loaded(token, source, result); } });
 	if (token == source_token) {
 		subscription = request;
 	}
 }
 void RNImageControl::_loaded(uint64_t p_token, const RNImageSource &p_source, const RNImageResult &p_result) {
-	if (p_token != source_token || (published_context.event_sink && published_context.event_sink->is_current && !published_context.event_sink->is_current())) {
+	if (p_token != source_token) {
 		return;
 	}
 	subscription = 0;
 	if (p_result.error.is_set()) {
-		Dictionary event;
-		event["error"] = p_result.error.message;
-		_emit("topError", event);
+		if (callbacks.error) {
+			callbacks.error(p_result.error.message);
+		}
 	} else {
 		resource = p_result.resource;
 		set_texture(resource->texture);
 		_observe_texture(resource->texture);
-		Dictionary source;
-		source["uri"] = p_source.uri;
-		source["width"] = resource->texture->get_width() / p_source.scale;
-		source["height"] = resource->texture->get_height() / p_source.scale;
-		Dictionary event;
-		event["source"] = source;
-		_emit("topLoad", event);
-		if (published_context.event_sink && published_context.event_sink->invalidate_layout) {
-			published_context.event_sink->invalidate_layout();
+		if (callbacks.load) {
+			callbacks.load(p_source, Size2(resource->texture->get_size()) / p_source.scale);
 		}
 	}
-	_emit("topLoadEnd");
+	if (callbacks.load_end) {
+		callbacks.load_end();
+	}
 }
 std::shared_ptr<const RNHostDescriptor> rn_image_descriptor() {
 	return std::make_shared<RNImageDescriptor>();
@@ -192,7 +216,7 @@ void RNImageControl::_observe_texture(const Ref<Texture2D> &p_texture) {
 	}
 }
 void RNImageControl::_source_changed() {
-	if (published_context.event_sink && published_context.event_sink->invalidate_layout) {
-		published_context.event_sink->invalidate_layout();
+	if (callbacks.source_changed) {
+		callbacks.source_changed();
 	}
 }

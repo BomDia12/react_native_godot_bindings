@@ -13,4 +13,6 @@ struct RNFontSnapshot {
 	uint64_t revision = 0;
 };
 
+Ref<Font> rn_load_font_family(const String &p_family, Dictionary &r_variation);
+Ref<Font> rn_font_variation(const Ref<Font> &p_base, int p_weight, bool p_italic, float p_letter_spacing);
 bool rn_resolve_font(const Dictionary &p_props, const RNHostContext &p_context, RNFontSnapshot &r_font, RNError &r_error);

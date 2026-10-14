@@ -228,22 +228,91 @@ void RNScrollControl::scroll_to(const Point2 &p_offset, bool p_animated) {
 	}
 }
 void RNScrollControl::publish(const RNPreparedHostState &p_state, const RNHostContext &p_context) {
-	const bool offset_changed = published_props.get("contentOffset", Variant()) != p_state.props.get("contentOffset", Variant());
-	published_context = p_context;
-	published_props = p_state.props.duplicate(true);
-	refresh_content();
-	if (!offset_changed && anchor.is_valid()) {
-		auto *child = Object::cast_to<Control>(ObjectDB::get_instance(anchor));
-		if (child && content->is_ancestor_of(child)) {
-			const Point2 position = content->get_global_transform().affine_inverse().xform(child->get_global_position());
-			set_offset(anchor_offset + position - anchor_position);
+	const bool offset_changed = published_offset != p_state.props.get("contentOffset", Variant());
+	published_offset = p_state.props.get("contentOffset", Variant());
+	RNScrollSettings published;
+	published.horizontal = p_state.props.get("horizontal", false);
+	published.paging = p_state.props.get("pagingEnabled", false);
+	published.snap_interval = p_state.props.get("snapToInterval", 0.0);
+	for (const Variant &offset : Array(p_state.props.get("snapToOffsets", Array()))) {
+		published.snap_offsets.push_back(offset);
+	}
+	const String alignment = p_state.props.get("snapToAlignment", "start");
+	published.snap_alignment = alignment == "center" ? HORIZONTAL_ALIGNMENT_CENTER : alignment == "end" ? HORIZONTAL_ALIGNMENT_RIGHT
+																										: HORIZONTAL_ALIGNMENT_LEFT;
+	if (p_state.props.get("maintainVisibleContentPosition", Variant()).get_type() == Variant::DICTIONARY) {
+		const Dictionary config = p_state.props["maintainVisibleContentPosition"];
+		published.maintain_visible_position = true;
+		published.min_index_for_visible = config.get("minIndexForVisible", 0);
+	}
+	set_settings(published);
+	RNScrollCallbacks published_callbacks;
+	published_callbacks.event = [this, p_context](const StringName &p_event) {
+		if (!p_context.event_sink || !p_context.event_sink->emit) {
+			return;
 		}
+		Dictionary offset;
+		offset["x"] = get_h_scroll();
+		offset["y"] = get_v_scroll();
+		Dictionary size;
+		size["width"] = content->get_size().x;
+		size["height"] = content->get_size().y;
+		Dictionary viewport;
+		viewport["width"] = usable_viewport().size.x;
+		viewport["height"] = usable_viewport().size.y;
+		Dictionary inset;
+		for (const char *key : { "top", "left", "bottom", "right" }) {
+			inset[key] = 0.0;
+		}
+		Dictionary event;
+		event["contentOffset"] = offset;
+		event["contentSize"] = size;
+		event["layoutMeasurement"] = viewport;
+		event["contentInset"] = inset;
+		event["zoomScale"] = 1.0;
+		p_context.event_sink->emit(p_context.tag, p_event, event, p_context.revision);
+	};
+	published_callbacks.content_size_changed = [p_context](const Size2 &p_size) {
+		if (p_context.event_sink && p_context.event_sink->emit) {
+			Dictionary event;
+			event["width"] = p_size.x;
+			event["height"] = p_size.y;
+			p_context.event_sink->emit(p_context.tag, "topContentSizeChange", event, p_context.revision);
+		}
+	};
+	published_callbacks.geometry_changed = [p_context]() {
+		if (p_context.event_sink && p_context.event_sink->invalidate_geometry) {
+			p_context.event_sink->invalidate_geometry();
+		}
+	};
+	published_callbacks.theme_changed = [p_context]() {
+		if (p_context.event_sink && p_context.event_sink->invalidate_layout) {
+			p_context.event_sink->invalidate_layout();
+		}
+	};
+	published_callbacks.drag_started = [p_context]() {
+		if (p_context.event_sink && p_context.event_sink->cancel_input) {
+			p_context.event_sink->cancel_input();
+		}
+	};
+	set_callbacks(published_callbacks);
+	refresh_content();
+	if (!offset_changed) {
+		restore_visible_anchor();
 	}
 	anchor = ObjectID();
-	if (offset_changed && published_props.has("contentOffset")) {
-		const Dictionary offset = published_props["contentOffset"];
+	if (offset_changed && published_offset.get_type() == Variant::DICTIONARY) {
+		const Dictionary offset = published_offset;
 		scroll_to(Point2(offset.get("x", 0), offset.get("y", 0)), false);
 	}
+}
+void RNScrollControl::restore_visible_anchor() {
+	auto *child = Object::cast_to<Control>(ObjectDB::get_instance(anchor));
+	if (child && content->is_ancestor_of(child)) {
+		const Point2 position = content->get_global_transform().affine_inverse().xform(child->get_global_position());
+		set_offset(anchor_offset + position - anchor_position);
+	}
+	anchor = ObjectID();
 }
 void RNScrollControl::refresh_content() {
 	Size2 extent;
@@ -253,6 +322,10 @@ void RNScrollControl::refresh_content() {
 			extent = extent.max(child->get_position() + child->get_size());
 		}
 	}
+	set_content_extent(extent);
+}
+void RNScrollControl::set_content_extent(const Size2 &p_extent) {
+	const Size2 extent = p_extent;
 	const bool changed = content->get_custom_minimum_size() != extent;
 	content->set_custom_minimum_size(extent);
 	content->set_size(extent.max(usable_viewport().size));
@@ -260,58 +333,96 @@ void RNScrollControl::refresh_content() {
 	_reposition_children();
 	get_h_scroll_bar()->set_page(usable_viewport().size.x);
 	get_v_scroll_bar()->set_page(usable_viewport().size.y);
-	if (changed && published_context.event_sink && published_context.event_sink->emit) {
-		Dictionary event;
-		event["width"] = extent.x;
-		event["height"] = extent.y;
-		published_context.event_sink->emit(published_context.tag, "topContentSizeChange", event, published_context.revision);
+	if (changed && callbacks.content_size_changed) {
+		callbacks.content_size_changed(extent);
 	}
-	if (published_context.event_sink && published_context.event_sink->invalidate_geometry) {
-		published_context.event_sink->invalidate_geometry();
+	if (callbacks.geometry_changed) {
+		callbacks.geometry_changed();
+	}
+	if (indicators) {
+		indicators->follow_scroll();
 	}
 }
 void RNScrollControl::_notification(int p_what) {
+	if ((p_what == NOTIFICATION_TRANSFORM_CHANGED || p_what == NOTIFICATION_RESIZED || p_what == NOTIFICATION_VISIBILITY_CHANGED) && indicators) {
+		indicators->follow_scroll();
+	}
 	if (p_what == NOTIFICATION_SORT_CHILDREN) {
 		get_h_scroll_bar()->set_page(usable_viewport().size.x);
 		get_v_scroll_bar()->set_page(usable_viewport().size.y);
+		if (callbacks.geometry_changed) {
+			callbacks.geometry_changed();
+		}
 	}
-	if (p_what == NOTIFICATION_THEME_CHANGED && published_context.event_sink && published_context.event_sink->invalidate_layout) {
-		published_context.event_sink->invalidate_layout();
-	}
-	if (p_what == NOTIFICATION_SORT_CHILDREN && published_context.event_sink && published_context.event_sink->invalidate_geometry) {
-		published_context.event_sink->invalidate_geometry();
+	if (p_what == NOTIFICATION_THEME_CHANGED && callbacks.theme_changed) {
+		callbacks.theme_changed();
 	}
 }
 void RNScrollControl::_emit_scroll(const StringName &p_event) {
-	if (!published_context.event_sink || !published_context.event_sink->emit || suppress_events) {
+	if (suppress_events || !callbacks.event) {
 		return;
 	}
-	Dictionary offset;
-	offset["x"] = get_h_scroll();
-	offset["y"] = get_v_scroll();
-	Dictionary size;
-	size["width"] = content->get_size().x;
-	size["height"] = content->get_size().y;
-	Dictionary viewport;
-	viewport["width"] = usable_viewport().size.x;
-	viewport["height"] = usable_viewport().size.y;
-	Dictionary inset;
-	for (const char *key : { "top", "left", "bottom", "right" }) {
-		inset[key] = 0.0;
+	callbacks.event(p_event);
+	if (callbacks.geometry_changed) {
+		callbacks.geometry_changed();
 	}
-	Dictionary event;
-	event["contentOffset"] = offset;
-	event["contentSize"] = size;
-	event["layoutMeasurement"] = viewport;
-	event["contentInset"] = inset;
-	event["zoomScale"] = 1.0;
-	published_context.event_sink->emit(published_context.tag, p_event, event, published_context.revision);
-	if (published_context.event_sink->invalidate_geometry) {
-		published_context.event_sink->invalidate_geometry();
+	if (indicators) {
+		indicators->follow_scroll();
 	}
 }
 void RNScrollControl::_scroll_changed(double) {
+	if (indicators) {
+		indicators->follow_scroll();
+	}
 	_emit_scroll("topScroll");
+}
+void RNScrollControl::set_overlay_indicators(bool p_horizontal, bool p_vertical) {
+	set_horizontal_scroll_mode(settings.horizontal ? SCROLL_MODE_SHOW_NEVER : SCROLL_MODE_DISABLED);
+	set_vertical_scroll_mode(settings.horizontal ? SCROLL_MODE_DISABLED : SCROLL_MODE_SHOW_NEVER);
+	if (!indicators) {
+		indicators = memnew(RNScrollIndicators(this));
+		add_child(indicators, false, INTERNAL_MODE_FRONT);
+		set_notify_transform(true);
+	}
+	indicators->horizontal = p_horizontal;
+	indicators->vertical = p_vertical;
+	indicators->follow_scroll();
+}
+RNScrollIndicators::RNScrollIndicators(RNScrollControl *p_scroll) :
+		scroll(p_scroll) {
+	set_as_top_level(true);
+	set_mouse_filter(MOUSE_FILTER_IGNORE);
+}
+void RNScrollIndicators::follow_scroll() {
+	if (scroll && scroll->is_inside_tree()) {
+		set_global_position(scroll->get_global_position());
+		set_size(scroll->get_size());
+		set_visible(scroll->is_visible_in_tree());
+	}
+	queue_redraw();
+}
+void RNScrollIndicators::_notification(int p_what) {
+	if (p_what != NOTIFICATION_DRAW || !scroll) {
+		return;
+	}
+	constexpr real_t THICKNESS = 3;
+	constexpr real_t INSET = 2;
+	constexpr real_t MINIMUM_LENGTH = 16;
+	const ::Color color(0.5, 0.5, 0.5, 0.75);
+	const Size2 viewport = get_size();
+	const Size2 extent = scroll->get_content()->get_custom_minimum_size();
+	if (vertical && extent.y > viewport.y && viewport.y > 0) {
+		const real_t length = MAX(MINIMUM_LENGTH, viewport.y * viewport.y / extent.y);
+		const real_t travel = viewport.y - length - INSET * 2;
+		const real_t y = INSET + travel * CLAMP(scroll->get_v_scroll() / (extent.y - viewport.y), 0.0, 1.0);
+		draw_rect(Rect2(viewport.x - THICKNESS - INSET, y, THICKNESS, length), color);
+	}
+	if (horizontal && extent.x > viewport.x && viewport.x > 0) {
+		const real_t length = MAX(MINIMUM_LENGTH, viewport.x * viewport.x / extent.x);
+		const real_t travel = viewport.x - length - INSET * 2;
+		const real_t x = INSET + travel * CLAMP(scroll->get_h_scroll() / (extent.x - viewport.x), 0.0, 1.0);
+		draw_rect(Rect2(x, viewport.y - THICKNESS - INSET, length, THICKNESS), color);
+	}
 }
 void RNScrollControl::_scroll_started() {
 	dragging = true;
@@ -319,8 +430,8 @@ void RNScrollControl::_scroll_started() {
 		scroll_tween->kill();
 		scroll_tween.unref();
 	}
-	if (published_context.event_sink && published_context.event_sink->cancel_input) {
-		published_context.event_sink->cancel_input();
+	if (callbacks.drag_started) {
+		callbacks.drag_started();
 	}
 	_emit_scroll("topScrollBeginDrag");
 }
@@ -341,18 +452,16 @@ std::shared_ptr<const RNHostDescriptor> rn_scroll_content_descriptor(const Strin
 
 void RNScrollControl::_capture_anchor() {
 	anchor = ObjectID();
-	if (!published_props.has("maintainVisibleContentPosition") || published_props["maintainVisibleContentPosition"].get_type() != Variant::DICTIONARY || content->get_child_count() == 0) {
+	if (!settings.maintain_visible_position || content->get_child_count() == 0) {
 		return;
 	}
 	Control *rows = Object::cast_to<Control>(content->get_child(0));
 	if (!rows) {
 		return;
 	}
-	Dictionary config = published_props["maintainVisibleContentPosition"];
-	const bool horizontal = published_props.get("horizontal", false);
 	anchor_offset = Point2(get_h_scroll(), get_v_scroll());
-	const int axis = horizontal ? 0 : 1;
-	const int minimum = MAX(0, int(config.get("minIndexForVisible", 0)));
+	const int axis = settings.horizontal ? 0 : 1;
+	const int minimum = MAX(0, settings.min_index_for_visible);
 	for (int i = minimum; i < rows->get_child_count(); ++i) {
 		auto *child = Object::cast_to<Control>(rows->get_child(i));
 		if (!child || !child->is_visible()) {
@@ -367,27 +476,26 @@ void RNScrollControl::_capture_anchor() {
 	}
 }
 void RNScrollControl::_snap() {
-	const bool horizontal = published_props.get("horizontal", false);
-	const int axis = horizontal ? 0 : 1;
+	const int axis = settings.horizontal ? 0 : 1;
 	Point2 offset(get_h_scroll(), get_v_scroll());
 	const double value = offset[axis];
 	double target = value;
-	Array offsets = published_props.get("snapToOffsets", Array());
-	if (!offsets.is_empty()) {
-		target = offsets[0];
-		for (int i = 1; i < offsets.size(); ++i) {
-			if (Math::abs(double(offsets[i]) - value) < Math::abs(target - value)) {
-				target = offsets[i];
+	if (!settings.snap_offsets.is_empty()) {
+		target = settings.snap_offsets[0];
+		for (double candidate : settings.snap_offsets) {
+			if (Math::abs(candidate - value) < Math::abs(target - value)) {
+				target = candidate;
 			}
 		}
 	} else {
-		const double interval = published_props.get("snapToInterval", bool(published_props.get("pagingEnabled", false)) ? usable_viewport().size[axis] : 0.0);
+		const double interval = settings.snap_interval > 0 ? settings.snap_interval : settings.paging ? usable_viewport().size[axis]
+																									  : 0.0;
 		if (interval <= 0) {
 			return;
 		}
-		const String alignment = published_props.get("snapToAlignment", "start");
-		const double shift = alignment == "center" ? (usable_viewport().size[axis] - interval) / 2 : alignment == "end" ? usable_viewport().size[axis] - interval
-																														: 0;
+		const double free_space = usable_viewport().size[axis] - interval;
+		const double shift = settings.snap_alignment == HORIZONTAL_ALIGNMENT_CENTER ? free_space / 2 : settings.snap_alignment == HORIZONTAL_ALIGNMENT_RIGHT ? free_space
+																																							 : 0;
 		target = Math::round((value + shift) / interval) * interval - shift;
 	}
 	offset[axis] = target;

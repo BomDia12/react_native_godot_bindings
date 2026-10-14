@@ -108,11 +108,18 @@ RNSwitchControl::RNSwitchControl() {
 	connect("toggled", callable_mp(this, &RNSwitchControl::_changed));
 }
 void RNSwitchControl::_changed(bool p_value) {
-	if (published_context.event_sink && published_context.event_sink->emit) {
-		Dictionary event;
-		event["value"] = p_value;
-		published_context.event_sink->emit(published_context.tag, "topChange", event, published_context.revision);
+	if (changed) {
+		changed(p_value);
 	}
+}
+void RNSwitchControl::publish(const RNHostContext &p_context) {
+	set_changed_callback([p_context](bool p_value) {
+		if (p_context.event_sink && p_context.event_sink->emit) {
+			Dictionary event;
+			event["value"] = p_value;
+			p_context.event_sink->emit(p_context.tag, "topChange", event, p_context.revision);
+		}
+	});
 }
 RNActivityIndicatorControl::RNActivityIndicatorControl() {
 	set_show_percentage(false);

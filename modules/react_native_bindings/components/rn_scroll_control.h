@@ -11,11 +11,48 @@ struct RNScrollData : RNComponentData {
 	Rect2 usable_viewport;
 };
 
+struct RNScrollSettings {
+	bool horizontal = false;
+	bool paging = false;
+	double snap_interval = 0;
+	Vector<double> snap_offsets;
+	HorizontalAlignment snap_alignment = HORIZONTAL_ALIGNMENT_LEFT;
+	bool maintain_visible_position = false;
+	int min_index_for_visible = 0;
+};
+struct RNScrollCallbacks {
+	std::function<void(const StringName &)> event;
+	std::function<void(const Size2 &)> content_size_changed;
+	std::function<void()> geometry_changed;
+	std::function<void()> theme_changed;
+	std::function<void()> drag_started;
+};
+class RNScrollControl;
+
+// React Native draws scroll indicators over the content instead of reserving
+// layout space, so this top-level child paints them above the ScrollContainer.
+class RNScrollIndicators : public Control {
+	GDCLASS(RNScrollIndicators, Control);
+	RNScrollControl *scroll = nullptr;
+
+protected:
+	static void _bind_methods() {}
+	void _notification(int p_what);
+
+public:
+	explicit RNScrollIndicators(RNScrollControl *p_scroll = nullptr);
+	bool horizontal = false;
+	bool vertical = false;
+	void follow_scroll();
+};
+
 class RNScrollControl : public ScrollContainer {
 	GDCLASS(RNScrollControl, ScrollContainer);
 	Control *content = nullptr;
-	RNHostContext published_context;
-	Dictionary published_props;
+	RNScrollIndicators *indicators = nullptr;
+	RNScrollSettings settings;
+	RNScrollCallbacks callbacks;
+	Variant published_offset;
 	Ref<Tween> scroll_tween;
 	Point2 last_offset;
 	bool suppress_events = false;
@@ -43,6 +80,11 @@ public:
 	RNScrollControl();
 	Control *get_content() const { return content; }
 	Rect2 usable_viewport() const;
+	void set_settings(const RNScrollSettings &p_settings) { settings = p_settings; }
+	void set_callbacks(RNScrollCallbacks p_callbacks) { callbacks = std::move(p_callbacks); }
+	void restore_visible_anchor();
+	void set_overlay_indicators(bool p_horizontal, bool p_vertical);
+	void set_content_extent(const Size2 &p_extent);
 	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 	void refresh_content();
 	void scroll_to(const Point2 &p_offset, bool p_animated);

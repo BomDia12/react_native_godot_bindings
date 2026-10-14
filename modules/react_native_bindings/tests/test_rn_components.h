@@ -9,7 +9,7 @@
 #include "../mounting/rn_layout_tree.h"
 #include "../native_modules/rn_image_probe.h"
 #include "../runtime/react_native_runtime_coordinator.h"
-#include "rn_test_display_server.h"
+#include "support/rn_test_display_server.h"
 
 #include "core/crypto/crypto_core.h"
 #include "core/input/input.h"

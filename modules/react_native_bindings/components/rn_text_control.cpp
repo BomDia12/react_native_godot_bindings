@@ -267,7 +267,7 @@ void RNTextControl::_bind_methods() {
 }
 
 String RNTextControl::get_text() const {
-	return document ? document->text : String();
+	return text;
 }
 
 int RNTextControl::get_font_size() const {
@@ -299,8 +299,7 @@ void RNTextControl::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_DRAW: {
 			if (selection_to > selection_from) {
-				Color color = get_theme_color(SNAME("selection_color"), SNAME("RichTextLabel"));
-				RNViewStyle::color_of(document->props, "selectionColor", color);
+				const Color color = has_selection_color ? selection_color : get_theme_color(SNAME("selection_color"), SNAME("RichTextLabel"));
 				for (const Rect2 &rect : layout.get_range_rects(selection_from, selection_to)) {
 					draw_rect(rect, color);
 				}
@@ -310,12 +309,9 @@ void RNTextControl::_notification(int p_what) {
 		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
 			const RID element = get_accessibility_element();
 			ERR_FAIL_COND(element.is_null());
-			const String alignment = document ? String(document->props.get("textAlign", "left")) : String("left");
 			AccessibilityServer::get_singleton()->update_set_role(element, AccessibilityServerEnums::AccessibilityRole::ROLE_STATIC_TEXT);
-			AccessibilityServer::get_singleton()->update_set_value(element, document ? document->text : String());
-			AccessibilityServer::get_singleton()->update_set_text_align(element, alignment == "center" ? HORIZONTAL_ALIGNMENT_CENTER : alignment == "right" ? HORIZONTAL_ALIGNMENT_RIGHT
-							: alignment == "justify"																										? HORIZONTAL_ALIGNMENT_FILL
-																																							: HORIZONTAL_ALIGNMENT_LEFT);
+			AccessibilityServer::get_singleton()->update_set_value(element, text);
+			AccessibilityServer::get_singleton()->update_set_text_align(element, accessibility_alignment);
 		} break;
 	}
 }
@@ -340,14 +336,14 @@ void RNTextControl::gui_input(const Ref<InputEvent> &p_event) {
 		return;
 	}
 	if (p_event->is_action_pressed(SNAME("ui_copy"), false, true) && selection_to > selection_from) {
-		DisplayServer::get_singleton()->clipboard_set(document->text.substr(selection_from, selection_to - selection_from));
+		DisplayServer::get_singleton()->clipboard_set(text.substr(selection_from, selection_to - selection_from));
 		accept_event();
 	}
 }
 
 void RNTextControl::_shape() {
-	if (document) {
-		rn_shape_text_document(*document, get_size().x, layout);
+	if (shape_function) {
+		shape_function(get_size().x, layout);
 	}
 	queue_redraw();
 	queue_accessibility_update();
@@ -360,11 +356,11 @@ void RNTextControl::_font_changed() {
 }
 
 bool RNTextControl::is_selectable() const {
-	return document && bool(document->props.get("selectable", false));
+	return selectable;
 }
 
 void RNTextControl::set_selection_range(int p_from, int p_to) {
-	const int length = document ? document->text.length() : 0;
+	const int length = text.length();
 	const bool valid = is_selectable() && p_from >= 0 && p_to > p_from;
 	const int from = valid ? MIN(p_from, length) : -1;
 	const int to = valid ? MIN(p_to, length) : -1;
@@ -390,9 +386,32 @@ void RNTextControl::apply_document(const std::shared_ptr<const RNTextDocument> &
 		to = p_document->character_at(document->utf16_at(to));
 	}
 	document = p_document;
-	set_focus_mode(is_selectable() ? FOCUS_ALL : FOCUS_ACCESSIBILITY);
-	_shape();
+	const String alignment = p_document->props.get("textAlign", "left");
+	accessibility_alignment = alignment == "center" ? HORIZONTAL_ALIGNMENT_CENTER : alignment == "right" ? HORIZONTAL_ALIGNMENT_RIGHT
+			: alignment == "justify"																	 ? HORIZONTAL_ALIGNMENT_FILL
+																										 : HORIZONTAL_ALIGNMENT_LEFT;
+	Color color;
+	has_selection_color = RNViewStyle::color_of(p_document->props, "selectionColor", color);
+	selection_color = color;
+	set_content(p_document->text, [p_document](float p_width, RNParagraphLayout &r_layout) { rn_shape_text_document(*p_document, p_width, r_layout); }, p_document->props.get("selectable", false));
 	set_selection_range(from, to);
+}
+
+void RNTextControl::set_content(const String &p_text, RNTextShapeFunction p_shape_function, bool p_selectable) {
+	if (p_text != text) {
+		set_selection_range(-1, -1);
+	}
+	text = p_text;
+	shape_function = std::move(p_shape_function);
+	selectable = p_selectable;
+	set_focus_mode(selectable ? FOCUS_ALL : FOCUS_ACCESSIBILITY);
+	_shape();
+}
+
+void RNTextControl::set_selection_color(const Color &p_color) {
+	selection_color = p_color;
+	has_selection_color = true;
+	queue_redraw();
 }
 
 void RNTextControl::publish(const RNHostContext &p_context) {

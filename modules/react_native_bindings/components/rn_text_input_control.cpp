@@ -266,44 +266,126 @@ void RNTextInputControl::reconcile(int p_ack, const Variant &p_text, int p_start
 	_set_selection(p_start, p_end);
 	changing = false;
 }
-void RNTextInputControl::_configure_editor(Control *p_editor, const RNPreparedHostState &p_state) {
+String RNTextInputControl::_submit_behavior() const {
+	if (!config.submit_behavior.is_empty()) {
+		return config.submit_behavior;
+	}
+	return config.multiline ? "newline" : "blurAndSubmit";
+}
+void RNTextInputControl::_configure_editor(Control *p_editor) {
 	p_editor->set_mouse_filter(get_mouse_filter() == MOUSE_FILTER_IGNORE ? MOUSE_FILTER_IGNORE : MOUSE_FILTER_STOP);
-	const auto component = std::static_pointer_cast<const RNTextInputData>(p_state.component_data);
-	p_editor->add_theme_font_override("font", component->font.font);
-	p_editor->add_theme_font_size_override("font_size", component->font.size);
-	p_editor->add_theme_color_override("font_color", component->font.color);
-	for (const char *key : { "selectionColor", "cursorColor", "placeholderTextColor" }) {
-		Color color;
-		const char *native = String(key) == "selectionColor" ? "selection_color" : String(key) == "cursorColor" ? "caret_color"
-																												: "font_placeholder_color";
-		if (RNViewStyle::color_of(p_state.props, key, color)) {
-			p_editor->add_theme_color_override(native, color);
+	p_editor->add_theme_font_override("font", config.font);
+	p_editor->add_theme_font_size_override("font_size", config.font_size);
+	p_editor->add_theme_color_override("font_color", config.font_color);
+	const std::pair<const char *, std::optional<Color>> colors[] = { { "selection_color", config.selection_color }, { "caret_color", config.cursor_color }, { "font_placeholder_color", config.placeholder_color } };
+	for (const auto &[name, color] : colors) {
+		if (color) {
+			p_editor->add_theme_color_override(name, *color);
 		} else {
-			p_editor->remove_theme_color_override(native);
+			p_editor->remove_theme_color_override(name);
 		}
 	}
-	const bool editable = bool(p_state.props.get("editable", true)) && !bool(p_state.props.get("readOnly", false));
-	const String placeholder = p_state.props.get("placeholder", String());
 	if (auto *line = Object::cast_to<LineEdit>(p_editor)) {
-		line->set_editable(editable);
-		line->set_placeholder(placeholder);
-		line->set_secret(p_state.props.get("secureTextEntry", false));
-		line->set_keep_editing_on_text_submit(String(p_state.props.get("submitBehavior", "blurAndSubmit")) == "submit");
+		line->set_editable(config.editable);
+		line->set_placeholder(config.placeholder);
+		line->set_secret(config.secure);
+		line->set_keep_editing_on_text_submit(_submit_behavior() == "submit");
 	} else {
 		auto *edit = Object::cast_to<TextEdit>(p_editor);
-		edit->set_editable(editable);
-		edit->set_placeholder(placeholder);
+		edit->set_editable(config.editable);
+		edit->set_placeholder(config.placeholder);
 	}
 	p_editor->set_size(get_size());
 }
+void RNTextInputControl::set_callbacks(std::function<void(const StringName &, const Dictionary &)> p_event, std::function<void()> p_layout) {
+	event_callback = std::move(p_event);
+	layout_callback = std::move(p_layout);
+}
+void RNTextInputControl::_swap_editor() {
+	const bool was_focused = editor->has_focus();
+	const String text = get_text();
+	const Point2i selection = get_selection();
+	changing = true;
+	if (auto *line = Object::cast_to<LineEdit>(editor)) {
+		line->cancel_ime();
+	} else {
+		Object::cast_to<TextEdit>(editor)->cancel_ime();
+	}
+	memdelete(editor);
+	editor = staged_editor;
+	staged_editor = nullptr;
+	editor->show();
+	deferred_replacement.clear();
+	_set_text(text);
+	_set_selection(selection.x, selection.y);
+	changing = false;
+	if (auto *edit = Object::cast_to<TextEdit>(editor)) {
+		edit->clear_undo_history();
+	}
+	if (was_focused) {
+		focus();
+	}
+}
+void RNTextInputControl::configure(const RNTextInputConfig &p_config) {
+	changing = true;
+	config = p_config;
+	set_mouse_filter(config.targetable ? MOUSE_FILTER_PASS : MOUSE_FILTER_IGNORE);
+	if (config.multiline != (Object::cast_to<TextEdit>(editor) != nullptr)) {
+		staged_editor = _create_editor(config.multiline);
+		add_child(staged_editor);
+		changing = false;
+		_swap_editor();
+		changing = true;
+	}
+	_configure_editor(editor);
+	changing = false;
+	if (subscribed_font != config.font) {
+		if (subscribed_font.is_valid()) {
+			subscribed_font->disconnect("changed", callable_mp(this, &RNTextInputControl::_font_changed));
+		}
+		subscribed_font = config.font;
+		if (subscribed_font.is_valid()) {
+			subscribed_font->connect("changed", callable_mp(this, &RNTextInputControl::_font_changed));
+		}
+	}
+	if (!published) {
+		published = true;
+		if (config.auto_focus && is_inside_tree() && is_visible_in_tree()) {
+			focus();
+		}
+	}
+}
 void RNTextInputControl::apply(const RNPreparedHostState &p_state) {
 	changing = true;
-	props = p_state.props.duplicate(true);
+	const Dictionary props = p_state.props;
 	const String pointer_events = String(props.get("pointerEvents", "auto")).to_lower();
 	const bool targetable = p_state.branch_targetable && pointer_events != "none" && pointer_events != "box-none";
+	const auto component = std::static_pointer_cast<const RNTextInputData>(p_state.component_data);
+	config = RNTextInputConfig();
+	config.font = component->font.font;
+	config.font_size = component->font.size;
+	config.font_color = component->font.color;
+	Color color;
+	if (RNViewStyle::color_of(props, "selectionColor", color)) {
+		config.selection_color = color;
+	}
+	if (RNViewStyle::color_of(props, "cursorColor", color)) {
+		config.cursor_color = color;
+	}
+	if (RNViewStyle::color_of(props, "placeholderTextColor", color)) {
+		config.placeholder_color = color;
+	}
+	config.editable = bool(props.get("editable", true)) && !bool(props.get("readOnly", false));
+	config.placeholder = props.get("placeholder", String());
+	config.secure = props.get("secureTextEntry", false);
+	config.submit_behavior = props.get("submitBehavior", String());
+	config.multiline = props.get("multiline", false);
+	config.max_length = props.get("maxLength", 0);
+	config.auto_focus = props.get("autoFocus", false);
+	config.targetable = targetable;
 	set_mouse_filter(targetable ? MOUSE_FILTER_PASS : MOUSE_FILTER_IGNORE);
 	editor->set_mouse_filter(targetable ? MOUSE_FILTER_STOP : MOUSE_FILTER_IGNORE);
-	const bool multiline = props.get("multiline", false);
+	const bool multiline = config.multiline;
 	if (multiline != (Object::cast_to<TextEdit>(editor) != nullptr)) {
 		if (staged_editor) {
 			memdelete(staged_editor);
@@ -311,13 +393,13 @@ void RNTextInputControl::apply(const RNPreparedHostState &p_state) {
 		staged_editor = _create_editor(multiline);
 		add_child(staged_editor);
 		staged_editor->hide();
-		_configure_editor(staged_editor, p_state);
+		_configure_editor(staged_editor);
 	} else {
 		if (staged_editor) {
 			memdelete(staged_editor);
 			staged_editor = nullptr;
 		}
-		_configure_editor(editor, p_state);
+		_configure_editor(editor);
 		const uint64_t next_text = (p_state.declarative_prop_revisions.has("text") ? p_state.declarative_prop_revisions["text"] : 0);
 		const uint64_t next_selection = (p_state.declarative_prop_revisions.has("selection") ? p_state.declarative_prop_revisions["selection"] : 0);
 		const bool fresh_text = props.has("text") && (text_revision != next_text);
@@ -334,29 +416,24 @@ void RNTextInputControl::apply(const RNPreparedHostState &p_state) {
 	changing = false;
 }
 void RNTextInputControl::publish(const RNPreparedHostState &p_state, const RNHostContext &p_context) {
-	published_context = p_context;
+	set_callbacks(
+			[p_context](const StringName &p_event, const Dictionary &p_payload) {
+				if (p_context.event_sink && p_context.event_sink->emit) {
+					p_context.event_sink->emit(p_context.tag, p_event, p_payload, p_context.revision);
+				}
+			},
+			[p_context]() {
+				if (p_context.event_sink && p_context.event_sink->invalidate_layout) {
+					p_context.event_sink->invalidate_layout();
+				}
+			});
 	if (pending_native_event) {
 		pending_native_event = false;
 		_emit("topChange");
 	}
 	if (staged_editor) {
-		const bool was_focused = editor->has_focus();
-		const String text = get_text();
-		const Point2i selection = get_selection();
-		changing = true;
-		if (auto *line = Object::cast_to<LineEdit>(editor)) {
-			line->cancel_ime();
-		} else {
-			Object::cast_to<TextEdit>(editor)->cancel_ime();
-		}
-		memdelete(editor);
-		editor = staged_editor;
-		staged_editor = nullptr;
-		editor->show();
-		deferred_replacement.clear();
-		_set_text(text);
-		_set_selection(selection.x, selection.y);
-		changing = false;
+		_swap_editor();
+		const Dictionary props = p_state.props;
 		const Dictionary requested = props.get("selection", Dictionary());
 		const uint64_t next_text = p_state.declarative_prop_revisions.has("text") ? p_state.declarative_prop_revisions["text"] : 0;
 		const uint64_t next_selection = p_state.declarative_prop_revisions.has("selection") ? p_state.declarative_prop_revisions["selection"] : 0;
@@ -365,12 +442,6 @@ void RNTextInputControl::publish(const RNPreparedHostState &p_state, const RNHos
 		reconcile(props.get("mostRecentEventCount", 0), fresh_text ? props["text"] : Variant(), fresh_selection ? int(requested.get("start", 0)) : -1, fresh_selection ? int(requested.get("end", requested.get("start", 0))) : -1);
 		text_revision = next_text;
 		selection_revision = next_selection;
-		if (auto *edit = Object::cast_to<TextEdit>(editor)) {
-			edit->clear_undo_history();
-		}
-		if (was_focused) {
-			focus();
-		}
 	}
 	const auto component = std::static_pointer_cast<const RNTextInputData>(p_state.component_data);
 	if (subscribed_font != component->font.base) {
@@ -384,7 +455,7 @@ void RNTextInputControl::publish(const RNPreparedHostState &p_state, const RNHos
 	}
 	if (!published) {
 		published = true;
-		if (bool(props.get("autoFocus", false)) && is_inside_tree() && is_visible_in_tree()) {
+		if (config.auto_focus && is_inside_tree() && is_visible_in_tree()) {
 			focus();
 		}
 	}
@@ -411,7 +482,7 @@ Ref<RNTextInputState> RNTextInputControl::capture_state() const {
 		}
 		state->scroll = Vector2(edit->get_h_scroll(), edit->get_v_scroll());
 	}
-	state->props = props.duplicate(true);
+	state->config = config;
 	state->deferred = deferred_replacement.duplicate(true);
 	state->event_count = event_count;
 	state->text_revision = text_revision;
@@ -457,7 +528,7 @@ void RNTextInputControl::restore_state(const Ref<RNTextInputState> &p_state) {
 	}
 	set_mouse_filter(p_state->wrapper_mouse_filter);
 	editor->set_mouse_filter(p_state->editor_mouse_filter);
-	props = p_state->props;
+	config = p_state->config;
 	deferred_replacement = p_state->deferred;
 	event_count = p_state->event_count;
 	text_revision = p_state->text_revision;
@@ -468,10 +539,10 @@ void RNTextInputControl::restore_state(const Ref<RNTextInputState> &p_state) {
 	changing = false;
 }
 void RNTextInputControl::_emit(const StringName &p_event, Dictionary p_payload) {
-	if (!changing && published_context.event_sink && published_context.event_sink->emit) {
+	if (!changing && event_callback) {
 		p_payload["text"] = get_text();
 		p_payload["eventCount"] = event_count;
-		published_context.event_sink->emit(published_context.tag, p_event, p_payload, published_context.revision);
+		event_callback(p_event, p_payload);
 	}
 }
 void RNTextInputControl::_line_changed(const String &) {
@@ -481,7 +552,7 @@ void RNTextInputControl::_native_changed() {
 	if (is_composing() || get_text() == observed_text) {
 		return;
 	}
-	const int maximum = props.get("maxLength", 0);
+	const int maximum = config.max_length;
 	const String text = get_text();
 	if (maximum > 0 && utf16_offset(text, text.length()) > maximum) {
 		changing = true;
@@ -525,7 +596,7 @@ void RNTextInputControl::_selection_changed() {
 }
 void RNTextInputControl::_submitted(const String &) {
 	_emit("topSubmitEditing");
-	if (String(props.get("submitBehavior", "blurAndSubmit")) == "blurAndSubmit") {
+	if (_submit_behavior() == "blurAndSubmit") {
 		blur();
 	}
 }
@@ -546,7 +617,7 @@ void RNTextInputControl::_editor_input(const Ref<InputEvent> &p_event) {
 			: key->get_unicode()																												? String::chr(key->get_unicode())
 																																				: key->as_text_keycode();
 	_emit("topKeyPress", event);
-	if (Object::cast_to<TextEdit>(editor) && (key->get_keycode() == Key::ENTER || key->get_keycode() == Key::KP_ENTER) && String(props.get("submitBehavior", "newline")) != "newline" && !is_composing()) {
+	if (Object::cast_to<TextEdit>(editor) && (key->get_keycode() == Key::ENTER || key->get_keycode() == Key::KP_ENTER) && _submit_behavior() != "newline" && !is_composing()) {
 		_submitted(get_text());
 		editor->accept_event();
 	}
@@ -561,8 +632,8 @@ void RNTextInputControl::blur() {
 	editor->release_focus();
 }
 void RNTextInputControl::_font_changed() {
-	if (published_context.event_sink && published_context.event_sink->invalidate_layout) {
-		published_context.event_sink->invalidate_layout();
+	if (layout_callback) {
+		layout_callback();
 	}
 }
 void RNTextInputControl::_notification(int p_what) {

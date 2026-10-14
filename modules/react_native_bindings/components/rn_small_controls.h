@@ -7,7 +7,7 @@
 
 class RNSwitchControl : public CheckButton {
 	GDCLASS(RNSwitchControl, CheckButton);
-	RNHostContext published_context;
+	std::function<void(bool)> changed;
 	void _changed(bool p_value);
 
 protected:
@@ -17,7 +17,8 @@ public:
 	Size2 get_combined_minimum_size() const override { return Size2(); }
 	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNSwitchControl();
-	void publish(const RNHostContext &p_context) { published_context = p_context; }
+	void set_changed_callback(std::function<void(bool)> p_changed) { changed = std::move(p_changed); }
+	void publish(const RNHostContext &p_context);
 };
 
 class RNActivityIndicatorControl : public ProgressBar {

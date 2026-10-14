@@ -60,6 +60,7 @@ module_source_dirs = [
 	"editor",
 	"examples",
 	"fabric",
+	"host",
 	"input",
 	"interop",
 	"mounting",
@@ -67,6 +68,7 @@ module_source_dirs = [
 	"root_view",
 	"runtime",
 	"singletons",
+	"turbomodules",
 ]
 
 for subdir in module_source_dirs:
@@ -87,7 +89,7 @@ def relative_sources(paths):
 
 env_upstream = env_modules.Clone()
 env_upstream.disable_warnings()
-env_upstream.Prepend(CPPPATH=react_native_sources.include_dirs())
+env_upstream.Prepend(CPPPATH=react_native_sources.include_dirs() + [module_dir])
 env_upstream.Append(CXXFLAGS=["-isystem%s" % path for path in react_native_sources.hermes_include_dirs()])
 env_upstream.Append(CPPDEFINES=react_native_sources.REACT_NATIVE_DEFINES)
 env_upstream.Append(CXXFLAGS=["-std=c++20", "-fexceptions", "-frtti"], CCFLAGS=["-fexceptions"])

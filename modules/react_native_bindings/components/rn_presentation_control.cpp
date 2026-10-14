@@ -93,9 +93,18 @@ public:
 	bool owns_input_control(Control *p_host, Control *p_control) const override { return p_host == p_control || get_child_container(p_host, RNHostContext()) == p_control; }
 	Vector<Control *> get_input_controls(Control *p_host) const override { return { get_child_container(p_host, RNHostContext()) }; }
 };
-Control *presentation_container(RNModalControl *p_modal, const RNHostContext &p_context) {
-	Control *container = p_context.owner;
-	for (Node *node = p_modal->get_parent(); node && node != p_context.owner; node = node->get_parent()) {
+ReactNativeRootView *owning_root(Node *p_node) {
+	for (Node *node = p_node; node; node = node->get_parent()) {
+		if (auto *root = Object::cast_to<ReactNativeRootView>(node)) {
+			return root;
+		}
+	}
+	return nullptr;
+}
+Control *presentation_container(RNModalControl *p_modal) {
+	ReactNativeRootView *root = owning_root(p_modal);
+	Control *container = root;
+	for (Node *node = p_modal->get_parent(); node && node != root; node = node->get_parent()) {
 		if (Object::cast_to<Window>(node)) {
 			break;
 		}
@@ -105,7 +114,7 @@ Control *presentation_container(RNModalControl *p_modal, const RNHostContext &p_
 	}
 	return container ? container : p_modal;
 }
-std::shared_ptr<RNModalDomain> modal_domain(RNModalControl *p_modal, const RNHostContext &p_context, Control *p_container) {
+std::shared_ptr<RNModalDomain> modal_domain(RNModalControl *p_modal, Control *p_container) {
 	static std::map<String, std::weak_ptr<RNModalDomain>> domains;
 	for (auto it = domains.begin(); it != domains.end();) {
 		if (it->second.expired()) {
@@ -114,7 +123,7 @@ std::shared_ptr<RNModalDomain> modal_domain(RNModalControl *p_modal, const RNHos
 			++it;
 		}
 	}
-	const String key = String::num_uint64(p_context.generation) + ":" + String::num_int64(p_context.root_tag) + ":" + String::num_uint64(p_context.surface_epoch) + ":" + String::num_uint64(uint64_t(p_modal->get_viewport()->get_instance_id()));
+	const String key = String::num_uint64(uint64_t(p_container->get_instance_id())) + ":" + String::num_uint64(uint64_t(p_modal->get_viewport()->get_instance_id()));
 	auto domain = domains[key].lock();
 	if (!domain) {
 		domain = std::make_shared<RNModalDomain>();
@@ -201,29 +210,57 @@ void RNModalControl::_update_focus_cycle() {
 	}
 }
 void RNModalControl::publish(const RNPreparedHostState &p_state, const RNHostContext &p_context) {
-	published_context = p_context;
-	const bool should_show = p_state.props.get("visible", true);
+	auto emit = [p_context](const StringName &p_event) {
+		if (p_context.event_sink && p_context.event_sink->emit) {
+			p_context.event_sink->emit(p_context.tag, p_event, Dictionary(), p_context.revision);
+		}
+	};
+	RNPresentationCallbacks published;
+	published.show = [emit]() { emit("topShow"); };
+	published.dismiss = [emit]() { emit("topDismiss"); };
+	published.request_close = [emit]() { emit("topRequestClose"); };
+	published.presented = [p_context]() {
+		if (p_context.event_sink && p_context.event_sink->cancel_input) {
+			p_context.event_sink->cancel_input();
+		}
+	};
+	published.geometry_changed = [p_context]() {
+		if (p_context.event_sink && p_context.event_sink->invalidate_geometry) {
+			p_context.event_sink->invalidate_geometry();
+		}
+	};
+	set_callbacks(published);
 	const auto component = std::static_pointer_cast<const RNPresentationData>(p_state.component_data);
-	const bool showing = should_show && !presented;
-	if (!should_show) {
+	Color backdrop(1, 1, 1, 1);
+	if (bool(p_state.props.get("transparent", false))) {
+		backdrop = Color(0, 0, 0, 0);
+	} else {
+		RNViewStyle::color_of(p_state.props, "backdropColor", backdrop);
+	}
+	present(p_state.props.get("visible", true), backdrop, component->viewport);
+}
+void RNModalControl::present(bool p_visible, const Color &p_backdrop, const Size2 &p_viewport) {
+	const bool showing = p_visible && !presented;
+	if (!p_visible) {
 		const bool dismissing = presented;
 		_remove_presentation();
-		if (dismissing && p_context.event_sink && p_context.event_sink->emit) {
-			p_context.event_sink->emit(p_context.tag, "topDismiss", Dictionary(), p_context.revision);
+		if (dismissing && callbacks.dismiss) {
+			callbacks.dismiss();
 		}
 		return;
 	}
-	Control *container = presentation_container(this, p_context);
+	Control *container = presentation_container(this);
 	if (overlay->get_parent() != container) {
 		overlay->reparent(container, false);
 	}
 	overlay->set_position(Point2());
-	overlay->set_size(component->viewport);
-	Dictionary backdrop;
-	backdrop["backgroundColor"] = bool(p_state.props.get("transparent", false)) ? Variant(Color(0, 0, 0, 0)) : p_state.props.get("backdropColor", Variant(Color(1, 1, 1, 1)));
-	overlay->add_theme_style_override("panel", RNViewStyle::build_stylebox(backdrop));
+	overlay->set_size(p_viewport);
+	Ref<StyleBoxFlat> backdrop;
+	backdrop.instantiate();
+	backdrop->set_bg_color(p_backdrop);
+	overlay->add_theme_style_override("panel", backdrop);
 	if (showing) {
-		domain = modal_domain(this, p_context, container);
+		domain = modal_domain(this, container);
 		Control *focus_owner = get_viewport()->gui_get_focus_owner();
 		const bool owns_focus = !focus_owner || focus_owner == container || container->is_ancestor_of(focus_owner);
 		if (domain->stack.is_empty()) {
@@ -241,23 +278,23 @@ void RNModalControl::publish(const RNPreparedHostState &p_state, const RNHostCon
 		if (owns_focus) {
 			overlay->grab_focus();
 		}
-		if (p_context.event_sink && p_context.event_sink->cancel_input) {
-			p_context.event_sink->cancel_input();
+		if (callbacks.presented) {
+			callbacks.presented();
 		}
-		if (p_context.event_sink && p_context.event_sink->emit) {
-			p_context.event_sink->emit(p_context.tag, "topShow", Dictionary(), p_context.revision);
+		if (callbacks.show) {
+			callbacks.show();
 		}
 	} else {
 		overlay->show();
 	}
 	_update_focus_cycle();
-	if (p_context.event_sink && p_context.event_sink->invalidate_geometry) {
-		p_context.event_sink->invalidate_geometry();
+	if (callbacks.geometry_changed) {
+		callbacks.geometry_changed();
 	}
 }
 void RNModalControl::request_close() {
-	if (is_top() && published_context.event_sink && published_context.event_sink->emit) {
-		published_context.event_sink->emit(published_context.tag, "topRequestClose", Dictionary(), published_context.revision);
+	if (is_top() && callbacks.request_close) {
+		callbacks.request_close();
 	}
 }
 void RNModalControl::input(const Ref<InputEvent> &p_event) {
@@ -287,33 +324,59 @@ Size2 RNWindowControl::resolve_size(const Size2 &p_declared) const {
 	return declared_size == p_declared ? Size2(window->get_size()) : p_declared;
 }
 void RNWindowControl::publish(const RNPreparedHostState &p_state, const RNHostContext &p_context) {
-	published_context = p_context;
-	const auto component = std::static_pointer_cast<const RNPresentationData>(p_state.component_data);
-	window->set_title(p_state.props.get("title", "React Native"));
-	publishing = true;
-	window->set_size(component->viewport);
-	declared_size = Size2(p_state.props.get("windowWidth", 640), p_state.props.get("windowHeight", 480));
-	content->set_size(component->viewport);
-	publishing = false;
-	const bool should_show = p_state.props.get("visible", true);
-	const bool changed = window->is_visible() != should_show;
-	window->set_visible(should_show);
-	if (changed && p_context.event_sink && p_context.event_sink->emit) {
-		p_context.event_sink->emit(p_context.tag, should_show ? "topShow" : "topDismiss", Dictionary(), p_context.revision);
-	}
-	if (p_context.owner) {
-		const Callable observer = callable_mp(p_context.owner, &ReactNativeRootView::_begin_input).bind(window->get_instance_id());
-		if (!window->is_connected("window_input", observer)) {
-			window->connect("window_input", observer);
+	auto emit = [p_context](const StringName &p_event, const Dictionary &p_payload) {
+		if (p_context.event_sink && p_context.event_sink->emit) {
+			p_context.event_sink->emit(p_context.tag, p_event, p_payload, p_context.revision);
 		}
+	};
+	RNPresentationCallbacks published;
+	published.show = [emit]() { emit("topShow", Dictionary()); };
+	published.dismiss = [emit]() { emit("topDismiss", Dictionary()); };
+	published.request_close = [emit]() { emit("topRequestClose", Dictionary()); };
+	published.geometry_changed = [p_context]() {
+		if (p_context.event_sink && p_context.event_sink->invalidate_geometry) {
+			p_context.event_sink->invalidate_geometry();
+		}
+	};
+	published.resized = [emit, p_context](const Size2 &p_size) {
+		if (p_context.event_sink && p_context.event_sink->invalidate_layout) {
+			p_context.event_sink->invalidate_layout();
+		}
+		Dictionary size;
+		size["width"] = p_size.x;
+		size["height"] = p_size.y;
+		emit("topResize", size);
+	};
+	set_callbacks(published);
+	const auto component = std::static_pointer_cast<const RNPresentationData>(p_state.component_data);
+	present(p_state.props.get("title", "React Native"), component->viewport, Size2(p_state.props.get("windowWidth", 640), p_state.props.get("windowHeight", 480)), p_state.props.get("visible", true));
+}
+void RNWindowControl::present(const String &p_title, const Size2 &p_size, const Size2 &p_declared_size, bool p_visible) {
+	window->set_title(p_title);
+	publishing = true;
+	window->set_size(p_size);
+	declared_size = p_declared_size;
+	content->set_size(p_size);
+	publishing = false;
+	const bool changed = window->is_visible() != p_visible;
+	window->set_visible(p_visible);
+	if (changed && p_visible && callbacks.show) {
+		callbacks.show();
+	} else if (changed && !p_visible && callbacks.dismiss) {
+		callbacks.dismiss();
 	}
-	if (p_context.event_sink && p_context.event_sink->invalidate_geometry) {
-		p_context.event_sink->invalidate_geometry();
+	ReactNativeRootView *root = owning_root(this);
+	if (root && root->get_instance_id() != observed_root) {
+		observed_root = root->get_instance_id();
+		window->connect("window_input", callable_mp(root, &ReactNativeRootView::_begin_input).bind(window->get_instance_id()));
+	}
+	if (callbacks.geometry_changed) {
+		callbacks.geometry_changed();
 	}
 }
 void RNWindowControl::_close_requested() {
-	if (published_context.event_sink && published_context.event_sink->emit) {
-		published_context.event_sink->emit(published_context.tag, "topRequestClose", Dictionary(), published_context.revision);
+	if (callbacks.request_close) {
+		callbacks.request_close();
 	}
 }
 void RNWindowControl::_resized() {
@@ -321,16 +384,8 @@ void RNWindowControl::_resized() {
 		return;
 	}
 	content->set_size(window->get_size());
-	if (published_context.event_sink) {
-		if (published_context.event_sink->invalidate_layout) {
-			published_context.event_sink->invalidate_layout();
-		}
-		if (published_context.event_sink->emit) {
-			Dictionary size;
-			size["width"] = window->get_size().x;
-			size["height"] = window->get_size().y;
-			published_context.event_sink->emit(published_context.tag, "topResize", size, published_context.revision);
-		}
+	if (callbacks.resized) {
+		callbacks.resized(window->get_size());
 	}
 }
 std::shared_ptr<const RNHostDescriptor> rn_modal_descriptor() {

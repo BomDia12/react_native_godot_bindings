@@ -32,11 +32,19 @@ struct RNModalDomain {
 	ObjectID saved_focus;
 	ObjectID container;
 };
+struct RNPresentationCallbacks {
+	std::function<void()> show;
+	std::function<void()> dismiss;
+	std::function<void()> request_close;
+	std::function<void()> presented;
+	std::function<void()> geometry_changed;
+	std::function<void(const Size2 &)> resized;
+};
 class RNModalControl : public Control {
 	GDCLASS(RNModalControl, Control);
 	RNModalOverlay *overlay = nullptr;
 	ObjectID overlay_id;
-	RNHostContext published_context;
+	RNPresentationCallbacks callbacks;
 	std::shared_ptr<RNModalDomain> domain;
 	ObjectID last_focus;
 	bool presented = false;
@@ -54,6 +62,8 @@ public:
 	~RNModalControl();
 	RNModalOverlay *get_overlay() const { return overlay; }
 	bool is_top() const;
+	void set_callbacks(RNPresentationCallbacks p_callbacks) { callbacks = std::move(p_callbacks); }
+	void present(bool p_visible, const Color &p_backdrop, const Size2 &p_viewport);
 	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 	void request_close();
 	void dismiss() { _remove_presentation(); }
@@ -62,7 +72,8 @@ class RNWindowControl : public Control {
 	GDCLASS(RNWindowControl, Control);
 	Window *window = nullptr;
 	RNWindowContent *content = nullptr;
-	RNHostContext published_context;
+	RNPresentationCallbacks callbacks;
+	ObjectID observed_root;
 	Size2 declared_size;
 	bool publishing = false;
 	void _close_requested();
@@ -78,6 +89,8 @@ public:
 	Window *get_native_window() const { return window; }
 	RNWindowContent *get_content() const { return content; }
 	Size2 resolve_size(const Size2 &p_declared) const;
+	void set_callbacks(RNPresentationCallbacks p_callbacks) { callbacks = std::move(p_callbacks); }
+	void present(const String &p_title, const Size2 &p_size, const Size2 &p_declared_size, bool p_visible);
 	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 };
 std::shared_ptr<const RNHostDescriptor> rn_modal_descriptor();

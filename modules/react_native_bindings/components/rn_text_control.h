@@ -40,9 +40,17 @@ public:
 	Color modulate;
 };
 
+using RNTextShapeFunction = std::function<void(float p_width, RNParagraphLayout &r_layout)>;
+
 class RNTextControl : public Control {
 	GDCLASS(RNTextControl, Control);
 
+	String text;
+	RNTextShapeFunction shape_function;
+	bool selectable = false;
+	Color selection_color;
+	bool has_selection_color = false;
+	HorizontalAlignment accessibility_alignment = HORIZONTAL_ALIGNMENT_LEFT;
 	std::shared_ptr<const RNTextDocument> document;
 	std::shared_ptr<const RNHostEventSink> sink;
 	RNParagraphLayout layout;
@@ -71,6 +79,9 @@ public:
 	String get_text() const;
 	int get_font_size() const;
 	Color get_text_color() const;
+	void set_content(const String &p_text, RNTextShapeFunction p_shape_function, bool p_selectable);
+	void set_selection_color(const Color &p_color);
+	void set_accessibility_alignment(HorizontalAlignment p_alignment) { accessibility_alignment = p_alignment; }
 	void apply_document(const std::shared_ptr<const RNTextDocument> &p_document);
 	std::shared_ptr<const RNTextDocument> get_document() const { return document; }
 	const RNParagraphLayout &get_layout() const { return layout; }

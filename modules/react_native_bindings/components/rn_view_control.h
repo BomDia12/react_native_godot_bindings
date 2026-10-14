@@ -10,16 +10,22 @@ class RNViewControl : public Panel {
 
 	PopupMenu *menu = nullptr;
 	Array published_entries;
-	RNHostContext published_context;
+	std::function<void(const String &)> menu_action;
+	std::function<void()> menu_opening;
+	std::function<void(bool)> focus_changed;
 	void _menu_selected(int p_id);
 
 protected:
 	static void _bind_methods() {}
 	void gui_input(const Ref<InputEvent> &p_event) override;
+	void _notification(int p_what);
 
 public:
 	Size2 get_combined_minimum_size() const override { return Size2(); }
 	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
+	void set_menu_entries(const Array &p_entries);
+	void set_focus_callback(std::function<void(bool)> p_callback) { focus_changed = std::move(p_callback); }
+	void set_menu_callbacks(std::function<void(const String &)> p_action, std::function<void()> p_opening);
 	void publish_menu(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 };
 
