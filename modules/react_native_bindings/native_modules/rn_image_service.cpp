@@ -275,11 +275,15 @@ RNImageResult RNImageService::load_imported(const RNImageSource &p_source) {
 	if (texture.is_null()) {
 		return failure(RNErrorCode::NATIVE, "Native imported texture load failed");
 	}
+	// Imported textures may be VRAM-compressed; RGBA8 is the upper bound.
+	auto reservation = reserve(uint64_t(texture->get_width()) * uint64_t(texture->get_height()) * 4);
+	if (!reservation) {
+		return failure(RNErrorCode::LIMIT, "Image total memory limit exceeded");
+	}
 	auto resource = std::make_shared<RNImageResource>();
 	resource->texture = texture;
 	resource->pixels = texture->get_size();
-	resource->reservation = std::make_shared<RNImageReservation>();
-	resource->reservation->budget = budget;
+	resource->reservation = reservation;
 	RNImageResult result;
 	result.resource = resource;
 	return result;

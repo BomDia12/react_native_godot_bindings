@@ -38,6 +38,13 @@ folly::dynamic RNGodotApplication::dimensions(const RNApplicationSnapshot &p_sna
 }
 
 RNApplicationSnapshot RNGodotApplication::_capture() const {
+	std::string color_scheme;
+	bool active;
+	{
+		std::lock_guard lock(mutex);
+		color_scheme = scheme_override;
+		active = !paused;
+	}
 	RNApplicationSnapshot captured;
 	ProjectSettings *settings = ProjectSettings::get_singleton();
 	const double font_scale = settings->get_setting("react_native/text/font_scale", 1.0);
@@ -54,14 +61,14 @@ RNApplicationSnapshot RNGodotApplication::_capture() const {
 		const Size2 screen = Size2(display->screen_get_size()) / screen_scale;
 		captured.screen = { screen.x, screen.y, screen_scale, font_scale };
 	}
-	if (!scheme_override.empty()) {
-		captured.color_scheme = scheme_override;
+	if (!color_scheme.empty()) {
+		captured.color_scheme = color_scheme;
 	} else if (bool(settings->get_setting("react_native/appearance/follow_system", false)) && display && display->is_dark_mode_supported()) {
 		captured.color_scheme = display->is_dark_mode() ? "dark" : "light";
 	} else {
 		captured.color_scheme = String(settings->get_setting("react_native/appearance/color_scheme", "light")).utf8().get_data();
 	}
-	captured.active = !paused;
+	captured.active = active;
 	captured.focused = headless || display->window_is_focused();
 	captured.swap_left_and_right = swap_left_and_right;
 	const String locale = TranslationServer::get_singleton()->get_locale();

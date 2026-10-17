@@ -123,6 +123,8 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	SceneTree *tree = SceneTree::get_singleton();
 	main_thread = std::make_shared<RNMainThreadQueue>();
 	application = std::make_shared<RNGodotApplication>();
+	// JavaScript reads dimensions, appearance and locale while the bundle loads.
+	application->poll();
 	blobs = std::make_shared<RNBlobService>(p_setup.settings.limit("binary/max_blob_bytes"));
 	RNHTTPService *http_node = memnew(RNHTTPService(p_setup.settings));
 	tree->get_root()->call_deferred("add_child", http_node, false, Node::INTERNAL_MODE_BACK);

@@ -45,7 +45,14 @@ public:
 	void drain_releases();
 	bool has_pending_work() const;
 	void shutdown();
-	uint64_t used_bytes() const { return used; }
-	uint64_t count() const { return blobs.size(); }
+	uint64_t used_bytes() const {
+		std::lock_guard lock(mutex);
+		return used;
+	}
+	uint64_t count() const {
+		std::lock_guard lock(mutex);
+		return blobs.size();
+	}
+	uint64_t max_bytes() const { return maximum; }
 	std::shared_ptr<facebook::jsi::HostObject> collector_provider();
 };

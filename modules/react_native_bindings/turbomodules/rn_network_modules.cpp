@@ -374,6 +374,9 @@ void RNBlobModule::createFromParts(jsi::Runtime &rt, jsi::Array parts, const std
 		} else if (!read_blob(context.blobs, blob_descriptor(part["data"]), chunk, error)) {
 			rn_throw_js_error(rt, error.code.utf8().get_data(), error.message.utf8().get_data());
 		}
+		if (uint64_t(bytes.size()) + chunk.size() > context.blobs->max_bytes()) {
+			rn_throw_js_error(rt, RNErrorCode::LIMIT, "Blob aggregate limit exceeded");
+		}
 		bytes.append_array(chunk);
 	}
 	if (!context.blobs->create(godot_string(withId), bytes, error)) {
