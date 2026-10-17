@@ -160,7 +160,11 @@ func _process(_delta: float) -> void:
 			action("controlled", "Changed controlled value")
 			next_stage()
 		2:
-			require_condition((target("inventory-list") as ScrollContainer).scroll_vertical > 1000, "FlatList.scrollToIndex did not scroll the native control")
+			# Viewability reaches React after native scroll events and upstream's batching timers.
+			var scrolled := (target("inventory-list") as ScrollContainer).scroll_vertical > 1000
+			if not (scrolled and fixture().get("viewable", []).has("50")) and frames - stage_frame < 300:
+				return
+			require_condition(scrolled, "FlatList.scrollToIndex did not scroll the native control")
 			require_condition(fixture().get("renderedItems", []).has("50"), "FlatList did not virtualize the new window")
 			require_condition(fixture().get("viewable", []).has("50"), "FlatList viewability did not follow native offsets")
 			var section_header := target("section-header-Equipment")
