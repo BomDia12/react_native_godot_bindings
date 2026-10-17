@@ -49,6 +49,7 @@ void RNComponentViewRegistry::create(const ShadowView &p_view) {
 		factory = &factories->get_fallback();
 	}
 	std::unique_ptr<RNComponentView> view = (*factory)(p_view);
+	view->set_component_handle(p_view.componentHandle);
 	// The emitter comes first: props can start work, such as a local image
 	// load, that reports events before the next update.
 	view->update_event_emitter(p_view.eventEmitter);

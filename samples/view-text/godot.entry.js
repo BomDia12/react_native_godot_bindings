@@ -8,6 +8,7 @@ import './transaction.entry';
 import './platform.entry';
 import './component_registry.entry';
 import './native_module.entry';
+import './native_animated.entry';
 
 const styles = StyleSheet.create({
   container: {

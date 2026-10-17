@@ -11,6 +11,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 namespace facebook::react {
@@ -56,11 +57,14 @@ private:
 	std::shared_ptr<RNSceneBindings> scenes;
 	std::shared_ptr<RNMountingManager> mounting;
 	std::shared_ptr<facebook::react::RunLoopObserverManager> run_loop_observers;
+	std::mutex animation_mutex;
+	std::function<void()> animation_frame;
 	RNHostRuntime runtime;
 	std::unique_ptr<RNHostTeardown> teardown;
 
 	void _on_js_thread(std::function<void()> p_task, facebook::react::SchedulerPriority p_priority = facebook::react::SchedulerPriority::ImmediatePriority);
 	void _report_error(const String &p_error);
+	void _run_animation_frame();
 
 public:
 	explicit RNHostInstance(const Setup &p_setup);

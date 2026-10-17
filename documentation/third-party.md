@@ -59,8 +59,7 @@ applications inherit their Godot theme by default.
 
 React Native files are not vendored or modified in references. The `react-native-godot`
 package contains whole-file derived copies of Alert, TextInput, TextInputState and Modal, each
-guarded by the SHA-256 of its 0.87.1 base file in `overrides.json`, and narrow Metro
-source adaptations guarded the same way in `source-adaptations.json`. Both remain under
+guarded by the SHA-256 of its 0.87.1 base file in `overrides.json`. They remain under
 the upstream React Native MIT license.
 
 ## Local network fixture

@@ -29,6 +29,7 @@
 #include <jsi/hermes-interfaces.h>
 #include <logger/react_native_log.h>
 #include <react/http/platform/godot/GodotNetworkClients.h>
+#include <react/renderer/animated/NativeAnimatedNodesManagerProvider.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
 #include <react/renderer/components/ReactNativeGodotSpec/ComponentDescriptors.h>
 #include <react/renderer/components/godotwindow/GodotWindowShadowNode.h>
@@ -193,7 +194,19 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 		jsi::Object provider = jsi::Object::createFromHostObject(p_runtime, blob_service->collector_provider());
 		p_runtime.global().setProperty(p_runtime, "__blobCollectorProvider", provider.getProperty(p_runtime, "create"));
 	};
-	runtime.react_host = std::make_unique<ReactHost>(config, mounting, run_loop_observers, context, js_error, logger, nullptr, TurboModuleProviders{ rn_godot_turbo_module_provider(modules) }, nullptr, nullptr, install_bindings);
+	// Native Animated starts and stops its frame callback from the JS thread and
+	// from inside a frame, so the callback is swapped under a lock and runs on
+	// the main thread once per Godot frame.
+	auto animated = std::make_shared<NativeAnimatedNodesManagerProvider>(
+			[this](std::function<void()> &&p_on_render, bool) {
+				std::lock_guard lock(animation_mutex);
+				animation_frame = std::move(p_on_render);
+			},
+			[this](bool) {
+				std::lock_guard lock(animation_mutex);
+				animation_frame = nullptr;
+			});
+	runtime.react_host = std::make_unique<ReactHost>(config, mounting, run_loop_observers, context, js_error, logger, nullptr, TurboModuleProviders{ rn_godot_turbo_module_provider(modules) }, nullptr, animated, install_bindings);
 
 	const auto emit = [this](const std::string &p_name, folly::dynamic p_payload) {
 		main_thread->post([this, p_name, payload = std::move(p_payload)]() mutable {
@@ -300,8 +313,20 @@ Dictionary RNHostInstance::stats() const {
 	return stats;
 }
 
+void RNHostInstance::_run_animation_frame() {
+	std::function<void()> frame;
+	{
+		std::lock_guard lock(animation_mutex);
+		frame = animation_frame;
+	}
+	if (frame) {
+		frame();
+	}
+}
+
 void RNHostInstance::process_frame() {
 	main_thread->drain();
+	_run_animation_frame();
 	application->poll();
 	websockets->process_frame();
 	http->process_requests();

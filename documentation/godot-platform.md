@@ -72,6 +72,14 @@ is discarded, its errors are ignored and its synchronous calls fail with `E_CANC
 It stops its surfaces one at a time and lets React finish unmounting. JavaScript that
 keeps it busy for more than 1 s is interrupted.
 
+Animations with `useNativeDriver: true` run in upstream's C++ native Animated driver.
+While one is active, the driver steps once per Godot frame on the main thread and applies
+its values straight to the Godot controls, so a busy JS thread doesn't stall it. React
+Native then commits the final values back to the shadow tree, so later renders keep
+them. Native `Animated.event` handlers, such as the one behind ScrollView sticky headers,
+read native scroll events on the main thread. Animated layout props, such as `width` or
+`top`, go through a Fabric commit and a layout pass on the JS thread.
+
 `ReactNativeHost.evaluate(code)` returns a signal that completes with the converted
 result, for example `var value = await ReactNativeHost.evaluate("1 + 1")`.
 `get_last_error()` reports the latest JavaScript error and `get_service_stats()`
@@ -135,16 +143,11 @@ dispatch, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid (upstream's
 non-Android fallbacks) are not claimed as
 supported services or components.
 
-## Native components and upstream source adaptations
+## Native components
 
 The TextInput override preserves upstream state synchronization and ref methods and
 selects the unified Godot host for both editor modes; the Modal override retains Modal
-until its native dismiss event. `source-adaptations.cjs` changes only exact installed
-RN 0.87.1 paths and rejects a source digest mismatch. It feeds sticky-header Animated
-values from native
-scroll events. The Animated props hook skips the unavailable native queue on Godot.
-Button opacity feedback explicitly uses the upstream JS animation driver on Godot.
-General NativeAnimated support is absent.
+until its native dismiss event.
 
 React Native flattens Views that only lay out, and it mounts a View that only draws
 without nesting its children, so a Text can be a sibling of its bordered parent View in

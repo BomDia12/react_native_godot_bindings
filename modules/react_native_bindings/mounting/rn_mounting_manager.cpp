@@ -53,9 +53,10 @@ void RNMountingManager::_flush() {
 	}
 }
 
-RNComponentView *RNMountingManager::_find(Tag p_tag) const {
+RNComponentView *RNMountingManager::_find(Tag p_tag, SurfaceId &r_surface) const {
 	for (const auto &[surface, mounted] : surfaces) {
 		if (RNComponentView *view = mounted.views->find(p_tag)) {
+			r_surface = surface;
 			return view;
 		}
 	}
@@ -74,9 +75,22 @@ void RNMountingManager::dispatchCommand(const ShadowView &p_view, const std::str
 
 void RNMountingManager::synchronouslyUpdateViewOnUIThread(Tag p_tag, const folly::dynamic &p_props) {
 	auto apply = [this, p_tag, p_props] {
-		if (RNComponentView *view = _find(p_tag)) {
-			view->synchronously_update_props(p_props);
+		SurfaceId surface = 0;
+		RNComponentView *view = _find(p_tag, surface);
+		SchedulerTaskExecutor executor;
+		{
+			std::lock_guard lock(mutex);
+			executor = scheduler_executor;
 		}
+		if (!view || !executor) {
+			return;
+		}
+		executor([view, surface, &p_props](Scheduler &p_scheduler) {
+			const ComponentDescriptor *descriptor = p_scheduler.findComponentDescriptorByHandle_DO_NOT_USE_THIS_IS_BROKEN(view->get_component_handle());
+			if (descriptor) {
+				view->synchronously_update_props(*descriptor, PropsParserContext{ surface, *p_scheduler.getContextContainer() }, p_props);
+			}
+		});
 	};
 	if (main_thread->is_main_thread()) {
 		apply();
