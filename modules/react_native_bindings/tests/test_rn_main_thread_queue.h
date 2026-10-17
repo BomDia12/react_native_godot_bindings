@@ -40,28 +40,30 @@ TEST_CASE("[ReactNativeBindings][MainThreadQueue] sync calls block their thread 
 	CHECK(value == 7);
 }
 
-TEST_CASE("[ReactNativeBindings][MainThreadQueue] shutdown cancels blocked and new sync calls") {
+TEST_CASE("[ReactNativeBindings][MainThreadQueue] close cancels blocked and new sync calls and discards posted work") {
 	RNMainThreadQueue queue;
 	std::atomic<bool> finished = false;
 	std::atomic<bool> succeeded = true;
 	bool ran = false;
+	queue.post([&ran]() { ran = true; });
 	std::thread worker([&]() {
 		succeeded = queue.run_sync([&ran]() { ran = true; });
 		finished = true;
 	});
 	while (!finished) {
-		queue.begin_shutdown();
+		queue.close();
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 	worker.join();
 	CHECK_FALSE(succeeded);
+	queue.post([&ran]() { ran = true; });
 	queue.drain();
 	CHECK_FALSE(ran);
-	std::thread late([&]() { succeeded = queue.run_sync([]() {}); });
+	std::thread late([&]() { succeeded = queue.run_sync([&ran]() { ran = true; }); });
 	late.join();
 	CHECK_FALSE(succeeded);
-	queue.end_shutdown();
-	CHECK_FALSE(queue.is_shutting_down());
+	CHECK_FALSE(queue.run_sync([&ran]() { ran = true; }));
+	CHECK_FALSE(ran);
 }
 
 } // namespace TestRNMainThreadQueue

@@ -15,21 +15,8 @@
 #include <memory>
 #include <mutex>
 
-namespace facebook::react {
-class ReactHost;
-class RNWebSocketHub;
-class RunLoopObserverManager;
-} // namespace facebook::react
-
 class ReactNativeRootView;
-class RNBlobService;
-class RNGodotApplication;
-class RNHTTPService;
-class RNImageService;
-class RNMainThreadQueue;
-class RNMountingManager;
-class RNSceneBindings;
-class RNTextShaper;
+class RNHostInstance;
 class RNThemeMetricsStore;
 
 // Forwards application pause and resume, which only nodes receive.
@@ -49,27 +36,19 @@ protected:
 	static void _bind_methods();
 };
 
-// Runs React Native for every ReactNativeRootView: one upstream ReactHost with
-// its JS thread, the Godot services behind the TurboModules, and the per-frame
-// work that applies JS results on the main thread.
+// Runs React Native for every ReactNativeRootView: one RNHostInstance with its
+// upstream ReactHost, JS thread and Godot services, and the per-frame work that
+// applies JS results on the main thread. A hard reload replaces the instance and
+// tears the old one down in the background.
 class ReactNativeHost : public Object {
 	GDCLASS(ReactNativeHost, Object);
 
 	static ReactNativeHost *singleton;
 
-	std::shared_ptr<RNMainThreadQueue> main_thread;
 	std::shared_ptr<RNThemeMetricsStore> theme;
-	std::shared_ptr<RNTextShaper> shaper;
-	std::shared_ptr<RNGodotApplication> application;
 	RNServiceSettings settings;
-	std::shared_ptr<RNBlobService> blobs;
-	std::shared_ptr<RNHTTPService> http;
-	std::shared_ptr<RNImageService> images;
-	std::shared_ptr<facebook::react::RNWebSocketHub> websockets;
-	std::shared_ptr<RNSceneBindings> scenes;
-	std::shared_ptr<RNMountingManager> mounting;
-	std::shared_ptr<facebook::react::RunLoopObserverManager> run_loop_observers;
-	std::unique_ptr<facebook::react::ReactHost> react_host;
+	std::shared_ptr<RNHostInstance> instance;
+	Vector<std::shared_ptr<RNHostInstance>> retiring;
 
 	Vector<ObjectID> roots;
 	HashMap<facebook::react::SurfaceId, ObjectID> surfaces;
@@ -84,18 +63,19 @@ class ReactNativeHost : public Object {
 
 	mutable std::mutex error_mutex;
 	String last_error;
+	uint64_t error_generation = 0;
 
 	bool _start();
-	void _stop();
+	void _retire();
+	void _finish_retired();
 	void _start_surface(ReactNativeRootView *p_root);
 	void _stop_surface(ReactNativeRootView *p_root, bool p_stop_react = true);
 	void _process_frame();
 	void _theme_changed();
 	void _bundle_changed(const String &p_path, const String &p_content, bool p_exists);
-	void _record_error(const String &p_error);
+	void _record_error(uint64_t p_generation, const String &p_error);
 	void _finish_evaluation(uint64_t p_id, const Variant &p_result);
 	bool _defer(std::function<void()> p_task);
-	void _on_js_thread(std::function<void()> p_task);
 
 protected:
 	static void _bind_methods();

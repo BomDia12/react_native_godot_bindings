@@ -30,14 +30,20 @@ function NativeModuleApp() {
         bytes: new Uint8Array([1, 2, 3, 4]).subarray(1, 3),
       },
     ]);
-    const subscription = NativeExampleScene.onChanged(event => {
-      state.event = event;
-      setValue(event.value);
-    });
+    // onChanged reports every root's counter, so the roots take turns: each
+    // subscribes only once the previous root has unsubscribed.
+    let subscription = null;
     const fail = error => {
       state.error = {code: error.code, message: error.message};
     };
-    NativeExampleScene.incrementLater(rootTag, 2)
+    global.__godotNativeModuleTurn = (global.__godotNativeModuleTurn ?? Promise.resolve())
+      .then(() => {
+        subscription = NativeExampleScene.onChanged(event => {
+          state.event = event;
+          setValue(event.value);
+        });
+        return NativeExampleScene.incrementLater(rootTag, 2);
+      })
       .then(result => {
         state.result = result;
         subscription.remove();
@@ -46,7 +52,7 @@ function NativeModuleApp() {
       .then(result => {
         state.removedResult = result;
       }, fail);
-    return () => subscription.remove();
+    return () => subscription?.remove();
   }, [rootTag]);
   return (
     <View>

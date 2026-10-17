@@ -13,9 +13,9 @@ substitutes null.
 TurboModule methods run on the JS thread. A method that needs Godot posts its work to
 the main thread. Synchronous methods, such as `GodotScene.call`, block the JS thread until
 that work finishes and then convert the result on the JS thread; asynchronous methods
-return a Promise that settles later. The main thread never waits for JavaScript. While
-the host shuts down or reloads, pending and new synchronous calls fail with
-`E_CANCELLED`. Nodes and scene-owned resources are only touched on the main thread; the
+return a Promise that settles later. The main thread never waits for JavaScript. Once the
+host shuts down or a reload retires a runtime, that runtime's pending and new
+synchronous calls fail with `E_CANCELLED`, and its queued Godot work is discarded. Nodes and scene-owned resources are only touched on the main thread; the
 JS thread uses only `FileAccess`, `TextServer` and already-loaded fonts.
 
 `ReactNativeHost.evaluate(code)` evaluates JavaScript from Godot without blocking. It

@@ -76,6 +76,12 @@ void RNScrollComponentView::_emit(const StringName &p_event) {
 	}
 }
 
+RNScrollComponentView::~RNScrollComponentView() {
+	if (has_control()) {
+		scroll->set_callbacks({});
+	}
+}
+
 void RNScrollComponentView::update_event_emitter(const EventEmitter::Shared &p_emitter) {
 	RNComponentView::update_event_emitter(p_emitter);
 	RNScrollCallbacks callbacks;

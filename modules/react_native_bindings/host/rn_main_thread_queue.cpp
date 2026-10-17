@@ -6,11 +6,17 @@ RNMainThreadQueue::RNMainThreadQueue() :
 
 void RNMainThreadQueue::post(std::function<void()> p_work) {
 	std::lock_guard lock(mutex);
+	if (closed) {
+		return;
+	}
 	tasks.push_back({ std::move(p_work), nullptr });
 }
 
 bool RNMainThreadQueue::run_sync(std::function<void()> p_work) {
 	if (is_main_thread()) {
+		if (is_closed()) {
+			return false;
+		}
 		p_work();
 		return true;
 	}
@@ -18,7 +24,7 @@ bool RNMainThreadQueue::run_sync(std::function<void()> p_work) {
 	std::future<bool> completed = completion->get_future();
 	{
 		std::lock_guard lock(mutex);
-		if (shutting_down) {
+		if (closed) {
 			return false;
 		}
 		tasks.push_back({ std::move(p_work), completion });
@@ -33,32 +39,28 @@ void RNMainThreadQueue::drain() {
 		pending.swap(tasks);
 	}
 	for (Task &task : pending) {
-		task.work();
+		const bool open = !is_closed();
+		if (open) {
+			task.work();
+		}
 		if (task.completion) {
-			task.completion->set_value(true);
+			task.completion->set_value(open);
 		}
 	}
 }
 
-void RNMainThreadQueue::begin_shutdown() {
+void RNMainThreadQueue::close() {
 	std::lock_guard lock(mutex);
-	shutting_down = true;
-	for (auto task = tasks.begin(); task != tasks.end();) {
-		if (task->completion) {
-			task->completion->set_value(false);
-			task = tasks.erase(task);
-		} else {
-			++task;
+	closed = true;
+	for (Task &task : tasks) {
+		if (task.completion) {
+			task.completion->set_value(false);
 		}
 	}
+	tasks.clear();
 }
 
-void RNMainThreadQueue::end_shutdown() {
+bool RNMainThreadQueue::is_closed() const {
 	std::lock_guard lock(mutex);
-	shutting_down = false;
-}
-
-bool RNMainThreadQueue::is_shutting_down() const {
-	std::lock_guard lock(mutex);
-	return shutting_down;
+	return closed;
 }

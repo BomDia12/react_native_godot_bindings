@@ -209,9 +209,31 @@ func _run() -> void:
 		fail("JS timers stopped while two roots were running")
 		return
 
+	var dev_generation := ReactNativeHost.get_generation()
+	await js("nativeModuleProxy.DevSettings.reloadWithReason('smoke')")
+	if not await wait_until(func(): return ReactNativeHost.get_generation() == dev_generation + 1 and target(left) != null and target(right) != null, "the DevSettings reload"):
+		return
+	await get_tree().create_timer(0.2).timeout
+	if ReactNativeHost.get_generation() != dev_generation + 1:
+		fail("the DevSettings reload replaced the runtime more than once")
+		return
+	if not remember_tag(left.get_root_tag(), "the DevSettings reload") or not remember_tag(right.get_root_tag(), "the DevSettings reload"):
+		return
+
+	var bundle := ReactNativeFileSingleton.get_monitored_file()
+	ReactNativeFileSingleton.set_monitored_file("res://smoke/tests/multi_root/missing.bundle.js")
+	if not await wait_until(func(): return left.get_root_tag() == 0 and right.get_root_tag() == 0 and target(left) == null and target(right) == null, "the roots to stop without a bundle"):
+		return
+	ReactNativeFileSingleton.set_monitored_file(bundle)
+	if not await wait_until(func(): return target(left) != null and target(right) != null and await count("left") == 0 and await count("right") == 0, "the late bundle"):
+		return
+	if not remember_tag(left.get_root_tag(), "the late bundle") or not remember_tag(right.get_root_tag(), "the late bundle"):
+		return
+
 	for cycle in STRESS_CYCLES:
+		var reloaded_tag := left.get_root_tag()
 		left.reload()
-		if not await wait_until(func(): return target(left) != null, "a stress reload"):
+		if not await wait_until(func(): return target(left) != null and left.get_root_tag() != reloaded_tag, "a stress reload"):
 			return
 		if not remember_tag(left.get_root_tag(), "a stress reload"):
 			return

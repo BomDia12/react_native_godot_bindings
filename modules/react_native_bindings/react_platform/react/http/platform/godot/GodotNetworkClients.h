@@ -10,9 +10,10 @@ class RNMainThreadQueue;
 
 namespace facebook::react {
 
-// The factories that getHttpClientFactory() and getWebSocketClientFactory() return
-// create clients over these services; ReactNativeHost configures them.
-void configureGodotNetworkClients(std::weak_ptr<RNHTTPService> http, std::weak_ptr<RNMainThreadQueue> mainThread);
+// Factories for the clients that one React Native instance creates over its own
+// Godot services.
+HttpClientFactory rn_http_client_factory(std::weak_ptr<RNHTTPService> http, std::weak_ptr<RNMainThreadQueue> mainThread);
+WebSocketClientFactory rn_web_socket_client_factory(std::weak_ptr<RNMainThreadQueue> mainThread);
 
 class RNHttpClient : public IHttpClient {
 	std::weak_ptr<RNHTTPService> service_;

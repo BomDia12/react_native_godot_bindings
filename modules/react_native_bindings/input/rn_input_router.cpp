@@ -223,6 +223,9 @@ Control *RNInputRouter::_mouse_button(const Ref<InputEventMouseButton> &p_button
 	} else {
 		mouse_buttons &= ~mask;
 	}
+	if (mouse_buttons == 0) {
+		mouse_pressed = Target();
+	}
 	const bool primary_release = button == 0 && !p_button->is_pressed();
 	const Target target = primary_release && mouse_active.is_valid() ? mouse_active : p_target;
 	if (!target.is_valid()) {
@@ -233,6 +236,7 @@ Control *RNInputRouter::_mouse_button(const Ref<InputEventMouseButton> &p_button
 	}
 
 	if (p_button->is_pressed()) {
+		mouse_pressed = target;
 		const PointerEvent event = pointer(target, p_position, MOUSE_POINTER_ID, "mouse", button, mouse_buttons, 0.5f, true, p_button.ptr());
 		target.emitter->onPointerDown(event);
 		if (button == 1 || button == 2) {
@@ -388,6 +392,9 @@ void RNInputRouter::view_destroyed(Tag p_tag) {
 	if (hover.tag == p_tag) {
 		hover = Target();
 	}
+	if (mouse_pressed.tag == p_tag) {
+		mouse_pressed = Target();
+	}
 	if (mouse_active.tag == p_tag) {
 		const Target target = mouse_active;
 		mouse_active = Target();
@@ -410,14 +417,24 @@ void RNInputRouter::view_destroyed(Tag p_tag) {
 	}
 }
 
+// Something outside React took the mouse mid-press, such as a popup menu the
+// press opened, so the release will never come back here.
+void RNInputRouter::cancel_mouse() {
+	const Target active = mouse_active;
+	const Target pressed = mouse_pressed;
+	mouse_active = Target();
+	mouse_pressed = Target();
+	mouse_buttons = 0;
+	if (active.is_valid()) {
+		_cancel(active, mouse_position, MOUSE_TOUCH_ID, MOUSE_POINTER_ID, "mouse", true);
+	} else if (pressed.is_valid()) {
+		pressed.emitter->onPointerCancel(pointer(pressed, mouse_position, MOUSE_POINTER_ID, "mouse", 0, 0, 0, true, nullptr));
+	}
+}
+
 void RNInputRouter::cancel_all() {
 	_hover(Target(), mouse_position, nullptr);
-	if (mouse_active.is_valid()) {
-		const Target target = mouse_active;
-		mouse_active = Target();
-		_cancel(target, mouse_position, MOUSE_TOUCH_ID, MOUSE_POINTER_ID, "mouse", true);
-	}
-	mouse_buttons = 0;
+	cancel_mouse();
 	const HashMap<int, Contact> active(touches);
 	touches.clear();
 	for (const KeyValue<int, Contact> &entry : active) {

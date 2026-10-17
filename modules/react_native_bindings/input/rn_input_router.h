@@ -35,6 +35,7 @@ private:
 	};
 
 	Target hover;
+	Target mouse_pressed;
 	Target mouse_active;
 	int mouse_buttons = 0;
 	Position mouse_position;
@@ -61,5 +62,7 @@ public:
 	Control *route_pointer(const Ref<InputEvent> &p_event, const Target &p_target, const Position &p_position);
 	void route_key(const Ref<InputEventKey> &p_key, const Target &p_target);
 	void view_destroyed(facebook::react::Tag p_tag);
+	bool is_mouse_pressed() const { return mouse_buttons != 0; }
+	void cancel_mouse();
 	void cancel_all();
 };

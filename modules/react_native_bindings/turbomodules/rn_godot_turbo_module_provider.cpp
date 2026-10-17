@@ -1,7 +1,9 @@
 #include "rn_godot_turbo_module_provider.h"
 
+#include "../host/rn_main_thread_queue.h"
 #include "../interop/rn_dynamic.h"
 #include "rn_alert_modules.h"
+#include "rn_dev_settings_module.h"
 #include "rn_godot_alerts.h"
 
 #include <react/io/ImageLoaderModule.h>
@@ -33,12 +35,16 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 	add(RNAlertManagerModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAlertManagerModule>(p_invoker, host); });
 	add(RNGodotAlertModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) {
 		auto module = std::make_shared<RNGodotAlertModule>(p_invoker, host);
-		GodotAlerts::get_singleton()->add_presenter([weak = std::weak_ptr<RNGodotAlertModule>(module)](const String &p_request, int p_root_tag, const Dictionary &p_payload) {
-			auto alive = weak.lock();
-			if (alive) {
-				alive->present(p_request.utf8().get_data(), p_root_tag, rn_dynamic_from_variant(p_payload));
-			}
-			return alive != nullptr;
+		// Registering through the instance's queue keeps a runtime that is being
+		// torn down from presenting the next runtime's alerts.
+		host.main_thread->post([weak = std::weak_ptr<RNGodotAlertModule>(module)] {
+			GodotAlerts::get_singleton()->add_presenter([weak](const String &p_request, int p_root_tag, const Dictionary &p_payload) {
+				auto alive = weak.lock();
+				if (alive) {
+					alive->present(p_request.utf8().get_data(), p_root_tag, rn_dynamic_from_variant(p_payload));
+				}
+				return alive != nullptr;
+			});
 		});
 		return module;
 	});
@@ -53,6 +59,7 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 		});
 		return module;
 	});
+	add(RNDevSettingsModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNDevSettingsModule>(p_invoker, host); });
 	add(ImageLoaderModule::kModuleName, [loader = std::weak_ptr<IImageLoader>(context.image_loader)](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<ImageLoaderModule>(p_invoker, loader); });
 	return [factories, host](const std::string &p_name, const std::shared_ptr<CallInvoker> &p_invoker) -> std::shared_ptr<TurboModule> {
 		auto factory = factories->find(p_name);

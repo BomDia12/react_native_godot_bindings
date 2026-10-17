@@ -7,22 +7,9 @@
 
 #include <folly/io/IOBuf.h>
 
-#include <mutex>
-
 namespace facebook::react {
 
 namespace {
-
-struct NetworkEnvironment {
-	std::mutex mutex;
-	std::weak_ptr<RNHTTPService> http;
-	std::weak_ptr<RNMainThreadQueue> mainThread;
-};
-
-NetworkEnvironment &environment() {
-	static NetworkEnvironment instance;
-	return instance;
-}
 
 String godot_string(const std::string &p_value) {
 	return String::utf8(p_value.c_str(), p_value.size());
@@ -50,23 +37,15 @@ public:
 
 } // namespace
 
-void configureGodotNetworkClients(std::weak_ptr<RNHTTPService> http, std::weak_ptr<RNMainThreadQueue> mainThread) {
-	std::lock_guard lock(environment().mutex);
-	environment().http = std::move(http);
-	environment().mainThread = std::move(mainThread);
-}
-
-HttpClientFactory getHttpClientFactory() {
-	return []() {
-		std::lock_guard lock(environment().mutex);
-		return std::make_unique<RNHttpClient>(environment().http, environment().mainThread);
+HttpClientFactory rn_http_client_factory(std::weak_ptr<RNHTTPService> http, std::weak_ptr<RNMainThreadQueue> mainThread) {
+	return [http = std::move(http), mainThread = std::move(mainThread)]() {
+		return std::make_unique<RNHttpClient>(http, mainThread);
 	};
 }
 
-WebSocketClientFactory getWebSocketClientFactory() {
-	return []() {
-		std::lock_guard lock(environment().mutex);
-		return std::make_unique<RNWebSocketClient>(environment().mainThread);
+WebSocketClientFactory rn_web_socket_client_factory(std::weak_ptr<RNMainThreadQueue> mainThread) {
+	return [mainThread = std::move(mainThread)]() {
+		return std::make_unique<RNWebSocketClient>(mainThread);
 	};
 }
 

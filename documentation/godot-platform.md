@@ -63,7 +63,14 @@ scene-owned resources are touched only on the main thread, which drains a task q
 from `SceneTree.process_frame`. The main thread never waits on the JS thread. A
 synchronous TurboModule call that needs Godot blocks the JS thread until its main-thread
 task finishes; while the host shuts down, such calls fail with `E_CANCELLED`. JS timers
-use the steady clock, so pausing the SceneTree does not stop them.
+use the steady clock, so pausing the SceneTree does not stop them. Interval ticks that
+come due while JavaScript is busy are skipped, not queued.
+
+A reload or bundle refresh starts the new runtime at once, and the old runtime is torn
+down off the main thread. From that point on, it cannot reach Godot: its queued Godot work
+is discarded, its errors are ignored and its synchronous calls fail with `E_CANCELLED`.
+It stops its surfaces one at a time and lets React finish unmounting. JavaScript that
+keeps it busy for more than 1 s is interrupted.
 
 `ReactNativeHost.evaluate(code)` returns a signal that completes with the converted
 result, for example `var value = await ReactNativeHost.evaluate("1 + 1")`.
@@ -73,16 +80,29 @@ reports native HTTP, WebSocket and Blob usage.
 Upstream C++ logs through glog. The host routes it into Godot's output: errors print as
 Godot errors, and info and warnings only show with `--verbose`. glog writes no files.
 Debug builds include upstream's LeakChecker. It checks a stopped surface for live
-components when the next surface stops, so stopping several surfaces at once, as host
-shutdown does, reports components whose React cleanup is still pending.
+components when the next surface stops, so stopping several surfaces at once would report
+components whose React cleanup is still pending. Runtime teardown and roots that leave the
+tree together therefore stop their surfaces one at a time, each after React has finished
+with the previous one. Before a root's surface stops, events and state updates its
+controls sent while leaving the tree are flushed, so they cannot keep its components
+alive when the game quits.
 
 Each `ReactNativeRootView` runs one surface. Surface ids, which React Native calls root
 tags, are allocated as `1, 11, 21, …` and never reused. A root starts its surface when it
 enters the tree and stops it when it leaves; `reload()` and `application_key` changes
 start a new surface. Root size, layout direction, content scale and the
-`react_native/text/font_scale` setting become the surface's layout constraints. A bundle
-change detected by `ReactNativeFileSingleton` recreates the host and restarts every live
-root.
+`react_native/text/font_scale` setting become the surface's layout constraints. A root's
+`reload()` and `application_key` changes restart only that surface, on the current
+runtime.
+
+A hard reload replaces the runtime and restarts every live root. It comes only from
+`ReactNativeHost.reload()`, from a bundle change signalled by `ReactNativeFileSingleton`, or
+from JavaScript's `DevSettings.reload()`, which only `__DEV__` bundles call through. Each
+runtime runs one bundle. `force_refresh()` always reloads, even when the file is
+unchanged, and so does a new `set_monitored_file()` path. Only the editor process watches
+the bundle file for changes; a running game or an exported build doesn't. A bundle that is
+missing when roots start leaves them empty, and the bundle-change signal that makes it
+available starts the runtime and every waiting root.
 
 ## Colors
 
@@ -130,6 +150,9 @@ React Native flattens Views that only lay out, and it mounts a View that only dr
 without nesting its children, so a Text can be a sibling of its bordered parent View in
 the Godot tree. Views that clip, transform, change opacity or set `pointerEvents` to `none` or `box-only` keep
 their children nested; `pointerEvents="none"` disables input for that Godot subtree.
+A press that opens a Godot popup, such as a `godotContextMenu` or a text input's context
+menu, hands the release to the popup, so the root cancels that mouse pointer
+(`pointercancel`, plus `touchcancel` for a primary press).
 
 Text inherits the root's Godot RichTextLabel theme font, size and color. The Text host
 shapes, wraps and draws through TextServer itself, with per-span colors, decorations

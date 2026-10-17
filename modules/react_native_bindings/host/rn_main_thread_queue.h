@@ -15,7 +15,7 @@ class RNMainThreadQueue {
 	mutable std::mutex mutex;
 	std::deque<Task> tasks;
 	std::thread::id main_thread;
-	bool shutting_down = false;
+	bool closed = false;
 
 public:
 	RNMainThreadQueue();
@@ -24,8 +24,6 @@ public:
 	void post(std::function<void()> p_work);
 	bool run_sync(std::function<void()> p_work);
 	void drain();
-
-	void begin_shutdown();
-	void end_shutdown();
-	bool is_shutting_down() const;
+	void close();
+	bool is_closed() const;
 };

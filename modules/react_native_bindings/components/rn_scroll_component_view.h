@@ -12,6 +12,7 @@ protected:
 
 public:
 	explicit RNScrollComponentView(facebook::react::Tag p_tag);
+	~RNScrollComponentView() override;
 	void update_props(const facebook::react::Props::Shared &p_old, const facebook::react::Props::Shared &p_new) override;
 	void update_state(const facebook::react::State::Shared &p_state) override;
 	void update_event_emitter(const facebook::react::EventEmitter::Shared &p_emitter) override;

@@ -7,6 +7,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/main/viewport.h"
+#include "scene/main/window.h"
 
 using namespace facebook::react;
 
@@ -194,6 +195,9 @@ void ReactNativeRootView::_route(const Ref<InputEvent> &p_event, RNComponentView
 	position.page = root_transform.affine_inverse().xform(position.screen);
 	const Point2 local = p_view ? p_view->get_control()->get_global_transform_with_canvas().affine_inverse().xform(viewport_position) : Point2();
 	Control *pressed = input_router.route_pointer(p_event, RNInputRouter::target_for(p_view, local), position);
+	if (Ref<InputEventMouseButton> button = p_event; button.is_valid() && button->is_pressed()) {
+		callable_mp(this, &ReactNativeRootView::_cancel_mouse_taken_by_popup).call_deferred(p_viewport->get_instance_id());
+	}
 	if (!pressed) {
 		return;
 	}
@@ -201,6 +205,27 @@ void ReactNativeRootView::_route(const Ref<InputEvent> &p_event, RNComponentView
 		focus->grab_focus();
 	} else if (Control *owner = get_viewport()->gui_get_focus_owner(); owner && container->is_ancestor_of(owner)) {
 		owner->release_focus();
+	}
+}
+
+// A press can open a popup, such as a context menu, that then receives the
+// release instead of the pressed view.
+void ReactNativeRootView::_cancel_mouse_taken_by_popup(ObjectID p_viewport_id) {
+	Viewport *viewport = Object::cast_to<Viewport>(ObjectDB::get_instance(p_viewport_id));
+	while (viewport && !viewport->is_embedding_subwindows()) {
+		Window *embedded = Object::cast_to<Window>(viewport);
+		viewport = embedded ? embedded->get_embedder() : nullptr;
+	}
+	if (!viewport || !input_router.is_mouse_pressed()) {
+		return;
+	}
+	const TypedArray<Window> windows = viewport->get_embedded_subwindows();
+	for (int i = 0; i < windows.size(); ++i) {
+		const Window *popup = Object::cast_to<Window>(windows[i]);
+		if (popup && popup->is_visible() && popup->get_flag(Window::FLAG_POPUP) && popup->has_focus()) {
+			input_router.cancel_mouse();
+			return;
+		}
 	}
 }
 

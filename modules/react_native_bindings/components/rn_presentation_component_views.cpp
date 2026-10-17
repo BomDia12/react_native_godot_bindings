@@ -14,6 +14,12 @@ RNModalComponentView::RNModalComponentView(Tag p_tag) :
 		RNComponentView(p_tag, memnew(RNModalControl)), modal(Object::cast_to<RNModalControl>(get_control())) {
 }
 
+RNModalComponentView::~RNModalComponentView() {
+	if (has_control()) {
+		modal->set_callbacks({});
+	}
+}
+
 void RNModalComponentView::_report_screen_size() {
 	auto concrete = std::static_pointer_cast<const ConcreteState<ModalHostViewState>>(state);
 	if (!concrete || !modal->is_inside_tree()) {
@@ -57,6 +63,12 @@ void RNModalComponentView::update_event_emitter(const EventEmitter::Shared &p_em
 
 RNWindowComponentView::RNWindowComponentView(Tag p_tag) :
 		RNComponentView(p_tag, memnew(RNWindowControl)), window(Object::cast_to<RNWindowControl>(get_control())) {
+}
+
+RNWindowComponentView::~RNWindowComponentView() {
+	if (has_control()) {
+		window->set_callbacks({});
+	}
 }
 
 void RNWindowComponentView::update_props(const Props::Shared &p_old, const Props::Shared &p_new) {

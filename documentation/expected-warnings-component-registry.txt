@@ -1,6 +1,2 @@
 # The fixture intentionally renders a component without a Godot component view.
 ^ERROR: E_UNKNOWN_COMPONENT: no Godot component view is registered for 'RNMissingFixture'\.$
-# Upstream's debug LeakChecker checks the previously stopped surface when the next
-# one stops. Host shutdown stops every surface at once, before React's deferred
-# deletion cleanup runs, so it reports those surfaces' components.
-^ERROR: LeakChecker\.cpp:[0-9]+\] \[LeakChecker\] Surface with id: [0-9]+ has leaked [0-9]+ components out of [0-9]+$

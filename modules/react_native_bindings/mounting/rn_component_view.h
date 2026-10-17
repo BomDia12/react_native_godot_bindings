@@ -35,6 +35,11 @@ protected:
 	facebook::react::EventEmitter::Shared event_emitter;
 	facebook::react::LayoutMetrics layout_metrics;
 
+	// Godot still reports focus, size and visibility changes while the control
+	// leaves the tree, which this destructor does after a subclass is gone. A
+	// subclass that gives its control callbacks into itself clears them in its
+	// own destructor while has_control() holds.
+	bool has_control() const { return ObjectDB::get_instance(control_id) != nullptr; }
 	void apply_view_props(const facebook::react::ViewProps &p_props);
 	void apply_transform();
 	virtual Control *get_child_container() { return get_control(); }
