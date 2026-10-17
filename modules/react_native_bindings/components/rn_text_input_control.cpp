@@ -170,7 +170,11 @@ String RNTextInputControl::_submit_behavior() const {
 }
 void RNTextInputControl::_configure_editor(Control *p_editor) {
 	p_editor->set_mouse_filter(get_mouse_filter() == MOUSE_FILTER_IGNORE ? MOUSE_FILTER_IGNORE : MOUSE_FILTER_STOP);
-	p_editor->add_theme_font_override("font", config.font);
+	if (config.font.is_valid()) {
+		p_editor->add_theme_font_override("font", config.font);
+	} else {
+		p_editor->remove_theme_font_override("font");
+	}
 	p_editor->add_theme_font_size_override("font_size", config.font_size);
 	p_editor->add_theme_color_override("font_color", config.font_color);
 	const std::pair<const char *, std::optional<Color>> colors[] = { { "selection_color", config.selection_color }, { "caret_color", config.cursor_color }, { "font_placeholder_color", config.placeholder_color } };

@@ -4,7 +4,9 @@
 #include "../turbomodules/rn_godot_turbo_module_provider.h"
 #include "support/rn_upstream_test_macros.h"
 
+#include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/os/os.h"
 
 #include <jsi/hermes-interfaces.h>
 #include <react/http/IHttpClient.h>
@@ -24,6 +26,15 @@ namespace TestRNReactHost {
 
 using namespace facebook;
 
+// Test runs have no project, so nothing has created the user data directory yet.
+void write_script(const String &p_path, const String &p_source) {
+	DirAccess::make_dir_recursive_absolute(OS::get_singleton()->get_user_data_dir());
+	Ref<FileAccess> script = FileAccess::open(p_path, FileAccess::WRITE);
+	REQUIRE(script.is_valid());
+	script->store_string(p_source);
+	script->close();
+}
+
 class RecordingMountingManager : public react::IMountingManager {
 public:
 	std::atomic<int> transactions = 0;
@@ -40,10 +51,7 @@ public:
 
 TEST_CASE("[ReactNativeBindings][ReactHost] upstream ReactHost evaluates a script on its JS thread") {
 	const String script_path = "user://rn_react_host_test.js";
-	Ref<FileAccess> script = FileAccess::open(script_path, FileAccess::WRITE);
-	REQUIRE(script.is_valid());
-	script->store_string("globalThis.__answer = 6 * 7;");
-	script->close();
+	write_script(script_path, "globalThis.__answer = 6 * 7;");
 
 	auto context = std::make_shared<react::ContextContainer>();
 	context->insert(react::HttpClientFactoryKey, react::HttpClientFactory([] { return std::unique_ptr<react::IHttpClient>(); }));
@@ -77,9 +85,7 @@ std::future<double> read_answer(react::ReactHost &p_host, const std::string &p_g
 
 TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript through the provider") {
 	const String script_path = "user://rn_turbo_module_test.js";
-	Ref<FileAccess> script = FileAccess::open(script_path, FileAccess::WRITE);
-	REQUIRE(script.is_valid());
-	script->store_string(String::utf8(
+	const String source = String::utf8(
 			"globalThis.setImmediate = callback => setTimeout(callback, 0);"
 			"const constants = nativeModuleProxy.PlatformConstants.getConstants();"
 			"globalThis.__minor = constants.reactNativeVersion.minor;"
@@ -89,8 +95,8 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 			".then(text => { globalThis.__textLength = text === 'héllo' ? text.length : -1; blobs.release('turbo-blob'); }, () => { globalThis.__textLength = -2; });"
 			"try { nativeModuleProxy.Appearance.setColorScheme('purple'); } catch (error) { globalThis.__rejected = error.code === 'E_VALIDATION' ? 1 : 0; }"
 			"nativeModuleProxy.DevSettings.reloadWithReason('test');"
-			"globalThis.__reloadRequested = 1;"));
-	script->close();
+			"globalThis.__reloadRequested = 1;");
+	write_script(script_path, source);
 
 	auto main_thread = std::make_shared<RNMainThreadQueue>();
 	auto blobs = std::make_shared<RNBlobService>(1024 * 1024);
@@ -132,10 +138,7 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 }
 
 void start_runtime(RNHostRuntime &r_runtime, const String &p_script_path, const String &p_source) {
-	Ref<FileAccess> script = FileAccess::open(p_script_path, FileAccess::WRITE);
-	REQUIRE(script.is_valid());
-	script->store_string(p_source);
-	script->close();
+	write_script(p_script_path, p_source);
 
 	auto context = std::make_shared<react::ContextContainer>();
 	context->insert(react::HttpClientFactoryKey, react::HttpClientFactory([] { return std::unique_ptr<react::IHttpClient>(); }));
