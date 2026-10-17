@@ -1,10 +1,10 @@
 import React, {useState, useRef, useEffect} from 'react';
-import {AppRegistry, View, Text, Image, FlatList, SectionList, ScrollView, TextInput, Button, Pressable, Switch, ActivityIndicator, Modal, Appearance, useWindowDimensions} from 'react-native';
+import {Alert, AppRegistry, View, Text, Image, FlatList, SectionList, ScrollView, TextInput, Button, Pressable, Switch, ActivityIndicator, Modal, Appearance, useWindowDimensions} from 'react-native';
 import {GodotAppRegistry, useGodotAlert} from 'react-native-godot/app-registry';
 import {useGodotScene, call, callAsync} from 'react-native-godot/scene';
 import GodotWindow from 'react-native-godot/GodotWindow';
 import {fontFamily} from 'react-native-godot/fonts';
-import '../../js/godot/bootstrap-finalize';
+import 'react-native-godot/setup';
 
 import {runHTTPChecks, runSocketChecks, runLowFPSDownload} from './game/network';
 const icon = require('./assets/item.png');
@@ -55,8 +55,8 @@ function GameInventory({rootTag}) {
   const dimensions = useWindowDimensions();
   observations.dimensions = dimensions;
   observations.controlled = controlled;
-  const command = (name, args = []) => binding && call(binding.session, binding.handle, name, args);
-  const queued = (name, args = []) => binding && callAsync(binding.session, binding.handle, name, args);
+  const command = (name, args = []) => binding && call(binding.rootTag, binding.handle, name, args);
+  const queued = (name, args = []) => binding && callAsync(binding.rootTag, binding.handle, name, args);
   const refresh = async base => {
     setBusy(true);
     try {
@@ -72,7 +72,7 @@ function GameInventory({rootTag}) {
     actions.set(rootTag, {
       command, queued, refresh,
       testAlert: (title = 'Inventory alert') => alert(title, 'Local policy', [{text: 'OK', onPress: () => record('inventory-alert-button')}], {cancelable: true}).then(() => record('alert-settled')).catch(error => {observations.alertError = error.code;}),
-      ambientAlert: () => global.__godotScheduler.withoutOrigin(() => require('react-native/Libraries/Alert/Alert').default.alert('Unattributed', 'Godot handler', [{text: 'OK', onPress: () => record('ambient-alert-button')}])),
+      ambientAlert: () => Alert.alert('Unattributed', 'Godot handler', [{text: 'OK', onPress: () => record('ambient-alert-button')}]),
       staleAlert: () => savedAlert?.(),
       lowFPSDownload: base => runLowFPSDownload(base).then(() => {observations.lowFPSDownload = true;}).catch(error => {observations.networkError = error.message;}),
       httpChecks: (base, https) => runHTTPChecks(base, https).then(evidence => {observations.httpEvidence = evidence;}).catch(error => {observations.networkError = error.message;}),
@@ -81,7 +81,6 @@ function GameInventory({rootTag}) {
       scroll: index => list.current?.scrollToIndex({index, animated: false}),
       controlled: setControlled, clear: () => editor.current?.clear(),
       scheme: value => { Appearance.setColorScheme(value); setDark(value === 'dark'); },
-      fontScale: value => global.__godotNativeModules.get('GodotServices').setFontScale(value),
       socket: url => new Promise((resolve, reject) => {
         const socket = new WebSocket(url, ['fixture']);
         observations.socket = {opened: false, messages: [], closes: []};
@@ -159,6 +158,4 @@ GodotAppRegistry.registerComponent('CustomInventory', () => GameInventory, {aler
   record('custom-presenter');
   return payload.title === 'Decline' ? {handled: false} : {buttonId: 0, dismissed: false};
 }});
-global.__godotRunApplication = (key, rootTag) => AppRegistry.runApplication(key, {rootTag, initialProps: {rootTag}, fabric: true});
-global.__godotStopApplication = rootTag => global.RN$stopSurface(rootTag);
 global.__gameAction = (rootTag, name, value) => {actions.get(rootTag)?.[name](...(Array.isArray(value) ? value : [value]));};

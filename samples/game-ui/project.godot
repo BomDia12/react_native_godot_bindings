@@ -11,3 +11,7 @@ window/size/viewport_height=768
 
 [rendering]
 renderer/rendering_method="gl_compatibility"
+
+[react_native]
+
+network/tls/trusted_certificates="res://fixtures/tls/ca.pem"

@@ -3,7 +3,7 @@
   "project_dir": "samples/view-text",
   "scene": "res://smoke/tests/mounting_regressions/MountingRegressions.tscn",
   "timeout_seconds": 60,
-  "allowlist": "documentation/expected-warnings-mounting-regressions.txt",
+  "allowlist": "documentation/expected-warnings.txt",
   "bundle": {
     "mode": "shared",
     "package_dir": "samples/view-text",
@@ -20,7 +20,7 @@
     "samples/view-text/babel.config.js",
     "samples/view-text/package.json",
     "samples/view-text/package-lock.json",
-    "documentation/expected-warnings-mounting-regressions.txt",
+    "documentation/expected-warnings.txt",
     "samples/view-text/smoke/tests/mounting_regressions/MountingRegressions.tscn",
     "samples/view-text/smoke/tests/mounting_regressions/mounting_regressions.gd",
     "samples/view-text/smoke/tests/mounting_regressions/mounting_regressions.js"

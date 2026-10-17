@@ -1,0 +1,2 @@
+# The fixture intentionally renders a component without a Godot component view.
+^ERROR: E_UNKNOWN_COMPONENT: no Godot component view is registered for 'RNMissingFixture'\.$

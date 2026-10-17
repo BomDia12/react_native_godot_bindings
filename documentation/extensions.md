@@ -1,173 +1,118 @@
 # C++ extension contracts
 
-Extensions are registered in C++ before the first bundle starts. Definitions
-contain no JSI values and are frozen at scene initialization. Implementations belong in
-`components/`, `native_modules/`, or `examples/`; each source directory must appear in
-`module_source_dirs` in `modules/react_native_bindings/SCsub`.
+Extensions follow React Native's own pattern: a codegen spec in JavaScript, plus a C++
+component view or TurboModule that implements it. Godot specs live in
+`packages/react-native-godot/specs/`. `node packages/react-native-godot/scripts/codegen.cjs`
+regenerates `modules/react_native_bindings/generated/`, which is committed. C++ sources
+belong in `components/`, `turbomodules/` or `examples/`; each source directory must appear
+in `module_source_dirs` in `modules/react_native_bindings/SCsub`.
 
-## Host descriptors
+## Component views
 
-A descriptor owns host creation, pure prop preparation, complete application, state
-capture/restore, measurement, signal wiring, commands, events, and traits. The working
-example registers through the same API as View and Text:
-
-```cpp
-bool rn_register_example_meter(RNHostDescriptorRegistry &p_registry,
-        RNError &r_error) {
-    return p_registry.register_descriptor(
-            std::make_shared<RNExampleMeterDescriptor>(), r_error);
-}
-```
-
-`RNExampleMeterDescriptor` derives from `RNHostDescriptor`, is named
-`RNExampleMeter`, creates a `ProgressBar`, validates `value` and `tint` in `prepare()`,
-measures to an intrinsic 80×20, and implements `advance`. Its signal wiring is:
-
-```cpp
-void attach_signals(Control *p_host, const RNHostContext &p_context) const override {
-    const Callable callback = callable_mp(
-            p_context.owner,
-            &ReactNativeRootView::_on_descriptor_value_changed)
-            .bind(p_context.tag, p_host->get_instance_id());
-    if (!p_host->is_connected("value_changed", callback)) {
-        p_host->connect("value_changed", callback);
-    }
-}
-
-void detach_signals(Control *p_host, const RNHostContext &p_context) const override {
-    const Callable callback = callable_mp(
-            p_context.owner,
-            &ReactNativeRootView::_on_descriptor_value_changed)
-            .bind(p_context.tag, p_host->get_instance_id());
-    if (p_host->is_connected("value_changed", callback)) {
-        p_host->disconnect("value_changed", callback);
-    }
-}
-```
-
-The matching JavaScript consumer uses normal React Native APIs:
+A native component starts as a codegen spec. The example meter's spec is
+`specs/RNExampleMeterNativeComponent.js`:
 
 ```js
-const RNExampleMeter = requireNativeComponent('RNExampleMeter');
+type NativeProps = $ReadOnly<{
+  ...ViewProps,
+  value?: Double,
+  tint?: ?ColorValue,
+  onValueChanged?: ?DirectEventHandler<ValueChangedEvent>,
+}>;
 
-<RNExampleMeter
-  ref={meter}
-  value={0.25}
-  tint="#33cc66"
-  onValueChanged={event => setValue(event.nativeEvent.value)}
-/>
+export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+  supportedCommands: ['advance'],
+});
 
-UIManager.dispatchViewManagerCommand(
-  findNodeHandle(meter.current),
-  'advance',
-  [0.25],
-);
+export default (codegenNativeComponent<NativeProps>('RNExampleMeter'): NativeType);
 ```
 
-Preparation must finish before scene mutation. Every apply path must describe the whole
-owned state. Capture state before updates and restore it if any later mutation fails;
-connect signals only for published hosts and disconnect them on removal. Unknown names
-fail with `E_UNKNOWN_COMPONENT` and retain the previous published tree. Adding a new
-component-name switch to the root view or mounting manager bypasses this contract and is
-not supported.
+Codegen produces the props, event emitter, shadow node and component descriptor. A
+component that needs its own measurement or state passes `{interfaceOnly: true}` and
+supplies a shadow node under `react_platform/`, as `GodotWindow`, `GodotTextInput` and
+`Switch` do.
 
-## Native modules
-
-Schemas are handwritten from `RNValueSchema`, `RNMethodSchema`, and `RNEventSchema`.
-This is the complete registration shape used by the example module (the helper functions
-construct the record schemas shown in `examples/rn_example_scene_module.cpp`):
+On the Godot side a component view owns one Control and translates upstream props,
+state, layout and events into it on the main thread:
 
 ```cpp
-RNModuleDefinition definition;
-definition.name = "ExampleScene";
+void RNExampleMeterComponentView::update_props(const Props::Shared &p_old, const Props::Shared &p_new) {
+	RNComponentView::update_props(p_old, p_new);
+	const auto &next = static_cast<const RNExampleMeterProps &>(*p_new);
+	meter->set_value_no_signal(next.value);
+}
 
-RNMethodSchema echo = method("echo", echo_schema());
-echo.arguments.push_back(argument("value", echo_schema()));
-definition.methods.push_back(echo);
-
-RNMethodSchema increment = method(
-        "incrementLater", counter_value_schema(), RNCallMode::ASYNC, true);
-increment.arguments.push_back(argument(
-        "session", RNValueSchema::value(RNValueType::SESSION)));
-RNValueSchema target = RNValueSchema::value(RNValueType::OBJECT);
-target.capability = "ExampleCounter";
-increment.arguments.push_back(argument("target", target));
-increment.arguments.push_back(argument(
-        "amount", RNValueSchema::value(RNValueType::FLOAT)));
-definition.methods.push_back(increment);
-
-RNEventSchema changed;
-changed.name = "changed";
-changed.subscription_name = "onChanged";
-changed.payload = counter_value_schema();
-changed.requires_session = true;
-definition.events.push_back(changed);
-definition.factory = []() { return std::make_unique<RNExampleSceneModule>(); };
-return p_registry.register_module(definition, r_error);
+void RNExampleMeterComponentView::update_event_emitter(const EventEmitter::Shared &p_emitter) {
+	RNComponentView::update_event_emitter(p_emitter);
+	auto emitter = std::static_pointer_cast<const RNExampleMeterEventEmitter>(p_emitter);
+	value_changed = emitter ? std::function<void(double)>([emitter](double p_value) { emitter->onValueChanged({ .value = p_value }); }) : nullptr;
+}
 ```
 
-The subscription member is exactly `onChanged`; names are not derived by capitalization.
-Its JavaScript ownership and removal are explicit:
+`RNComponentView` places children by counting only React-owned siblings, so Godot
+children authored in a scene survive every mutation. Override `get_child_container()`
+when children belong inside an internal control, `handle_command()` for commands,
+`get_input_controls()` and `owns_input_control()` when internal controls receive input,
+`get_focus_control()` when another control takes focus, and `owns_activation()` when the
+Godot control handles presses itself. Controls return an empty combined minimum size and
+an unbounded combined maximum size, so React Native's layout sizes them exactly.
+
+Register the descriptor and the view together in `host/react_native_host.cpp`: add
+`concreteComponentDescriptorProvider<RNExampleMeterComponentDescriptor>()` to
+`component_registry_factory()` and the view factory to `component_view_factories()`. A
+name without a view factory reports `E_UNKNOWN_COMPONENT` and mounts a plain View.
+
+JavaScript uses the spec directly:
 
 ```js
-const scene = TurboModuleRegistry.getEnforcing('ExampleScene');
-const session = openSession(rootTag);
-const target = scene.getTarget(session);
-const subscription = scene.onChanged(session, event => setValue(event.value));
+import RNExampleMeter, {Commands} from 'react-native-godot/specs/RNExampleMeterNativeComponent';
 
-await callAsync(scene, 'incrementLater', [session, target, 2], {signal});
-
-subscription.remove();
-closeSession(session);
+<RNExampleMeter ref={meter} style={{width: 80, height: 20}} value={0.25}
+  onValueChanged={event => setValue(event.nativeEvent.value)} />;
+Commands.advance(meter.current, 0.25);
 ```
 
-`global.__godotNativeModules.getSchema(name)` and a module proxy's `__godotSchema`
-return copied schema metadata; changing the copy cannot alter the frozen native
-definition. Callbacks are retained only in the generation
-registry; native jobs carry tokens and copied Variants, never JSI references. The module
-emits through `RNCompletionToken`, which queues delivery instead of entering Hermes.
+## TurboModules
 
-## Initialization order
+A module spec declares its methods and events; `specs/NativeExampleScene.js` is the
+example:
 
-At `MODULE_INITIALIZATION_LEVEL_SCENE`, `register_types.cpp` registers built-in and
-project descriptors, freezes that registry, registers built-in and project modules,
-freezes module definitions, and then exposes scene classes. Registration rejects empty,
-duplicate, invalid, or reserved names before a bundle evaluates. Core initialization
-creates the runtime/coordinator only and performs no scene-dependent registration.
+```js
+export interface Spec extends TurboModule {
+  +getConstants: () => {name: string, version: number};
+  +read: (rootTag: RootTag) => CounterValue;
+  +incrementLater: (rootTag: RootTag, amount: number) => Promise<CounterValue>;
+  +onChanged: EventEmitter<CounterValue>;
+}
+```
 
-## Stateful host publication
+The C++ class derives from the generated `NativeExampleSceneCxxSpec` and receives an
+`RNHostModuleContext` with the main-thread queue and a root lookup. Methods run on the JS
+thread. A synchronous method that needs Godot uses `main_thread->run_sync`, which blocks
+the JS thread until the main thread runs the work; an asynchronous method returns an
+`RNJSPromise` and settles it from the main thread. Never touch nodes from the JS thread,
+and never make the main thread wait for JavaScript. Events emit through the generated
+`emitOn...` methods or the module's event emitter from any thread. Register the factory in
+`RNTurboModuleContext::extensions` where `host/react_native_host.cpp` builds the
+TurboModule context. Specs whose values are only known at runtime use names ending in
+`Cxx`, so codegen passes `mixed` values through as `jsi::Value`.
 
-Resource resolution runs on the main thread before Yoga and produces immutable
-component data and a dependency revision. Measured leaves and independent scroll
-or presentation child layouts use descriptor policies. Internal controls are owned
-by the descriptor's child container; renderer ordering touches only React children.
-The external-layout native opt-in lets Yoga constrain controls without changing
-ordinary Godot minimum-size behavior.
-
-Capture native state before mutation. Editor checkpoints include native undo/redo,
-preedit and pending notification state; string setters are not a rollback mechanism.
-`after_publish` runs parent first only after publication and owns asynchronous work,
-subscriptions and presentation activation. The copied event sink checks generation,
-surface epoch, tag, native object identity and revision. Completion code must also
-check `is_current` before applying native state. Visual snapshots use actual native
-transforms, viewport clips, scroll positions and TextServer span bounds.
-
-`RNImageTransport` is the 6B handoff. Start/completion/cancel run on the main thread.
+`RNImageTransport` connects the image service to a transport. Start, completion and cancel run on the main thread.
 Transport must enforce the encoded ceiling before growing response buffers, honor
 headers and include/omit credentials, and mark no-store/no-cache responses
 uncacheable. `cancel` returns true only when transport allocations are released;
 otherwise completion must still occur so the held reservation can be released.
 Credentialed requests, including explicit Authorization/Cookie, bypass shared cache
 and deduplication. Only explicitly credential-free requests share results. Image
-limits under `react_native/images/` are snapshotted per runtime generation; cache
+limits under `react_native/images/` are read when the host starts; cache
 zero disables cache ownership, while other ceilings must be positive. Mounted
 textures retain their budget reservation after cache eviction. Static PNG/JPEG/WebP
 codecs and imported native textures are bounded before decoding or allocation.
 
 ## Script-authored scene capabilities
 
-The frozen native registry contains the generic GodotScene module, not application
-schemas. New scripts/resources attach an RNSceneBinding without recompiling C++:
+The generic GodotScene module carries application schemas at runtime. New scripts and
+resources attach an RNSceneBinding without recompiling C++:
 
 ```gdscript
 var resource := RNSceneBinding.new()
@@ -193,48 +138,19 @@ GodotAppRegistry.registerComponent('Inventory', () => Inventory, {alerts: true})
 ```
 
 Options are Godot helper options; upstream AppRegistry's third argument remains the
-`section` boolean (`options.section` forwards it). `alerts` defaults to false; true
-uses a local Godot AcceptDialog. A custom function receives the copied presentation
-payload and returns/resolves `{buttonId, dismissed}` or `{handled:false}` to decline.
-The request stays bound to its originating root/epoch. `useGodotRoot()` exposes that
-session/origin and root-bound alert function; store the function for timers/promises.
-No ambient scope survives a microtask automatically.
+`section` boolean (`options.section` forwards it). `alerts` defaults to false, which
+bubbles root alerts to Godot handlers; `true` presents a Godot AcceptDialog in the root.
+A custom function receives the presentation payload and returns or resolves
+`{buttonId, dismissed}`, or `{handled: false}` to decline. `useGodotRoot()` exposes the
+root tag and its alert function. Plain `Alert.alert` is not tied to a root and goes to
+the application handler.
 
-A root can set `set_alert_handler(callable)`; the application fallback is installed with `GodotAlerts.set_alert_handler(callable)`.
-The Callable receives `(requestId, origin, payload)` and completes asynchronously
-with `root.complete_alert(requestId, {buttonId: 0, dismissed: false})`; the application
-singleton `GodotAlerts.complete_alert(requestId, result)` completes unattributed requests.
-Handlers complete explicitly; their return value is ignored.
-Default originless requests remain originless. Decline bubbles once; presenter failure,
-origin destruction/reload and stale stored callbacks cancel rather than selecting a
-sibling. Native dialogs attach to the origin's presentation Window; Window's React
-content retains the same root context.
-
-## Native service lifecycle
-
-Modules can implement `shutdown`, `on_session_closed`,
-`on_surface_closed`, `on_scene_binding_changed`, `process_frame`, `has_pending_work`
-and `on_result_delivered`. The registry owns generation instances and invokes shutdown
-before JSI caches disappear. Copied native events are bounded and immutable; listener
-snapshots retain a cursor when the frame budget is exhausted. Hermes checkpoints follow
-each delivered callback. Native jobs never carry JSI references. Completion payloads
-share a 16 MiB byte bound; an overflowing request rejects with `E_LIMIT` and still invokes
-`on_result_delivered(..., false)` for ownership cleanup. `RNEventSchema.keeps_runtime_alive`
-defaults to true for polling subscriptions; passive listeners may set it to false.
-Queued events, promises and module-reported pending work still keep delivery active.
-
-The shared image service receives the pooled HTTP adapter before bundle evaluation.
-Its start/complete/cancel contract and existing descriptor publication hooks remain as
-above; failed preparation starts no transport work. A module completion must honor the
-generation and release retained response ownership when delivery/conversion fails.
-
-`RNCompletionToken::emit` returns whether the bounded event queue accepted a
-notification. Producers must retain a bounded retry or fail/remove their pending work
-when it returns false. Custom Alert presentation rejects with `E_LIMIT` and removes its
-request when the presentation notification cannot be queued. Native noncancelable
-alerts reopen after a window-close attempt and remain available for a button choice.
-
-Alert results are discriminated by `dismissed`: a button choice has a numeric
-`buttonId` and `dismissed: false`; dismissal has `buttonId: null` and `dismissed: true`.
-Session wrappers use `{$godot: 'Session', handle: string}`. The TypeScript declarations
-match the native result validation and session codec.
+A root can set `set_alert_handler(callable)`; the application handler is installed with
+`GodotAlerts.set_alert_handler(callable)`. The Callable receives
+`(requestId, origin, payload)`, where `origin` is `{rootTag}` or null, and completes
+asynchronously with `root.complete_alert(requestId, {buttonId: 0, dismissed: false})` or
+`GodotAlerts.complete_alert(requestId, result)`. Its return value is ignored. Without any
+handler, a native dialog presents the alert. A decline bubbles once; a stopped root
+cancels its pending alerts. Noncancelable native alerts reopen after a window-close
+attempt. Results have a numeric `buttonId` and `dismissed: false`, or `buttonId: null`
+and `dismissed: true`.

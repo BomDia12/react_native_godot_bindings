@@ -1,11 +1,13 @@
 # React Native bindings for Godot
 
-This repository builds the React Native 0.87.1 component layer as an
-external Godot module. Godot is cloned into the ignored `godot/` working directory; the
+This repository runs React Native 0.87.1 inside Godot as an external module. It builds
+upstream React Native's C++ core (Fabric, the TurboModule system and `ReactHost`) from
+pinned submodules and adds a Godot platform: component views over Godot controls,
+TurboModules over Godot services, and the `react-native-godot` JavaScript package. Godot is cloned into the ignored `godot/` working directory; the
 tracked module remains under `modules/react_native_bindings/`.
 
 The tested Linux path includes independent React surfaces, retained native controls,
-images, lists, editing and presentations, a monotonic frame scheduler, pooled Godot
+images, lists, editing and presentations, a JavaScript thread separate from Godot's main thread, pooled Godot
 HTTPRequest, WebSocketPeer and chunked Blob services. The [working game](samples/game-ui/DEMO.md)
 keeps enemy and inventory state in GDScript: signals update four RN surfaces directly,
 and declared RN commands mutate only their bound Godot target. Network scenarios feed
@@ -41,21 +43,29 @@ cd react_native_godot_bindings
 scripts/bootstrap.sh
 scripts/build_hermes.sh
 scripts/build_godot.sh
+npm --prefix packages/react-native-godot ci
+node packages/react-native-godot/scripts/codegen.cjs
+node packages/react-native-godot/scripts/check-overrides.cjs
+npm --prefix packages/react-native-godot test
 npm --prefix samples/view-text ci
-npm --prefix samples/view-text run test:godot
 scripts/run_baseline.sh
 scripts/run_component_display.sh
 ```
 
-`bootstrap.sh` creates or verifies the pinned `godot/` checkout. `build_hermes.sh` builds
-the pinned Hermes submodule from source. `build_godot.sh` attaches `modules/` through
+`bootstrap.sh` creates or verifies the pinned `godot/` checkout, initializes the pinned
+React Native, folly, glog, fmt, double-conversion, fast_float and nlohmann/json submodules,
+and downloads the Boost headers. `build_hermes.sh` builds the pinned Hermes submodule
+against React Native's JSI. `codegen.cjs` regenerates the committed React Native codegen
+output in `modules/react_native_bindings/generated/`. `build_godot.sh` attaches `modules/` through
 Godot's `custom_modules` option. `run_baseline.sh` discovers the restricted manifests at
 `samples/*/smoke/tests/*/smoke_test.json`, creates fresh Metro bundles, and runs every
 declared headless smoke test. Shared manifests with the same package, npm script, and
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the
 default concurrency of two Godot processes.
 
-The sample's `build:godot` script uses the repository-owned Metro config and stages its
+The JavaScript platform is the `react-native-godot` package in `packages/react-native-godot/`.
+Samples depend on it through `file:../../packages/react-native-godot`, and the sample's
+`build:godot` script uses the package's Metro config and stages its
 bundle, source map, dependency evidence, and local asset variants under
 `samples/view-text/dist/`. Application resolution prefers `.godot.*`, then `.native.*`,
 then generic files; the supported graph does not select Android/iOS platform files.
@@ -74,12 +84,13 @@ Supported versions are defined in `baseline.env` and explained in
 
 Build one Metro bundle that registers every application key used by the Godot scene. Set
 each `ReactNativeRootView.application_key` to one of those registered keys; `GodotApp` is
-the default. All roots share one Hermes runtime and one evaluated bundle, while each root
-owns an independent React surface.
+the default. All roots share one `ReactNativeHost`, one Hermes runtime and one evaluated
+bundle, while each root owns an independent React surface. JavaScript runs on its own
+thread; `await ReactNativeHost.evaluate(code)` evaluates code from GDScript.
 
 Calling `reload()` or changing a live root's application key restarts only that surface
-and assigns it a new root tag. A React Native file refresh is process-wide: it resets
-Hermes once, evaluates the shared bundle once, and restarts every live root with a new
+and assigns it a new root tag. A React Native file refresh is process-wide: it recreates
+the host once, evaluates the shared bundle once, and restarts every live root with a new
 tag.
 
 Successful merges to `main` replace the `baseline-linux-latest` rolling prerelease. Its

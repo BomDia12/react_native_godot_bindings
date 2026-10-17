@@ -7,7 +7,6 @@ const initialState = {
   items: ['alpha', 'beta', 'gamma'],
   alphaText: 'alpha',
   wide: false,
-  recovery: 0,
 };
 
 function TransactionApp() {
@@ -26,19 +25,17 @@ function TransactionApp() {
           return {...current, items: [...current.items, 'delta']};
         case 'style':
           return {...current, items: ['alpha', 'gamma', 'delta'], wide: true};
-        case 'recover':
-          return {...current, recovery: current.recovery + 1};
         default:
           return current;
       }
     });
   };
-  global.__godotTransactionPropsAfterFailure = () => {
+  global.__godotTransactionSetNativeProps = () => {
     alphaRef.current?.setNativeProps({opacity: 0.4});
   };
 
   return (
-    <View style={{flex: 1, flexDirection: 'row', gap: 4, opacity: state.recovery ? 0.99 : 1}}>
+    <View style={{flex: 1, flexDirection: 'row', gap: 4}}>
       {state.items.map(item => (
         <View
           key={item}

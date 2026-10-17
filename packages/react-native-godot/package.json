@@ -1,0 +1,41 @@
+{
+  "name": "react-native-godot",
+  "version": "0.1.0",
+  "description": "Godot platform for React Native",
+  "license": "MIT",
+  "exports": {
+    "./metro": "./metro.cjs",
+    "./resolver": "./resolver.cjs",
+    "./assets": "./assets.cjs",
+    "./app-registry": "./src/app-registry.js",
+    "./scene": "./src/scene.js",
+    "./GodotWindow": "./src/GodotWindow.js",
+    "./fonts": "./src/fonts.js",
+    "./values": "./src/values.js",
+    "./package.json": "./package.json",
+    "./setup": "./src/setup.js",
+    "./specs/*": "./specs/*.js"
+  },
+  "types": "./godot.d.ts",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "check-overrides": "node scripts/check-overrides.cjs",
+    "codegen": "node scripts/codegen.cjs"
+  },
+  "peerDependencies": {
+    "react": "19.2.3",
+    "react-native": "0.87.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@react-native/babel-preset": "0.87.1",
+    "@react-native/codegen": "0.87.1",
+    "@react-native/metro-config": "0.87.1",
+    "metro": "0.87.0",
+    "react": "19.2.3",
+    "react-native": "0.87.1"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

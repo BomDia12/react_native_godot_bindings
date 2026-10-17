@@ -2,14 +2,14 @@ import React, {useState, useRef, useEffect} from 'react';
 import {AppRegistry, View, Text, Image, ScrollView, FlatList, SectionList, TextInput, Button, Pressable, Modal, Switch, ActivityIndicator} from 'react-native';
 import GodotWindow from 'react-native-godot/GodotWindow';
 import {fontFamily} from 'react-native-godot/fonts';
-import '../../js/godot/bootstrap-finalize';
+import 'react-native-godot/setup';
 
 const itemIcon = require('./assets/item.png');
 const importedFont = fontFamily(require('./assets/OpenSans.woff2'));
 const rows = Array.from({length: 100}, (_, index) => ({id: String(index), title: 'Item ' + index}));
 const sections = [{title: 'Equipment', data: rows.slice(0, 8)}, {title: 'Supplies', data: rows.slice(8, 16)}];
 const fixture = {enemySetters: {}, refs: {}};
-const state = global.__phase6a = {events: [], enemies: {}, renderedItems: []};
+const state = global.__gallery = {events: [], enemies: {}, renderedItems: []};
 const record = name => state.events.push(name);
 const dataIcon = {uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAAAAADFHGIkAAAAAmJLR0QA/4ePzL8AAAAHdElNRQfqCgECJyKFJspvAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTEwLTAxVDAyOjM5OjE3KzAwOjAwucRQNQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0xMC0wMVQwMjozOToxNyswMDowMMiZ6IkAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMTAtMDFUMDI6Mzk6MzQrMDA6MDDsQdS2AAABbUlEQVQoz22SsW4TQRCGv39u13cRZ8HJRhShgT5NpEQUlKnCC/AI5AnyGunIi4SKHilI9DSWCLiIZMsuYnH23e1Q+BwsxDY7mp35Z/T9qzNc/OcEfwwlSAAuXIG+3tqmI4shuXAg9OnmoXpVaTFdFDEhIOAIW43en4wH3sy/3syeJIDsNcgeji9P8nbT+PDozfRHnrR9yFbHlwcrl6SuLt9O7nIHk6wZfdA6CIGytV+MNwJzVJ+/qDMHB7D183e1wKB9elqbQ7+4/T6tWjDUvBy3gr4DtaPDjTApVdH3YXiskjB2Gv8QM9wWjf7mhZqFOeYep7OwGwDucfZr4JgIy9uDTjv6SsXtMoBBKj7dF13fo664vykcDIjzj+TdVqjNuZ4PfMvK87vJ0Tgld8VyfvWtTD1dPP/5pavKYsDs8/WkTDjSWW9U/eywYjFdFjE5cvUOpjBcf+/I4tDT1vXwuL4Vwr1DyMH3fonvXc4fihicbbO3bcMAAAAASUVORK5CYII='};
 
@@ -93,10 +93,8 @@ function Inventory() {
 }
 AppRegistry.registerComponent('EnemyPanel', () => EnemyPanel);
 AppRegistry.registerComponent('Inventory', () => Inventory);
-global.__godotRunApplication = (key, rootTag) => AppRegistry.runApplication(key, {rootTag, initialProps: {rootTag}, fabric: true});
-global.__godotStopApplication = rootTag => global.RN$stopSurface(rootTag);
 
-global.__phase6aAction = (action, value) => {
+global.__galleryAction = (action, value) => {
   if (action === 'switch-pointer-events') { fixture.setSwitchPointerEvents(value); }
   else if (action === 'rerender') { fixture.rerender(); }
   else if (action === 'scroll') { fixture.scrollList(value); }

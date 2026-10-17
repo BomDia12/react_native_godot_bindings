@@ -21,8 +21,6 @@ if [[ $(git -C "$GODOT_SOURCE_DIR" rev-parse HEAD) != "$GODOT_COMMIT" ]]; then
 	exit 1
 fi
 
-python3 "$SCRIPT_DIR/godot_patches.py" "$GODOT_SOURCE_DIR" --apply
-
 for module_file in SCsub config.py register_types.cpp register_types.h; do
 	if [[ ! -f "$MODULE_DIR/$module_file" ]]; then
 		echo "Custom module is incomplete: $MODULE_DIR/$module_file" >&2

@@ -1,4 +1,1 @@
-# Phase 6 replaces this feature-flag shim with a native API.
-^Could not access feature flag 'enableIntersectionObserverByDefault' because native module method was not available$
-# Phase 6 replaces this feature-flag shim with a native API.
-^Could not access feature flag 'enableNativeCSSParsing' because native module method was not available$
+# Diagnostics that any smoke test may print. None are expected.

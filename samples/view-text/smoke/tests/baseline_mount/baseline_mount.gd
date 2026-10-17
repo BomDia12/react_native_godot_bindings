@@ -10,7 +10,7 @@ func smoke_id() -> String:
 	return "baseline-mount"
 
 func find_sentinel(node: Node) -> RNTextControl:
-	if node is RNTextControl and node.get_parsed_text() == SENTINEL:
+	if node is RNTextControl and node.get_text() == SENTINEL:
 		return node
 
 	for child in node.get_children():
@@ -35,7 +35,7 @@ func find_styled_panel(node: Node) -> Panel:
 
 func has_only_expected_node_types(node: Node) -> bool:
 	for child in node.get_children():
-		if not child is Panel and not child is RNTextControl and not (child is Control and child.name == "ReactNativeMountContainer"):
+		if not child is Panel and not child is RNTextControl:
 			return false
 		if child is RNTextControl:
 			continue
@@ -45,14 +45,12 @@ func has_only_expected_node_types(node: Node) -> bool:
 	return true
 
 func validate_smoke() -> String:
-	if get_child_count() != 1 or not get_child(0) is Control or get_child(0).name != "ReactNativeMountContainer":
-		return "expected the internal mount container"
-	var container := get_child(0) as Control
+	var container := mount_container()
 	if container.get_child_count() != 1 or not container.get_child(0) is Panel:
 		return "expected exactly one mounted root Panel in the internal container"
 
 	var mounted_root := container.get_child(0) as Panel
-	if not has_only_expected_node_types(self):
+	if not has_only_expected_node_types(container):
 		return "mounted tree contains an unexpected native node type"
 
 	var label := find_sentinel(mounted_root)
@@ -66,9 +64,9 @@ func validate_smoke() -> String:
 		return "styled View has an empty Yoga layout"
 	if label.size.x <= 0.0 or label.size.y <= 0.0:
 		return "sentinel Text has an empty Yoga layout"
-	if not label.get_theme_color("default_color").is_equal_approx(EXPECTED_TEXT_COLOR):
+	if not label.get_text_color().is_equal_approx(EXPECTED_TEXT_COLOR):
 		return "sentinel Text color does not match the fixture"
-	if label.get_theme_font_size("normal_font_size") != EXPECTED_FONT_SIZE:
+	if label.get_font_size() != EXPECTED_FONT_SIZE:
 		return "sentinel Text font size does not match the fixture"
 	if not is_equal_approx(styled_panel.modulate.a, EXPECTED_OPACITY):
 		return "styled View opacity does not match the fixture"

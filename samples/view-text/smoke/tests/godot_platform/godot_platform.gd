@@ -4,7 +4,7 @@ func smoke_id() -> String:
 	return "godot-platform"
 
 func validate_smoke() -> String:
-	var state = HermesRuntime.get_global("__godotPlatformState")
+	var state = await js("__godotPlatformState")
 	if not state is Dictionary:
 		return "platform fixture state is missing"
 	if state.get("os") != "godot" or state.get("selected") != "godot":
@@ -21,6 +21,6 @@ func validate_smoke() -> String:
 	var microtasks = state.get("microtasks", [])
 	if microtasks != ["sync", "promise", "native"]:
 		return "microtask checkpoint order was %s" % [microtasks]
-	if get_child_count() < 1:
+	if mount_container().get_child_count() < 1:
 		return "platform React tree did not mount"
 	return ""

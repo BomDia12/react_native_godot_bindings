@@ -1,69 +1,47 @@
 #pragma once
 
-#include "rn_font.h"
+#include "rn_paragraph_layout.h"
 
-#include "scene/gui/rich_text_label.h"
-#include "scene/resources/style_box.h"
+#include "scene/gui/control.h"
 
-struct RNTextRun {
+#include <functional>
+
+using RNTextShapeFunction = std::function<void(float p_width, RNParagraphLayout &r_layout)>;
+
+class RNTextControl : public Control {
+	GDCLASS(RNTextControl, Control);
+
 	String text;
-	Dictionary props;
-	RNFontSnapshot font;
-	int from = 0;
-	int to = 0;
-};
-
-struct RNTextDocument : RNComponentData {
-	String text;
-	Vector<RNTextRun> runs;
-	HashMap<int, Vector2i> spans;
-	Vector<int> utf16_offsets;
-	RNFontSnapshot font;
-	Dictionary props;
-	uint64_t revision = 0;
-	int utf16_at(int p_character) const;
-	int character_at(int p_utf16) const;
-};
-
-class RNTextNativeState : public RefCounted {
-	GDCLASS(RNTextNativeState, RefCounted);
+	RNTextShapeFunction shape_function;
+	bool selectable = false;
+	Color selection_color;
+	bool has_selection_color = false;
+	HorizontalAlignment accessibility_alignment = HORIZONTAL_ALIGNMENT_LEFT;
+	RNParagraphLayout layout;
+	int selection_from = -1;
+	int selection_to = -1;
+	int selection_anchor = -1;
+	bool selecting = false;
+	void _shape();
 
 protected:
-	static void _bind_methods() {}
-
-public:
-	std::shared_ptr<const RNTextDocument> document;
-	int from = -1;
-	int to = -1;
-	bool visible = true;
-	Color modulate;
-};
-
-class RNTextControl : public RichTextLabel {
-	GDCLASS(RNTextControl, RichTextLabel);
-
-	std::shared_ptr<const RNTextDocument> document;
-	std::shared_ptr<const RNHostEventSink> sink;
-	Vector<Ref<Font>> observed_fonts;
-	uint64_t published_revision = 0;
-	int tag = 0;
-	Dictionary published_layout;
-	void _font_changed();
-	void _publish_layout();
-
-protected:
-	static void _bind_methods() {}
-	bool _set(const StringName &, const Variant &) { return false; }
+	static void _bind_methods();
 	void _notification(int p_what);
+	void gui_input(const Ref<InputEvent> &p_event) override;
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNTextControl();
-	~RNTextControl() override;
-	void apply_document(const std::shared_ptr<const RNTextDocument> &p_document);
-	std::shared_ptr<const RNTextDocument> get_document() const { return document; }
-	void publish(const RNHostContext &p_context);
-	HashMap<int, Vector<Rect2>> get_span_bounds();
+	String get_text() const;
+	int get_font_size() const;
+	Color get_text_color() const;
+	void set_content(const String &p_text, RNTextShapeFunction p_shape_function, bool p_selectable);
+	void set_selection_color(const Color &p_color);
+	void set_accessibility_alignment(HorizontalAlignment p_alignment) { accessibility_alignment = p_alignment; }
+	const RNParagraphLayout &get_layout() const { return layout; }
+	bool is_selectable() const;
+	void set_selection_range(int p_from, int p_to);
+	int get_selection_from() const { return selection_from; }
+	int get_selection_to() const { return selection_to; }
 };
-
-std::shared_ptr<const RNHostDescriptor> rn_text_descriptor();
-std::shared_ptr<const RNHostDescriptor> rn_virtual_text_descriptor();

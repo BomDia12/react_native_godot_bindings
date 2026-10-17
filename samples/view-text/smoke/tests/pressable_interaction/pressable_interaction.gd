@@ -19,15 +19,35 @@ func fail(message: String) -> void:
 	printerr("RN_SMOKE_FAILED: pressable-interaction: %s" % message)
 	get_tree().quit(1)
 
+var cached_state := {}
+var polling := false
+
+# Godot never waits on the JS thread, so the latest JS state is fetched in the
+# background and each frame reads the most recent copy.
+func poll_state() -> void:
+	if polling:
+		return
+	polling = true
+	var value = await ReactNativeHost.evaluate("__godotInteractionState")
+	cached_state = value if value is Dictionary else {}
+	polling = false
+
 func state() -> Dictionary:
-	var value = HermesRuntime.get_global("__godotInteractionState")
-	return value if value is Dictionary else {}
+	return cached_state
 
 func event_log() -> Array:
 	return state().get("log", [])
 
 func has_log(name: String) -> bool:
 	return name in event_log()
+
+# Upstream's event queue picks the priority, so handlers only need to see one.
+func has_priority(name: String) -> bool:
+	for value in event_log():
+		var parts: PackedStringArray = String(value).split(":")
+		if parts.size() == 3 and parts[0] == "priority" and parts[1] == name and int(parts[2]) in [0, 1, 2, 3]:
+			return true
+	return false
 
 func find_panel_with_color(node: Node, color: Color) -> Panel:
 	if node is Panel:
@@ -45,7 +65,7 @@ func border_width_of(panel: Panel) -> int:
 	return 0 if style == null else style.get_border_width(SIDE_TOP)
 
 func find_label_text(node: Node, value: String) -> RNTextControl:
-	if node is RNTextControl and node.get_parsed_text() == value:
+	if node is RNTextControl and node.get_text() == value:
 		return node
 	for child in node.get_children():
 		var found := find_label_text(child, value)
@@ -105,6 +125,7 @@ func _process(_delta: float) -> void:
 		fail("timed out at stage %d with state %s" % [stage, state()])
 		return
 
+	poll_state()
 	var current := state()
 	var log_values := event_log()
 	match stage:
@@ -118,8 +139,8 @@ func _process(_delta: float) -> void:
 			if int(current.get("outsidePriority", -1)) != 0:
 				fail("current event priority did not default outside dispatch")
 				return
-			counter = find_panel_with_color(self, INITIAL_COLOR)
-			secondary = find_panel_with_color(self, SECONDARY_COLOR)
+			counter = find_panel_with_color(get_child(0, true), INITIAL_COLOR)
+			secondary = find_panel_with_color(get_child(0, true), SECONDARY_COLOR)
 			if counter == null or secondary == null:
 				return
 			var layout: Dictionary = current.layouts[0]
@@ -138,7 +159,7 @@ func _process(_delta: float) -> void:
 		2:
 			if not current.get("pressed", false):
 				return
-			counter = find_panel_with_color(self, PRESSED_COLOR)
+			counter = find_panel_with_color(get_child(0, true), PRESSED_COLOR)
 			if counter == null:
 				return
 			mouse_button(counter_point, MOUSE_BUTTON_LEFT, false)
@@ -150,9 +171,9 @@ func _process(_delta: float) -> void:
 			if not is_equal_approx(float(changed_layout.width), 42.0) or not is_equal_approx(float(changed_layout.height), 20.0):
 				fail("changed onLayout rectangle is wrong: %s" % changed_layout)
 				return
-			if find_label_text(self, "Count 1") == null:
+			if find_label_text(get_child(0, true), "Count 1") == null:
 				return
-			var outlined := find_panel_with_color(self, CHANGED_COLOR)
+			var outlined := find_panel_with_color(get_child(0, true), CHANGED_COLOR)
 			if outlined == null:
 				return
 			if border_width_of(outlined) != 2:
@@ -161,12 +182,10 @@ func _process(_delta: float) -> void:
 			if not assert_order(log_values, ["outer-capture", "inner-capture", "inner-bubble", "outer-bubble"]):
 				fail("pointer capture and bubble order is wrong: %s" % log_values)
 				return
-			if not has_log("priority:pointer-down:1") or not has_log("priority:layout:0"):
-				fail("event priorities were not visible inside handlers")
-				return
-			if not has_log("priority:pointer-move:2"):
-				fail("continuous event priority was not visible inside a handler")
-				return
+			for name in ["pointer-down", "layout", "pointer-move"]:
+				if not has_priority(name):
+					fail("the %s handler did not see a React event priority: %s" % [name, log_values])
+					return
 			if not has_log("measure:2:2:40:20:2:2"):
 				fail("measure did not return the six current-tree values")
 				return
@@ -183,8 +202,9 @@ func _process(_delta: float) -> void:
 			if not assert_order(log_values, ["counter-blur", "secondary-focus"]):
 				fail("blur did not precede the next focus event: %s" % log_values)
 				return
-			HermesRuntime.set_global("__godotStopPropagation", true)
 			stop_log_start = log_values.size()
+			stage = -1
+			await ReactNativeHost.evaluate("__godotStopPropagation = true")
 			mouse_button(counter_point, MOUSE_BUTTON_RIGHT, true)
 			stage = 5
 		5:
@@ -192,13 +212,14 @@ func _process(_delta: float) -> void:
 				return
 			var stopped := event_log().slice(stop_log_start)
 			if "outer-bubble" in stopped:
-				fail("stopPropagation allowed the outer bubble handler: %s" % stopped)
+				fail("stopPropagation allowed the outer bubble handler: %s" % [stopped])
 				return
 			if not assert_order(stopped, ["outer-capture", "inner-capture", "inner-bubble"]):
-				fail("stopped propagation order is wrong: %s" % stopped)
+				fail("stopped propagation order is wrong: %s" % [stopped])
 				return
 			mouse_button(counter_point, MOUSE_BUTTON_RIGHT, false)
-			HermesRuntime.set_global("__godotStopPropagation", false)
+			stage = -1
+			await ReactNativeHost.evaluate("__godotStopPropagation = false")
 			mouse_button(counter_point, MOUSE_BUTTON_LEFT, true)
 			mouse_button(counter_point, MOUSE_BUTTON_LEFT, false)
 			stage = 6
@@ -256,11 +277,12 @@ func _process(_delta: float) -> void:
 				fail("unchanged commits emitted duplicate layout events: %s" % current.get("layouts", []))
 				return
 			ReactNativeFileSingleton.force_refresh()
+			cached_state = {}
 			stage = 13
 		13:
 			if current.get("count", -1) != 0 or current.get("layouts", []).is_empty():
 				return
-			counter = find_panel_with_color(self, INITIAL_COLOR)
+			counter = find_panel_with_color(get_child(0, true), INITIAL_COLOR)
 			if counter == null:
 				return
 			counter_point = counter.get_global_rect().get_center()

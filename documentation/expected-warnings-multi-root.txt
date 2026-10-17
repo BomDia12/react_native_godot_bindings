@@ -1,4 +1,8 @@
 # The fixture intentionally starts an unregistered application key.
-^WARNING: "MissingApplication" has not been registered\. This can happen if:$
+^ERROR: \{ \[Invariant Violation: "MissingApplication" has not been registered\. This can happen if:$
+^ERROR: React Native JS error: Invariant Violation: "MissingApplication" has not been registered\. This can happen if:$
 # The fixture intentionally renders a component that throws inside its surface boundary.
-^WARNING: ReactNativeRootView [0-9]+ failed inside its error boundary: intentional surface failure$
+^ERROR: \{ \[Error: intentional surface failure\]$
+^ERROR: React Native JS error: Error: intentional surface failure$
+# The fixture points the bundle singleton at a missing file, which stops the runtime.
+^ERROR: React Native bundle 'res://smoke/tests/multi_root/missing\.bundle\.js' is missing\.$

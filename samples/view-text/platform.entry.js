@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {AppRegistry, BackHandler, Platform, StyleSheet, Text, View} from 'react-native';
+import {AppRegistry, BackHandler, Image, Platform, StyleSheet, Text, View} from 'react-native';
 import processColor from 'react-native/Libraries/StyleSheet/processColor';
 import resolveAssetSource from 'react-native/Libraries/Image/resolveAssetSource';
 
@@ -16,7 +16,7 @@ const state = {
 global.__godotPlatformState = state;
 
 Promise.resolve().then(() => state.microtasks.push('promise'));
-global.__godotQueueMicrotask(() => state.microtasks.push('native'));
+queueMicrotask(() => state.microtasks.push('native'));
 state.microtasks.push('sync');
 try {
   BackHandler.addEventListener('hardwareBackPress', () => true);
@@ -42,7 +42,13 @@ const explicitUser = resolveAssetSource({
   uri: 'user://rn-godot-asset-smoke.txt',
 });
 const missing = resolveAssetSource({uri: 'res://missing-phase-5-asset.png'});
-let invalidLocalSourcesRejected = 0;
+global.__godotAssetState = {
+  primary,
+  secondary,
+  explicitUser,
+  missing,
+  invalidLocalSourcesRejected: 0,
+};
 for (const uri of [
   '/tmp/asset.png',
   'file://asset.png',
@@ -50,19 +56,10 @@ for (const uri of [
   'res://asset\\name.png',
   'res://asset\u0000name.png',
 ]) {
-  try {
-    resolveAssetSource({uri});
-  } catch (_error) {
-    invalidLocalSourcesRejected += 1;
-  }
+  Image.getSize(uri).catch(() => {
+    global.__godotAssetState.invalidLocalSourcesRejected += 1;
+  });
 }
-global.__godotAssetState = {
-  primary,
-  secondary,
-  explicitUser,
-  missing,
-  invalidLocalSourcesRejected,
-};
 
 function AssetsApp() {
   return (

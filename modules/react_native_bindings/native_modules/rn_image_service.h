@@ -1,12 +1,13 @@
 #pragma once
-#include "rn_native_module.h"
 
-class RNNativeModuleRegistry;
+#include "../interop/rn_error.h"
 
 #include "core/io/image.h"
 #include "scene/resources/texture.h"
 
+#include <functional>
 #include <map>
+#include <memory>
 
 struct RNImageSource {
 	String uri;
@@ -80,6 +81,7 @@ class RNImageService : public std::enable_shared_from_this<RNImageService> {
 	bool evict(uint64_t p_required);
 	std::shared_ptr<RNImageReservation> reserve(uint64_t p_bytes);
 	RNImageResult decode(const RNImageSource &p_source, const Vector<uint8_t> &p_bytes, const std::shared_ptr<RNImageReservation> &p_reservation);
+	RNImageResult load_imported(const RNImageSource &p_source);
 	RNImageResult load_local(const RNImageSource &p_source);
 	void finish(uint64_t p_id, RNImageTransportResponse p_response);
 	void remember(const RNImageSource &p_source, const RNImageResult &p_result, bool p_cacheable = true);
@@ -96,5 +98,4 @@ public:
 	uint64_t used_bytes() const { return budget->used; }
 	void clear_cache();
 };
-bool rn_register_image_module(RNNativeModuleRegistry &p_registry, RNError &r_error);
 void rn_register_image_settings();

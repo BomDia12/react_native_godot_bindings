@@ -3,8 +3,12 @@ extends "res://smoke/support/smoke_case.gd"
 func smoke_id() -> String:
 	return "godot-assets"
 
+func ready_to_validate() -> bool:
+	var state = await js("__godotAssetState")
+	return state is Dictionary and state.get("invalidLocalSourcesRejected") == 5
+
 func validate_smoke() -> String:
-	var state = HermesRuntime.get_global("__godotAssetState")
+	var state = await js("__godotAssetState")
 	if not state is Dictionary:
 		return "asset fixture state is missing"
 	var primary = state.get("primary", {})

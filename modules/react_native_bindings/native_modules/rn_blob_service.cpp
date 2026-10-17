@@ -59,51 +59,27 @@ public:
 	}
 };
 } //namespace
-bool RNBlobService::begin(const String &p_id, int64_t p_size, RNError &r_error) {
+bool RNBlobService::create(const String &p_id, const PackedByteArray &p_bytes, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	if (closed || p_id.is_empty() || blobs.count(p_id)) {
 		return failure(r_error, "Blob ID is stale or already allocated", RNErrorCode::STALE_HANDLE);
 	}
-	if (p_id.length() > 256 || blobs.size() >= 4096 || p_size < 0 || uint64_t(p_size) > maximum || used > maximum - uint64_t(p_size)) {
+	const uint64_t size = p_bytes.size();
+	if (p_id.length() > 256 || blobs.size() >= 4096 || size > maximum || used > maximum - size) {
 		return failure(r_error, "Blob aggregate limit exceeded", RNErrorCode::LIMIT);
 	}
 	Entry entry;
-	entry.bytes.resize(p_size);
+	entry.bytes = p_bytes;
 	blobs.emplace(p_id, std::move(entry));
-	used += p_size;
-	return true;
-}
-bool RNBlobService::append(const String &p_id, int64_t p_offset, const PackedByteArray &p_bytes, RNError &r_error) {
-	auto found = blobs.find(p_id);
-	if (found == blobs.end() || found->second.complete) {
-		return failure(r_error, "Blob construction is unavailable", RNErrorCode::STALE_HANDLE);
-	}
-	Entry &entry = found->second;
-	if (p_offset != entry.written || p_bytes.size() > 1024 * 1024 || p_bytes.size() > entry.bytes.size() - entry.written) {
-		return failure(r_error, "Invalid bounded Blob write");
-	}
-	if (!p_bytes.is_empty()) {
-		std::memcpy(entry.bytes.ptrw() + p_offset, p_bytes.ptr(), p_bytes.size());
-	}
-	entry.written += p_bytes.size();
-	return true;
-}
-bool RNBlobService::finish(const String &p_id, RNError &r_error) {
-	auto found = blobs.find(p_id);
-	if (found == blobs.end() || found->second.written != found->second.bytes.size()) {
-		return failure(r_error, "Blob construction is incomplete");
-	}
-	found->second.complete = true;
+	used += size;
 	return true;
 }
 Dictionary RNBlobService::store(const PackedByteArray &p_bytes, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	const String id = vformat("native-%016x", next_id++);
-	if (!begin(id, p_bytes.size(), r_error)) {
+	if (!create(id, p_bytes, r_error)) {
 		return Dictionary();
 	}
-	Entry &entry = blobs.at(id);
-	entry.bytes = p_bytes;
-	entry.written = p_bytes.size();
-	entry.complete = true;
 	Dictionary data;
 	data["blobId"] = id;
 	data["offset"] = 0;
@@ -112,9 +88,10 @@ Dictionary RNBlobService::store(const PackedByteArray &p_bytes, RNError &r_error
 	return data;
 }
 bool RNBlobService::read(const Dictionary &p_data, int64_t p_offset, int64_t p_length, PackedByteArray &r_bytes, RNError &r_error) const {
+	std::lock_guard lock(mutex);
 	const String id = blob_id(p_data);
 	auto found = blobs.find(id);
-	if (closed || found == blobs.end() || !found->second.complete || (!found->second.owner && !found->second.pins)) {
+	if (closed || found == blobs.end() || (!found->second.owner && !found->second.pins)) {
 		return failure(r_error, "Blob backing storage has been released", RNErrorCode::STALE_HANDLE);
 	}
 	if (p_data.get("offset", Variant()).get_type() != Variant::INT || p_data.get("size", Variant()).get_type() != Variant::INT) {
@@ -131,6 +108,7 @@ bool RNBlobService::read(const Dictionary &p_data, int64_t p_offset, int64_t p_l
 	return true;
 }
 bool RNBlobService::pin(const Dictionary &p_data, RNError &r_error) {
+	std::lock_guard lock(mutex);
 	PackedByteArray empty;
 	if (!read(p_data, 0, 0, empty, r_error)) {
 		return false;
@@ -146,6 +124,7 @@ void RNBlobService::reclaim(const String &p_id) {
 	}
 }
 void RNBlobService::unpin(const String &p_id) {
+	std::lock_guard lock(mutex);
 	auto found = blobs.find(p_id);
 	if (found != blobs.end() && found->second.pins) {
 		--found->second.pins;
@@ -153,6 +132,7 @@ void RNBlobService::unpin(const String &p_id) {
 	}
 }
 void RNBlobService::release(const String &p_id) {
+	std::lock_guard lock(mutex);
 	auto found = blobs.find(p_id);
 	if (found != blobs.end()) {
 		found->second.owner = false;
@@ -160,10 +140,12 @@ void RNBlobService::release(const String &p_id) {
 	}
 }
 std::weak_ptr<RNBlobCollectorState> RNBlobService::collector_state(const String &p_id) const {
+	std::lock_guard lock(mutex);
 	auto found = blobs.find(p_id);
 	return found != blobs.end() ? std::weak_ptr<RNBlobCollectorState>(found->second.collectors) : std::weak_ptr<RNBlobCollectorState>();
 }
 void RNBlobService::drain_releases() {
+	std::lock_guard lock(mutex);
 	std::vector<String> collected;
 	for (const auto &entry : blobs) {
 		if (entry.second.collectors->collected.exchange(false) && entry.second.collectors->references.load() == 0) {
@@ -175,6 +157,7 @@ void RNBlobService::drain_releases() {
 	}
 }
 bool RNBlobService::has_pending_work() const {
+	std::lock_guard lock(mutex);
 	for (const auto &entry : blobs) {
 		if (entry.second.collectors->collected.load()) {
 			return true;
@@ -182,128 +165,13 @@ bool RNBlobService::has_pending_work() const {
 	}
 	return false;
 }
-String RNBlobService::create_url(const Dictionary &p_data, RNError &r_error) {
-	if (urls.size() >= 4096) {
-		failure(r_error, "Object URL count limit exceeded", RNErrorCode::LIMIT);
-		return String();
-	}
-	if (!pin(p_data, r_error)) {
-		return String();
-	}
-	const String url = vformat("blob:godot-%016x", next_id++);
-	urls[url] = p_data.duplicate(true);
-	return url;
-}
-void RNBlobService::revoke_url(const String &p_url) {
-	auto found = urls.find(p_url);
-	if (found != urls.end()) {
-		const String id = blob_id(found->second);
-		urls.erase(found);
-		unpin(id);
-	}
-}
-bool RNBlobService::resolve_url(const String &p_url, Dictionary &r_data, RNError &r_error) const {
-	auto found = urls.find(p_url);
-	if (found == urls.end()) {
-		return failure(r_error, "Object URL is revoked or stale", RNErrorCode::STALE_HANDLE);
-	}
-	r_data = found->second;
-	return true;
-}
 void RNBlobService::shutdown() {
+	std::lock_guard lock(mutex);
 	closed = true;
-	urls.clear();
 	blobs.clear();
 	used = 0;
 	drain_releases();
 }
 std::shared_ptr<facebook::jsi::HostObject> RNBlobService::collector_provider() {
 	return std::make_shared<BlobCollectorProvider>(shared_from_this());
-}
-
-namespace {
-class RNBlobModule : public RNNativeModule {
-	std::function<std::shared_ptr<RNBlobService>()> service;
-
-public:
-	explicit RNBlobModule(std::function<std::shared_ptr<RNBlobService>()> p_service) :
-			service(std::move(p_service)) {}
-	RNModuleResult invoke_sync(const StringName &p_method, const Array &p_args, const RNCallContext &) override {
-		auto owner = service();
-		if (!owner) {
-			return RNModuleResult::failure(RNError::make(RNErrorCode::RUNTIME_RESET, "Blob service unavailable", "Blob"));
-		}
-		RNError error;
-		Variant result;
-		if (p_method == "begin") {
-			owner->begin(p_args[0], p_args[1], error);
-		} else if (p_method == "append") {
-			owner->append(p_args[0], p_args[1], p_args[2], error);
-		} else if (p_method == "finish") {
-			owner->finish(p_args[0], error);
-		} else if (p_method == "release") {
-			owner->release(p_args[0]);
-		} else if (p_method == "pin") {
-			owner->pin(p_args[0], error);
-		} else if (p_method == "unpin") {
-			owner->unpin(p_args[0]);
-		} else if (p_method == "readChunk") {
-			PackedByteArray bytes;
-			owner->read(p_args[0], p_args[1], p_args[2], bytes, error);
-			result = bytes;
-		} else if (p_method == "createURL") {
-			result = owner->create_url(p_args[0], error);
-		} else if (p_method == "revokeURL") {
-			owner->revoke_url(p_args[0]);
-		} else if (p_method == "stats") {
-			owner->drain_releases();
-			Dictionary stats;
-			stats["bytes"] = int64_t(owner->used_bytes());
-			stats["count"] = int64_t(owner->count());
-			result = stats;
-		}
-		return error.is_set() ? RNModuleResult::failure(error) : RNModuleResult::success(result);
-	}
-	void process_frame(double) override {
-		if (auto owner = service()) {
-			owner->drain_releases();
-		}
-	}
-	bool has_pending_work() const override {
-		auto owner = service();
-		return owner && owner->has_pending_work();
-	}
-};
-} //namespace
-bool rn_register_blob_module(RNNativeModuleRegistry &p_registry, const std::function<std::shared_ptr<RNBlobService>()> &p_service, RNError &r_error) {
-	RNModuleDefinition definition;
-	definition.name = "GodotBinary";
-	definition.factory = [p_service] { return std::make_unique<RNBlobModule>(p_service); };
-	for (const char *name : { "begin", "append", "finish", "release", "readChunk", "createURL", "revokeURL", "pin", "unpin", "stats" }) {
-		RNMethodSchema method;
-		method.name = name;
-		method.result = RNValueSchema::value(String(name) == "readChunk" ? RNValueType::BYTES : String(name) == "createURL" ? RNValueType::STRING
-						: String(name) == "stats"																			? RNValueType::DYNAMIC
-																															: RNValueType::VOID);
-		if (String(name) != "stats") {
-			RNArgumentSchema arg;
-			arg.name = "data";
-			arg.value = RNValueSchema::value(String(name) == "readChunk" || String(name) == "createURL" || String(name) == "pin" ? RNValueType::DYNAMIC : RNValueType::STRING);
-			method.arguments.push_back(arg);
-		}
-		if (String(name) == "begin" || String(name) == "append" || String(name) == "readChunk") {
-			RNArgumentSchema arg;
-			arg.name = "offset";
-			arg.value = RNValueSchema::value(RNValueType::INTEGER);
-			method.arguments.push_back(arg);
-		}
-		if (String(name) == "append" || String(name) == "readChunk") {
-			RNArgumentSchema arg;
-			arg.name = "chunk";
-			arg.value = RNValueSchema::value(String(name) == "append" ? RNValueType::BYTES : RNValueType::INTEGER);
-			method.arguments.push_back(arg);
-		}
-		definition.methods.push_back(method);
-	}
-	return p_registry.register_module(definition, r_error);
 }

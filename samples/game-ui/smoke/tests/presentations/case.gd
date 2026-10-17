@@ -2,8 +2,22 @@ extends "res://smoke/game_test.gd"
 
 var root_requests: Array = []
 var app_requests: Array = []
-var custom: ReactNativeRootView
 var late_request := ""
+
+func smoke_id() -> String:
+	return "game-presentations"
+
+func dialogs(node: Node) -> Array[Node]:
+	var result: Array[Node] = []
+	if node is AcceptDialog:
+		result.append(node)
+	for child in node.get_children():
+		result.append_array(dialogs(child))
+	return result
+
+func events() -> Array:
+	return (await fixture()).get("events", [])
+
 func _ready() -> void:
 	super._ready()
 	panels[0].set_alert_handler(func(id: String, origin, payload: Dictionary):
@@ -13,64 +27,55 @@ func _ready() -> void:
 	GodotAlerts.set_alert_handler(func(id: String, origin, payload: Dictionary):
 		app_requests.append({"id": id, "origin": origin, "payload": payload})
 		check(GodotAlerts.complete_alert(id, {"buttonId": 0, "dismissed": false}), "Application handler could not complete request"))
-func dialogs(node: Node) -> Array[Node]:
-	var result: Array[Node] = []
-	if node is AcceptDialog: result.append(node)
-	for child in node.get_children(): result.append_array(dialogs(child))
-	return result
-func _process(_delta: float) -> void:
-	if not advance(): return
-	match stage:
-		0:
-			HermesRuntime.call_function("__gameAction", [panels[0].get_root_tag(), "testAlert", []])
-			next_stage()
-		1:
-			check(root_requests.size() == 1 and "enemy-alert-button" in fixture().events, "Disabled enemy did not bubble to its Godot handler")
-			check(dialogs(inventory_root).is_empty(), "Enabled sibling presented an enemy alert")
-			check(not inventory_root.complete_alert(late_request, {"buttonId": 0, "dismissed": false}), "Another root completed a foreign request")
-			action("testAlert")
-			next_stage()
-		2:
-			var local := dialogs(inventory_root)
-			check(local.size() == 1 and dialogs(panels[0]).is_empty(), "Enabled Alert was not local to the inventory root")
-			if local.size() == 1: local[0].close_requested.emit()
-			next_stage()
-		3:
-			var local := dialogs(inventory_root)
-			check(local.size() == 1 and local[0].visible and fixture().events.count("inventory-alert-button") == 0, "Noncancelable alert was hidden or settled by window close")
-			if local.size() == 1: local[0].confirmed.emit()
-			next_stage()
-		4:
-			check(fixture().events.count("inventory-alert-button") == 1 and dialogs(inventory_root).is_empty(), "Local alert callback/lifetime did not settle once")
-			action("ambientAlert")
-			next_stage()
-		5:
-			check(app_requests.size() == 1 and app_requests[0].origin == null and "ambient-alert-button" in fixture().events, "Unattributed Alert selected an RN root")
-			custom = ReactNativeRootView.new()
-			custom.application_key = "CustomInventory"
-			custom.size = Vector2(800, 600)
-			assert(custom.attach_scene_binding(inventory, inventory.binding()).is_empty())
-			ui.add_child(custom)
-			next_stage()
-		6:
-			HermesRuntime.call_function("__gameAction", [custom.get_root_tag(), "testAlert", ["Custom"]])
-			next_stage()
-		7:
-			check(fixture().events.count("custom-presenter") == 1 and dialogs(custom).is_empty(), "Custom presenter did not replace native presentation")
-			HermesRuntime.call_function("__gameAction", [custom.get_root_tag(), "testAlert", ["Decline"]])
-			next_stage()
-		8:
-			check(app_requests.size() == 2 and app_requests[1].origin.rootTag == custom.get_root_tag(), "Explicit custom decline did not bubble once")
-			custom.queue_free()
-			HermesRuntime.call_function("__gameAction", [panels[0].get_root_tag(), "saveAlert", []])
-			panels[0].reload()
-			next_stage()
-		9:
-			action("staleAlert")
-			action("window", [true])
-			next_stage()
-		10:
-			check(fixture().get("alertError") == "E_CANCELLED" and root_requests.size() == 1, "Stale origin was reassigned or not canceled")
-			action("window", [false])
-			GodotAlerts.set_alert_handler(Callable())
-			finish("game-presentations")
+
+func run() -> void:
+	await root_action(panels[0], "testAlert")
+	if not await wait_until(func(): return root_requests.size() == 1 and "enemy-alert-button" in await events(), "the enemy alert to bubble to its Godot handler"):
+		return
+	check(dialogs(inventory_root).is_empty(), "Enabled sibling presented an enemy alert")
+	check(not inventory_root.complete_alert(late_request, {"buttonId": 0, "dismissed": false}), "Another root completed a foreign request")
+
+	await action("testAlert")
+	if not await wait_until(func(): return dialogs(inventory_root).size() == 1, "the native inventory alert"):
+		return
+	check(dialogs(panels[0]).is_empty(), "Enabled Alert was not local to the inventory root")
+	var local: AcceptDialog = dialogs(inventory_root)[0]
+	local.close_requested.emit()
+	await frames(4)
+	check(dialogs(inventory_root).size() == 1 and local.visible and (await events()).count("inventory-alert-button") == 0, "Noncancelable alert was hidden or settled by window close")
+	local.confirmed.emit()
+	if not await wait_until(func(): return (await events()).count("inventory-alert-button") == 1 and dialogs(inventory_root).is_empty(), "the local alert to settle once"):
+		return
+
+	await action("ambientAlert")
+	if not await wait_until(func(): return app_requests.size() == 1 and "ambient-alert-button" in await events(), "Alert.alert to reach the application handler"):
+		return
+	check(app_requests[0].origin == null, "Alert.alert selected a React Native root")
+
+	var custom := ReactNativeRootView.new()
+	custom.application_key = "CustomInventory"
+	custom.size = Vector2(800, 600)
+	assert(custom.attach_scene_binding(inventory, inventory.binding()).is_empty())
+	ui.add_child(custom)
+	if not await wait_until(func(): return custom.get_root_tag() != 0 and await js("__gameAction !== undefined") and target("inventory-editor", custom) != null, "the custom presenter root"):
+		return
+	await root_action(custom, "testAlert", ["Custom"])
+	if not await wait_until(func(): return (await events()).count("custom-presenter") == 1, "the custom presenter"):
+		return
+	check(dialogs(custom).is_empty(), "Custom presenter did not replace native presentation")
+	await root_action(custom, "testAlert", ["Decline"])
+	if not await wait_until(func(): return app_requests.size() == 2, "the declined alert to bubble"):
+		return
+	check(app_requests[1].origin.rootTag == custom.get_root_tag(), "Explicit custom decline did not bubble once")
+	custom.queue_free()
+
+	await root_action(panels[0], "saveAlert")
+	panels[0].reload()
+	await frames(4)
+	await action("staleAlert")
+	await action("window", [true])
+	if not await wait_until(func(): return (await fixture()).get("alertError") == "E_CANCELLED", "the stale alert to be canceled"):
+		return
+	check(root_requests.size() == 1, "Stale root alert was reassigned")
+	await action("window", [false])
+	GodotAlerts.set_alert_handler(Callable())

@@ -1,34 +1,27 @@
 extends "res://smoke/game_test.gd"
 
-var editor_id := 0
-var offset := 0
-func _process(_delta: float) -> void:
-	if not advance(): return
-	match stage:
-		0:
-			check(target("asset-image") is RNImageControl and target("asset-image").texture != null, "Inventory asset did not load")
-			check(target("section-list") is ScrollContainer, "SectionList did not mount")
-			editor_id = target("inventory-editor").get_child(0).get_instance_id()
-			var list := target("inventory-list") as ScrollContainer
-			list.scroll_vertical = 120
-			offset = list.scroll_vertical
-			action("command", ["equip", ["potion"]])
-			action("controlled", ["Reconciled"])
-			next_stage()
-		1:
-			check(inventory.items[0].equipped and fixture().inventory.items[0].equipped, "Equip command did not reconcile")
-			check(target("inventory-editor").get_child(0).get_instance_id() == editor_id, "Inventory update remounted editor")
-			check((target("inventory-list") as ScrollContainer).scroll_vertical == offset, "Update lost scroll offset")
-			check(target("controlled-editor").get_child(0).text == "Reconciled", "Controlled editing did not reconcile")
-			action("scroll", [50])
-			next_stage()
-		2:
-			check((target("inventory-list") as ScrollContainer).scroll_vertical > 1000 and "item-50" in fixture().rendered, "FlatList did not move its virtual window")
-			action("command", ["rename", ["Godot inventory"]])
-			action("modal", [true])
-			next_stage()
-		3:
-			check(inventory.title == "Godot inventory", "Rename command did not reach Godot")
-			check("modal-show" in fixture().events, "Modal callback did not run")
-			action("modal", [false])
-			finish("game-inventory-ui")
+func smoke_id() -> String:
+	return "game-inventory-ui"
+
+func run() -> void:
+	if not await wait_until(func(): return target("asset-image") is RNImageControl and target("asset-image").texture != null, "the inventory asset"):
+		return
+	check(target("section-list") is ScrollContainer, "SectionList did not mount")
+	var editor_id := target("inventory-editor").get_child(0).get_instance_id()
+	var list := target("inventory-list") as ScrollContainer
+	list.scroll_vertical = 120
+	var offset := list.scroll_vertical
+	await action("command", ["equip", ["potion"]])
+	await action("controlled", ["Reconciled"])
+	if not await wait_until(func(): return inventory.items[0].equipped and (await fixture()).inventory.items[0].equipped and target("controlled-editor").get_child(0).text == "Reconciled", "the equip command and controlled edit"):
+		return
+	check(target("inventory-editor").get_child(0).get_instance_id() == editor_id, "Inventory update remounted editor")
+	check((target("inventory-list") as ScrollContainer).scroll_vertical == offset, "Update lost scroll offset")
+	await action("scroll", [50])
+	if not await wait_until(func(): return (target("inventory-list") as ScrollContainer).scroll_vertical > 1000 and "item-50" in (await fixture()).rendered, "the FlatList virtual window"):
+		return
+	await action("command", ["rename", ["Godot inventory"]])
+	await action("modal", [true])
+	if not await wait_until(func(): return inventory.title == "Godot inventory" and "modal-show" in (await fixture()).events, "the rename and modal"):
+		return
+	await action("modal", [false])

@@ -1,42 +1,60 @@
 #pragma once
-#include "rn_font.h"
 
 #include "scene/gui/line_edit.h"
 #include "scene/gui/text_edit.h"
+#include "scene/resources/font.h"
 
-struct RNTextInputData : RNComponentData {
-	RNFontSnapshot font;
-};
-class RNTextInputState : public RefCounted {
-	GDCLASS(RNTextInputState, RefCounted);
+#include <functional>
+#include <memory>
+#include <optional>
+
+class RNLineEditor : public LineEdit {
+	GDCLASS(RNLineEditor, LineEdit);
 
 protected:
 	static void _bind_methods() {}
 
 public:
-	ObjectID editor_id;
-	Control::MouseFilter wrapper_mouse_filter = Control::MOUSE_FILTER_PASS;
-	Control::MouseFilter editor_mouse_filter = Control::MOUSE_FILTER_STOP;
-	std::shared_ptr<const LineEdit::EditState> line;
-	std::shared_ptr<const TextEdit::EditState> multiline;
-	Dictionary props;
-	Dictionary deferred;
-	uint64_t text_revision = UINT64_MAX;
-	uint64_t selection_revision = UINT64_MAX;
-	int event_count = 0;
-	String observed_text;
-	Point2i observed_selection;
-	bool pending_native_event = false;
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
+};
+class RNTextEditor : public TextEdit {
+	GDCLASS(RNTextEditor, TextEdit);
+
+protected:
+	static void _bind_methods() {}
+
+public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
+};
+struct RNTextInputConfig {
+	Ref<Font> font;
+	int font_size = 16;
+	Color font_color = Color(1, 1, 1);
+	std::optional<Color> selection_color;
+	std::optional<Color> cursor_color;
+	std::optional<Color> placeholder_color;
+	bool editable = true;
+	String placeholder;
+	bool secure = false;
+	String submit_behavior;
+	bool multiline = false;
+	int max_length = 0;
+	bool auto_focus = false;
+	bool targetable = true;
 };
 class RNTextInputControl : public Control {
 	GDCLASS(RNTextInputControl, Control);
 	Control *editor = nullptr;
 	Control *staged_editor = nullptr;
-	Dictionary props;
-	RNHostContext published_context;
+	RNTextInputConfig config;
+	std::function<void(const StringName &, const Dictionary &)> event_callback;
+	std::function<void()> layout_callback;
 	Dictionary deferred_replacement;
 	bool changing = false;
 	bool published = false;
+	bool auto_focus_pending = false;
 	bool pending_native_event = false;
 	int event_count = 0;
 	uint64_t text_revision = UINT64_MAX;
@@ -52,10 +70,12 @@ class RNTextInputControl : public Control {
 	void _submitted(const String &p_text);
 	void _editor_input(const Ref<InputEvent> &p_event);
 	void _font_changed();
+	void _auto_focus();
 	Control *_create_editor(bool p_multiline);
-	void _configure_editor(Control *p_editor, const RNPreparedHostState &p_state);
+	void _configure_editor(Control *p_editor);
+	void _swap_editor();
+	String _submit_behavior() const;
 	void _emit(const StringName &p_event, Dictionary p_payload = Dictionary());
-	void _discard_notifications();
 	void _set_text(const String &p_text);
 	void _set_selection(int p_start, int p_end);
 
@@ -64,6 +84,8 @@ protected:
 	void _notification(int p_what);
 
 public:
+	Size2 get_combined_minimum_size() const override { return Size2(); }
+	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 	RNTextInputControl();
 	~RNTextInputControl();
 	Control *get_editor() const { return editor; }
@@ -71,12 +93,9 @@ public:
 	Point2i get_selection() const;
 	bool is_composing() const;
 	int get_event_count() const { return event_count; }
-	void apply(const RNPreparedHostState &p_state);
-	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
-	Ref<RNTextInputState> capture_state() const;
-	void restore_state(const Ref<RNTextInputState> &p_state);
+	void set_callbacks(std::function<void(const StringName &, const Dictionary &)> p_event, std::function<void()> p_layout);
+	void configure(const RNTextInputConfig &p_config);
 	void reconcile(int p_ack, const Variant &p_text, int p_start, int p_end);
 	void focus();
 	void blur();
 };
-std::shared_ptr<const RNHostDescriptor> rn_text_input_descriptor();

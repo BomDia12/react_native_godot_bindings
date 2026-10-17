@@ -1,12 +1,12 @@
 import React from 'react';
 import {AppRegistry, StyleSheet, Text, View} from 'react-native';
-import '../../js/godot/bootstrap-finalize';
+import 'react-native-godot/setup';
 
 import './interaction.entry';
 import './multi_root.entry';
 import './transaction.entry';
 import './platform.entry';
-import './descriptor.entry';
+import './component_registry.entry';
 import './native_module.entry';
 
 const styles = StyleSheet.create({
@@ -36,14 +36,9 @@ global.__godotBoundaryCaught = false;
 class SurfaceErrorBoundary extends React.Component {
   state = {failed: false};
 
-  componentDidCatch(error, info) {
+  componentDidCatch() {
     global.__godotBoundaryCaught = true;
     global.__godotBoundaryErrors.push(this.props.rootTag);
-    global.nativeFabricUIManager.__godotReportSurfaceError(
-      this.props.rootTag,
-      String(error?.message ?? error),
-      info?.componentStack ?? '',
-    );
     this.setState({failed: true});
   }
 
@@ -55,14 +50,3 @@ class SurfaceErrorBoundary extends React.Component {
 AppRegistry.setWrapperComponentProvider(parameters => props => (
   <SurfaceErrorBoundary rootTag={parameters.rootTag} {...props} />
 ));
-
-global.__godotRunApplication = (applicationKey, rootTag) =>
-  AppRegistry.runApplication(applicationKey, {
-    rootTag,
-    initialProps: {rootTag},
-    fabric: true,
-  });
-
-global.__godotStopApplication = rootTag => {
-  global.RN$stopSurface(rootTag);
-};

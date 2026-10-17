@@ -46,8 +46,6 @@ String type_name(RNValueType p_type) {
 			return "Transform2D";
 		case RNValueType::OBJECT:
 			return "Object";
-		case RNValueType::SESSION:
-			return "Session";
 	}
 	return "unknown";
 }
@@ -88,30 +86,6 @@ RNValueSchema RNValueSchema::record(const Vector<RNRecordFieldSchema> &p_fields,
 	schema.fields = p_fields;
 	schema.closed = p_closed;
 	return schema;
-}
-
-Dictionary RNValueSchema::to_metadata() const {
-	Dictionary result;
-	result[SNAME("type")] = type_name(type);
-	result[SNAME("nullable")] = nullable;
-	if (type == RNValueType::ARRAY && element) {
-		result[SNAME("element")] = element->to_metadata();
-	}
-	if (type == RNValueType::RECORD) {
-		Dictionary metadata_fields;
-		for (const RNRecordFieldSchema &field : fields) {
-			Dictionary metadata = field.value ? field.value->to_metadata() : Dictionary();
-			metadata[SNAME("optional")] = field.optional;
-			metadata[SNAME("nullable")] = field.nullable;
-			metadata_fields[field.name] = metadata;
-		}
-		result[SNAME("fields")] = metadata_fields;
-		result[SNAME("closed")] = closed;
-	}
-	if (!capability.is_empty()) {
-		result[SNAME("capability")] = capability;
-	}
-	return result;
 }
 
 bool rn_validate_value_schema(const RNValueSchema &p_schema, RNError &r_error, const String &p_path) {
@@ -174,13 +148,6 @@ bool rn_validate_method_schema(const RNMethodSchema &p_schema, RNError &r_error,
 		}
 	}
 	return rn_validate_value_schema(p_schema.result, r_error, p_path + ".result");
-}
-
-bool rn_validate_event_schema(const RNEventSchema &p_schema, RNError &r_error, const String &p_path) {
-	if (p_schema.name.is_empty() || p_schema.subscription_name.is_empty()) {
-		return fail(r_error, "event and subscription names must be non-empty", p_path);
-	}
-	return rn_validate_value_schema(p_schema.payload, r_error, p_path + ".payload");
 }
 
 static bool validate_native_shape(const Variant &p_value, const RNValueSchema &p_schema, RNError &r_error, const String &p_path) {
@@ -287,7 +254,6 @@ static bool validate_native_shape(const Variant &p_value, const RNValueSchema &p
 			return (transform.columns[0].is_finite() && transform.columns[1].is_finite() && transform.columns[2].is_finite()) || fail(r_error, "Transform2D components must be finite", p_path);
 		}
 		case RNValueType::OBJECT:
-		case RNValueType::SESSION:
 			return p_value.get_type() == Variant::STRING || fail(r_error, "expected opaque handle token", p_path);
 	}
 	return fail(r_error, "unsupported schema type", p_path);
@@ -388,7 +354,7 @@ struct SchemaParser {
 		}
 		const String name = p_definition["type"];
 		bool found = false;
-		for (int type = int(RNValueType::VOID); type <= int(RNValueType::SESSION); ++type) {
+		for (int type = int(RNValueType::VOID); type <= int(RNValueType::OBJECT); ++type) {
 			if (type_name(RNValueType(type)) == name) {
 				r_schema = RNValueSchema::value(RNValueType(type));
 				found = true;

@@ -8,27 +8,15 @@ func smoke_id() -> String:
 	return "flex-padding"
 
 func validate_smoke() -> String:
-	if get_child_count() != 1 or not get_child(0) is Control or get_child(0).name != "ReactNativeMountContainer":
-		return "expected the internal mount container"
-	var container := get_child(0) as Control
+	var container := mount_container()
 	if container.get_child_count() != 1 or not container.get_child(0) is Panel:
-		return "expected exactly one mounted root Panel in the internal container"
+		return "expected the flex View Panel as the only mounted child; React Native flattens the layout-only wrappers"
 
-	var mounted_root := container.get_child(0) as Panel
-	if mounted_root.position.distance_to(Vector2.ZERO) > TOLERANCE:
-		return "mounted root Panel is not at the root origin"
-	if mounted_root.size.distance_to(size) > TOLERANCE:
-		return "mounted root Panel size does not match ReactNativeRootView"
-	if mounted_root.get_child_count() != 1 or not mounted_root.get_child(0) is Panel:
-		return "expected one styled View Panel below the mounted root"
-
-	var flex_panel := mounted_root.get_child(0) as Panel
+	var flex_panel := container.get_child(0) as Panel
 	if flex_panel.position.distance_to(Vector2.ZERO) > TOLERANCE:
-		return "flex View is not at the mounted root origin"
-	if flex_panel.size.distance_to(mounted_root.size) > TOLERANCE:
-		return "flex View size does not fill the mounted root"
-	if flex_panel.size.x <= TOLERANCE or flex_panel.size.y <= TOLERANCE:
-		return "flex View has an empty layout"
+		return "flex View is not at the root origin"
+	if flex_panel.size.distance_to(size) > TOLERANCE:
+		return "flex View size does not fill ReactNativeRootView"
 	if flex_panel.get_child_count() != 1 or not flex_panel.get_child(0) is RNTextControl:
 		var child_types: Array[String] = []
 		for child in flex_panel.get_children():
@@ -36,7 +24,7 @@ func validate_smoke() -> String:
 		return "expected the sentinel RNTextControl as the direct flex View child, got %s" % ", ".join(child_types)
 
 	var label := flex_panel.get_child(0) as RNTextControl
-	if label.get_parsed_text() != SENTINEL:
+	if label.get_text() != SENTINEL:
 		return "direct RNTextControl does not contain the sentinel text"
 	if label.position.distance_to(EXPECTED_OFFSET) > TOLERANCE:
 		return "padding did not place the sentinel RNTextControl at (16, 16)"

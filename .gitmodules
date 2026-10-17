@@ -1,3 +1,31 @@
 [submodule "modules/react_native_bindings/engines/hermes"]
 	path = modules/react_native_bindings/engines/hermes
 	url = https://github.com/facebook/hermes.git
+[submodule "modules/react_native_bindings/thirdparty/react-native"]
+	path = modules/react_native_bindings/thirdparty/react-native
+	url = https://github.com/facebook/react-native.git
+	shallow = true
+[submodule "modules/react_native_bindings/thirdparty/folly"]
+	path = modules/react_native_bindings/thirdparty/folly
+	url = https://github.com/facebook/folly.git
+	shallow = true
+[submodule "modules/react_native_bindings/thirdparty/glog"]
+	path = modules/react_native_bindings/thirdparty/glog
+	url = https://github.com/google/glog.git
+	shallow = true
+[submodule "modules/react_native_bindings/thirdparty/fmt"]
+	path = modules/react_native_bindings/thirdparty/fmt
+	url = https://github.com/fmtlib/fmt.git
+	shallow = true
+[submodule "modules/react_native_bindings/thirdparty/double-conversion"]
+	path = modules/react_native_bindings/thirdparty/double-conversion
+	url = https://github.com/google/double-conversion.git
+	shallow = true
+[submodule "modules/react_native_bindings/thirdparty/fast_float"]
+	path = modules/react_native_bindings/thirdparty/fast_float
+	url = https://github.com/fastfloat/fast_float.git
+	shallow = true
+[submodule "modules/react_native_bindings/thirdparty/nlohmann_json"]
+	path = modules/react_native_bindings/thirdparty/nlohmann_json
+	url = https://github.com/nlohmann/json.git
+	shallow = true

@@ -43,7 +43,6 @@ bool compatible(const PropertyInfo &p_info, const RNValueSchema &p_schema) {
 		case RNValueType::INT64:
 			return p_info.type == Variant::INT;
 		case RNValueType::STRING:
-		case RNValueType::SESSION:
 			return p_info.type == Variant::STRING || p_info.type == Variant::STRING_NAME;
 		case RNValueType::ARRAY:
 			return p_info.type == Variant::ARRAY;

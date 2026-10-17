@@ -1,6 +1,6 @@
 #include "rn_image_service.h"
 
-#include "rn_native_module_registry.h"
+#include "rn_image_probe.h"
 
 #include "core/config/project_settings.h"
 #include "core/crypto/crypto_core.h"
@@ -8,7 +8,6 @@
 #include "core/io/resource_loader.h"
 #include "core/math/math_funcs.h"
 #include "core/os/thread.h"
-#include "scene/resources/compressed_texture.h"
 #include "scene/resources/image_texture.h"
 
 namespace {
@@ -17,13 +16,6 @@ RNImageResult failure(const String &p_code, const String &p_message) {
 	RNImageResult result;
 	result.error = RNError::make(p_code, p_message, "image.load");
 	return result;
-}
-Image::LoadLimits codec_limits(const RNImageLimits &p_limits) {
-	Image::LoadLimits limits;
-	limits.max_encoded_bytes = p_limits.encoded_bytes;
-	limits.max_allocation_bytes = p_limits.decoded_bytes;
-	limits.max_workspace_bytes = WORKSPACE_BYTES;
-	return limits;
 }
 } //namespace
 bool RNImageLimits::valid() const {
@@ -167,7 +159,7 @@ bool RNImageService::normalize(const Dictionary &p_source, RNImageSource &r_sour
 		}
 	}
 	r_source.shared = !r_source.remote || r_source.stateless;
-	if (!r_source.remote && !r_source.uri.begins_with("data:")) {
+	if (!r_source.remote && !r_source.uri.begins_with("data:") && FileAccess::exists(ResourceLoader::import_remap(r_source.uri))) {
 		const String imported = ResourceLoader::import_remap(r_source.uri);
 		hash_part(String::num_uint64(FileAccess::get_modified_time(imported)));
 		hash_part(String::num_uint64(FileAccess::get_size(imported)));
@@ -239,13 +231,15 @@ RNImageResult RNImageService::decode(const RNImageSource &p_source, const Vector
 	if (active_decodes >= limits.concurrent_decodes || p_bytes.size() <= 0 || uint64_t(p_bytes.size()) > limits.encoded_bytes) {
 		return failure(RNErrorCode::LIMIT, "Image encoded/concurrent decode limit exceeded");
 	}
-	Image::ScopedLoadLimits codec_scope(codec_limits(limits));
-	Size2i dimensions;
-	Image::BufferFormat format;
-	if (Image::probe_buffer(p_bytes.ptr(), p_bytes.size(), dimensions, format) != OK) {
+	RNImageHeader header;
+	if (!rn_probe_image(p_bytes.ptr(), p_bytes.size(), header)) {
 		return failure(RNErrorCode::LIMIT, "Unsupported, corrupt or oversized image header");
 	}
+	const Size2i dimensions = header.size;
 	const uint64_t pixels = uint64_t(dimensions.x) * uint64_t(dimensions.y);
+	if (pixels * 4 > limits.decoded_bytes) {
+		return failure(RNErrorCode::LIMIT, "Unsupported, corrupt or oversized image header");
+	}
 	const uint64_t retained = pixels * 32 + 1024;
 	const uint64_t required = WORKSPACE_BYTES + uint64_t(p_bytes.size()) * 3 + pixels * 64 + 1024;
 	if (!evict(required > p_reservation->bytes ? required - p_reservation->bytes : 0) || !p_reservation->resize(required)) {
@@ -254,8 +248,8 @@ RNImageResult RNImageService::decode(const RNImageSource &p_source, const Vector
 	++active_decodes;
 	Ref<Image> image;
 	image.instantiate();
-	Error error = format == Image::BUFFER_PNG ? image->load_png_from_buffer(p_bytes) : format == Image::BUFFER_JPEG ? image->load_jpg_from_buffer(p_bytes)
-																													: image->load_webp_from_buffer(p_bytes);
+	Error error = header.format == RNImageFormat::PNG ? image->load_png_from_buffer(p_bytes) : header.format == RNImageFormat::JPEG ? image->load_jpg_from_buffer(p_bytes)
+																																	: image->load_webp_from_buffer(p_bytes);
 	--active_decodes;
 	if (error != OK || image->get_size() != dimensions) {
 		return failure(RNErrorCode::NATIVE, "Native image decoding failed");
@@ -272,6 +266,24 @@ RNImageResult RNImageService::decode(const RNImageSource &p_source, const Vector
 	p_reservation->bytes -= retained;
 	image.unref();
 	p_reservation->resize(uint64_t(p_bytes.size()) * 3);
+	RNImageResult result;
+	result.resource = resource;
+	return result;
+}
+RNImageResult RNImageService::load_imported(const RNImageSource &p_source) {
+	Ref<Texture2D> texture = ResourceLoader::load(p_source.uri, "Texture2D", ResourceLoader::CACHE_MODE_IGNORE);
+	if (texture.is_null()) {
+		return failure(RNErrorCode::NATIVE, "Native imported texture load failed");
+	}
+	// Imported textures may be VRAM-compressed; RGBA8 is the upper bound.
+	auto reservation = reserve(uint64_t(texture->get_width()) * uint64_t(texture->get_height()) * 4);
+	if (!reservation) {
+		return failure(RNErrorCode::LIMIT, "Image total memory limit exceeded");
+	}
+	auto resource = std::make_shared<RNImageResource>();
+	resource->texture = texture;
+	resource->pixels = texture->get_size();
+	resource->reservation = reservation;
 	RNImageResult result;
 	result.resource = resource;
 	return result;
@@ -304,7 +316,10 @@ RNImageResult RNImageService::load_local(const RNImageSource &p_source) {
 		}
 		bytes.resize(decoded);
 	} else {
-		String path = ResourceLoader::import_remap(p_source.uri);
+		const String path = ResourceLoader::import_remap(p_source.uri);
+		if (path != p_source.uri) {
+			return load_imported(p_source);
+		}
 		Ref<FileAccess> file = FileAccess::open(path, FileAccess::READ);
 		if (file.is_null()) {
 			return failure(RNErrorCode::NATIVE, "Image file cannot be opened");
@@ -316,41 +331,6 @@ RNImageResult RNImageService::load_local(const RNImageSource &p_source) {
 		reservation = reserve(WORKSPACE_BYTES + size * 3);
 		if (!reservation) {
 			return failure(RNErrorCode::LIMIT, "Insufficient image input/workspace memory");
-		}
-		if (path.get_extension().to_lower() == "ctex") {
-			if (size < 52 || file->get_32() != 0x32545347 || file->get_32() > CompressedTexture2D::FORMAT_VERSION) {
-				return failure(RNErrorCode::VALIDATION, "Invalid imported texture header");
-			}
-			const uint32_t logical_width = file->get_32();
-			const uint32_t logical_height = file->get_32();
-			file->seek(36);
-			const uint32_t storage = file->get_32();
-			const uint32_t width = file->get_16();
-			const uint32_t height = file->get_16();
-			const uint32_t mips = file->get_32();
-			const uint32_t format = file->get_32();
-			Image::ScopedLoadLimits codec_scope(codec_limits(limits));
-			if (!Image::is_load_size_allowed(width, height, 16, true) || !Image::is_load_size_allowed(logical_width, logical_height, 16, true) || storage > CompressedTexture2D::DATA_FORMAT_WEBP || format >= Image::FORMAT_MAX || mips > 32) {
-				return failure(RNErrorCode::LIMIT, "Imported texture exceeds bounds or uses an unbounded codec");
-			}
-			const uint64_t pixels = uint64_t(width) * height;
-			const uint64_t retained = pixels * 64 + 1024;
-			const uint64_t required = WORKSPACE_BYTES + size * 3 + pixels * 128 + 1024;
-			if (!evict(required - reservation->bytes) || !reservation->resize(required)) {
-				return failure(RNErrorCode::LIMIT, "Imported texture exceeds aggregate memory");
-			}
-			Ref<Texture2D> texture = ResourceLoader::load(p_source.uri, "Texture2D", ResourceLoader::CACHE_MODE_IGNORE);
-			if (texture.is_null()) {
-				return failure(RNErrorCode::NATIVE, "Native imported texture load failed");
-			}
-			auto resource = std::make_shared<RNImageResource>();
-			resource->texture = texture;
-			resource->pixels = Size2i(width, height);
-			resource->reservation = reservation;
-			reservation->resize(retained);
-			RNImageResult result;
-			result.resource = resource;
-			return result;
 		}
 		bytes.resize(size);
 		if (file->get_buffer(bytes.ptrw(), size) != size) {
@@ -439,92 +419,4 @@ void rn_register_image_settings() {
 	for (const auto &entry : { std::pair<const char *, int64_t>("cache_bytes", 64 * 1024 * 1024), { "max_encoded_bytes", 8 * 1024 * 1024 }, { "max_decoded_bytes", 64 * 1024 * 1024 }, { "total_bytes", 256 * 1024 * 1024 }, { "max_concurrent_decodes", 2 } }) {
 		GLOBAL_DEF(PropertyInfo(Variant::INT, String("react_native/images/") + entry.first, PROPERTY_HINT_RANGE, String(entry.first) == "max_concurrent_decodes" ? "1,32,1" : "0,2147483647,1"), entry.second);
 	}
-}
-
-namespace {
-class RNImageModule : public RNNativeModule {
-	std::shared_ptr<RNImageService> service;
-	std::shared_ptr<std::map<String, uint64_t>> subscriptions = std::make_shared<std::map<String, uint64_t>>();
-
-public:
-	~RNImageModule() {
-		if (service) {
-			const auto pending = *subscriptions;
-			subscriptions->clear();
-			for (const auto &entry : pending) {
-				service->cancel(entry.second);
-			}
-		}
-	}
-	RNModuleResult invoke_sync(const StringName &p_method, const Array &p_arguments, const RNCallContext &p_context) override {
-		service = RNImageService::for_generation(p_context.generation);
-		if (p_method == "queryCache") {
-			Dictionary result;
-			if (p_arguments.size() != 1 || p_arguments[0].get_type() != Variant::ARRAY) {
-				return RNModuleResult::failure(RNError::make(RNErrorCode::VALIDATION, "queryCache requires source records", "image.module"));
-			}
-			const Array sources = p_arguments[0];
-			for (const Variant &value : sources) {
-				if (value.get_type() != Variant::DICTIONARY) {
-					return RNModuleResult::failure(RNError::make(RNErrorCode::VALIDATION, "queryCache requires source records", "image.module"));
-				}
-				const Dictionary source = value;
-				RNImageSource normalized;
-				RNError error;
-				if (!RNImageService::normalize(source, normalized, error)) {
-					return RNModuleResult::failure(error);
-				}
-				if (service->cached(normalized)) {
-					result[normalized.uri] = "memory";
-				}
-			}
-			return RNModuleResult::success(result);
-		}
-		return RNModuleResult::failure(RNError::make(RNErrorCode::UNSUPPORTED, "Unknown ImageLoader method", "image.module"));
-	}
-	void start_async(const StringName &p_method, const Array &p_arguments, const RNCallContext &p_context, const RNCompletionToken &p_completion) override {
-		service = RNImageService::for_generation(p_context.generation);
-		RNImageSource source;
-		RNError error;
-		if (p_arguments.size() != 1 || p_arguments[0].get_type() != Variant::DICTIONARY) {
-			p_completion.fail(RNError::make(RNErrorCode::VALIDATION, "ImageLoader requires a source record", "image.module"));
-			return;
-		}
-		if (!RNImageService::normalize(p_arguments[0], source, error)) {
-			p_completion.fail(error);
-			return;
-		}
-		auto completed = std::make_shared<bool>(false);
-		const String token = p_context.request_token;
-		uint64_t subscription = service->request(source, [p_completion, source, p_method, completed, token, tracking = subscriptions](RNImageResult result) { *completed = true; tracking->erase(token); if (result.error.is_set()) { p_completion.fail(result.error); } else if (p_method == "prefetch") { p_completion.complete(true); } else { Dictionary size; size["width"] = result.resource->texture->get_width() / source.scale; size["height"] = result.resource->texture->get_height() / source.scale; p_completion.complete(size); } });
-		if (subscription && !*completed) {
-			(*subscriptions)[p_context.request_token] = subscription;
-		}
-	}
-	void cancel(const String &p_request) override {
-		auto found = subscriptions->find(p_request);
-		if (found != subscriptions->end()) {
-			const uint64_t subscription = found->second;
-			subscriptions->erase(found);
-			service->cancel(subscription);
-		}
-	}
-};
-} //namespace
-bool rn_register_image_module(RNNativeModuleRegistry &p_registry, RNError &r_error) {
-	RNModuleDefinition definition;
-	definition.name = "GodotImageLoader";
-	for (const char *name : { "getSize", "prefetch", "queryCache" }) {
-		RNMethodSchema method;
-		method.name = name;
-		method.mode = String(name) == "queryCache" ? RNCallMode::SYNC : RNCallMode::ASYNC;
-		RNArgumentSchema argument;
-		argument.name = "source";
-		argument.value = RNValueSchema::value(RNValueType::DYNAMIC);
-		method.arguments.push_back(argument);
-		method.result = RNValueSchema::value(RNValueType::DYNAMIC);
-		definition.methods.push_back(method);
-	}
-	definition.factory = []() { return std::make_unique<RNImageModule>(); };
-	return p_registry.register_module(definition, r_error);
 }

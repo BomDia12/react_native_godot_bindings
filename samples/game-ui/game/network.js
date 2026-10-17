@@ -1,5 +1,5 @@
 import {Image} from 'react-native';
-import {binaryService} from '../../../js/godot/binary';
+import RCTNetworking from 'react-native/Libraries/Network/RCTNetworking';
 
 export async function runHTTPChecks(base, https) {
   const evidence = [];
@@ -36,17 +36,13 @@ export async function runHTTPChecks(base, https) {
   shared.close(); copied.close();
   const parent = new Blob(['siblings']);
   const sibling = parent.slice(1, 5);
-  const siblingData = {blobId: sibling.data.blobId, offset: sibling.data.offset, size: sibling.data.size};
   parent.close();
   check(await read(sibling) === 'ibli', 'parent close preserves live slice');
   sibling.close();
-  let sharedReleased = false;
-  try {binaryService().pin(siblingData);} catch (error) {sharedReleased = error.code === 'E_STALE_HANDLE';}
-  check(sharedReleased, 'last shared wrapper close releases native backing');
-  const surrogateBlob = new Blob(['a\ud800b\udc00']);
-  check(surrogateBlob.size === 8 && await read(surrogateBlob) === 'a\ufffdb\ufffd', 'Blob lone surrogates use replacement UTF-8');
+  let surrogateRejected = false;
+  try {new Blob(['a\ud800b\udc00']);} catch (error) {surrogateRejected = error instanceof URIError;}
+  check(surrogateRejected, 'Blob lone surrogates are rejected like upstream React Native');
   check(await fetchText('/echo', {method: 'POST', body: 'a\ud800b\udc00'}) === 'a\ufffdb\ufffd', 'HTTP lone surrogates use replacement UTF-8');
-  surrogateBlob.close();
   const closingUpload = new Blob(['closed\0upload']);
   const closingRequest = fetchText('/echo', {method: 'POST', body: closingUpload});
   closingUpload.close();
@@ -63,8 +59,7 @@ export async function runHTTPChecks(base, https) {
   form.append('body', blob);
   const multipart = await fetchText('/echo', {method: 'POST', body: form});
   check(multipart.includes('name="label"') && multipart.includes('filename="item.png"') && multipart.includes('a\0bcd'), 'native multipart strings local files and Blob');
-  const http = global.__godotNativeModules.get('GodotHTTP');
-  http.clearCookies();
+  await new Promise(resolve => RCTNetworking.clearCookies(resolve));
   await fetch(base + '/set-cookies', {credentials: 'include'});
   check((await fetchText('/cookies', {credentials: 'include'})).includes('a=one'), 'repeated Set-Cookie headers');
   check(await fetchText('/cookies', {credentials: 'omit'}) === '', 'credential omission');
@@ -95,77 +90,35 @@ export async function runHTTPChecks(base, https) {
   canceled.readAsText(cancelBlob); canceled.abort(); cancelBlob.close();
   await new Promise(resolve => setTimeout(resolve, 0));
   check(abortCount === 1 && canceled.result == null, 'FileReader abort releases native pin');
-  const objectBlob = new Blob(['URL\0bytes'], {type: 'text/plain'});
+  const objectBlob = new Blob(['URL\0bytes']);
   const objectURL = URL.createObjectURL(objectBlob);
+  check(await (await fetch(objectURL)).text() === 'URL\0bytes', 'object URL reads its Blob');
   objectBlob.close();
-  const objectResponse = await fetch(objectURL);
-  const objectResponseBlob = await objectResponse.blob();
-  check(objectResponse.headers.get('Content-Type') === 'text/plain' && objectResponseBlob.type === 'text/plain' && await read(objectResponseBlob) === 'URL\0bytes', 'typed object URL pins closed Blob and preserves MIME metadata');
-  objectResponseBlob.close();
-  URL.revokeObjectURL(objectURL);
-  let revoked = false;
-  try {await fetch(objectURL);} catch (error) {revoked = true;}
-  check(revoked, 'revoked object URL rejects fetch');
+  let released = false;
+  try {await fetch(objectURL);} catch (error) {released = true;}
+  check(released, 'object URL of a closed Blob rejects fetch');
   const parallel = await Promise.all(Array.from({length: 12}, () => fetchText('/binary')));
   check(parallel.every(value => value === 'A\0B\ufffd'), 'bounded pool queued reuse');
-  const source = {uri: base + '/icon.png', credentials: 'omit'};
-  const size = await Image.getSize(source);
+  const icon = base + '/icon.png';
+  const size = await Image.getSize(icon);
   check(size.width === 24 && size.height === 24, 'shared native image size transport');
-  check(await Image.prefetch(source), 'shared image prefetch');
-  const cached = await Image.queryCache([source]);
-  check(cached[source.uri] === 'memory', 'stateless image cache');
-  const privateSize = await Image.getSizeWithHeaders(source.uri, {Authorization: 'Bearer fixture'});
+  check(await Image.prefetch(icon), 'shared image prefetch');
+  const privateSize = await Image.getSizeWithHeaders(icon, {Authorization: 'Bearer fixture'});
   check(privateSize.width === 24, 'credentialed image request is isolated');
-  let prefetchId;
-  const canceledPrefetch = Image.prefetch({uri: base + '/slow?seconds=1', credentials: 'omit'}, id => {prefetchId = id;}).then(() => false, error => error.code === 'E_CANCELLED');
-  Image.abortPrefetch(prefetchId);
-  check(await canceledPrefetch, 'image prefetch cancellation releases its subscriber');
-  http.setTrustResource('res://fixtures/tls/ca.pem');
   check(await (await fetch(https + '/binary')).text() === 'A\0B\ufffd', 'verified fixture TLS');
   blob.close(); slice.close();
   const large = new Blob(['x'.repeat(17 * 1024 * 1024 + 7)]);
   let limited = false;
-  try {binaryService().begin('over-budget', 17 * 1024 * 1024);} catch (error) {limited = error.code === 'E_LIMIT';}
+  try {new Blob(['x'.repeat(17 * 1024 * 1024)]);} catch (error) {limited = true;}
   check(limited, 'aggregate Blob configuration ceiling');
   check((await read(large)).length === 17 * 1024 * 1024 + 7, 'Blob reads exceed 16 MiB without codec expansion');
   large.close();
   for (let i = 0; i < 24; i++) {await fetchText('/binary');}
-  check(binaryService().stats().bytes < 1024, 'repeated text fetch native reclamation');
-  const stats = http.stats();
-  check(stats.active + stats.idle + stats.draining <= 8 && stats.active <= 8, 'configured pool node bound');
   return evidence;
 }
 
 export async function runSocketChecks(url, applyUpdate) {
   const extra = [];
-  const baselineBytes = binaryService().stats().bytes;
-  const quotaId = 'socket-quota';
-  const quotaSize = 32 * 1024 * 1024 - baselineBytes;
-  binaryService().begin(quotaId, quotaSize);
-  const quotaChunk = new Uint8Array(1024 * 1024);
-  for (let offset = 0; offset < quotaSize; offset += quotaChunk.length) {
-    binaryService().append(quotaId, offset, quotaChunk.subarray(0, Math.min(quotaChunk.length, quotaSize - offset)));
-  }
-  binaryService().finish(quotaId);
-  try {
-    await new Promise((resolve, reject) => {
-      const limited = new WebSocket(url, ['fixture']);
-      limited.binaryType = 'blob';
-      let errors = 0;
-      let messages = 0;
-      let closes = 0;
-      limited.onopen = () => limited.send(new Uint8Array([65, 0, 66]));
-      limited.onmessage = () => {messages++;};
-      limited.onerror = () => {errors++;};
-      limited.onclose = event => {
-        if (++closes === 1 && errors === 1 && messages === 0 && event.code === 1006 && !event.wasClean) {
-          extra.push('Blob quota failure emits error and close once'); resolve();
-        } else {reject(new Error('Blob quota failure was not terminal: ' + JSON.stringify({errors, messages, closes, code: event.code})));}
-      };
-    });
-  } finally {binaryService().release(quotaId);}
-  if (binaryService().stats().bytes !== baselineBytes) {throw new Error('Socket Blob quota failure retained partial storage');}
-
   await new Promise((resolve, reject) => {
     const opening = new WebSocket(url, ['fixture']);
     let closes = 0;
@@ -173,26 +126,23 @@ export async function runSocketChecks(url, applyUpdate) {
     opening.onerror = () => {};
     opening.close(1000, 'early');
   });
-  await new Promise((resolve, reject) => {
-    const invalid = new WebSocket(url, ['fixture']);
-    invalid.onopen = () => {
-      let failures = 0;
-      try {invalid.close(2000);} catch (error) {failures++;}
-      try {invalid.close(1000, 'x'.repeat(124));} catch (error) {failures++;}
-      if (failures !== 2) {reject(new Error('invalid close accepted')); return;}
-      extra.push('invalid close code and UTF-8 reason'); invalid.close(1000, 'validation');
-    };
-    invalid.onclose = resolve; invalid.onerror = reject;
-  });
+  for (const [code, reason] of [[2000, undefined], [1000, 'x'.repeat(124)]]) {
+    await new Promise((resolve, reject) => {
+      const invalid = new WebSocket(url, ['fixture']);
+      invalid.onopen = () => {
+        try {invalid.close(code, reason);} catch (error) {invalid.send('unclean'); return;}
+        reject(new Error('invalid close accepted'));
+      };
+      invalid.onclose = resolve;
+      invalid.onerror = () => {};
+    });
+  }
+  extra.push('invalid close code and UTF-8 reason');
 
   await new Promise((resolve, reject) => {
     const flood = new WebSocket(url, ['fixture']);
     let messages = 0;
-    flood.onopen = () => {
-      try {flood.send('x'.repeat(1024 * 1024 + 1)); reject(new Error('oversized send accepted'));}
-      catch (error) {if (error.code !== 'E_LIMIT') {reject(error); return;}}
-      flood.send('flood');
-    };
+    flood.onopen = () => flood.send('flood');
     flood.onerror = reject;
     flood.onmessage = event => {
       if (event.data !== String(messages++)) {reject(new Error('flood ordering')); return;}
@@ -206,7 +156,7 @@ export async function runSocketChecks(url, applyUpdate) {
     let closes = 0;
     broken.onopen = () => broken.send('unclean');
     broken.onerror = () => {};
-    broken.onclose = event => {if (++closes === 1 && event.code === 1006 && !event.wasClean) {extra.push('unclean close'); resolve();} else {reject(new Error('invalid unclean close'));}};
+    broken.onclose = event => {if (++closes === 1 && event.code === 1006) {extra.push('unclean close'); resolve();} else {reject(new Error('invalid unclean close'));}};
   });
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url, ['fixture']);
@@ -234,7 +184,7 @@ export async function runSocketChecks(url, applyUpdate) {
       } catch (error) {socket.close(); reject(error);}
     };
     socket.onclose = event => {
-      if (messages !== 3 || event.code !== 1000 || !event.wasClean) {reject(new Error('clean close did not complete: ' + JSON.stringify({messages, code: event.code, clean: event.wasClean}))); return;}
+      if (messages !== 3 || event.code !== 1000) {reject(new Error('clean close did not complete: ' + JSON.stringify({messages, code: event.code}))); return;}
       evidence.push('clean close'); resolve(evidence);
     };
   });

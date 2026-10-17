@@ -1,117 +1,53 @@
 #pragma once
 
-#include "../fabric/rn_registry.h"
-#include "../runtime/react_native_runtime_coordinator.h"
-#include "rn_layout_tree.h"
-#include "rn_mounting_transaction.h"
-#include "rn_tree_differ.h"
+#include "rn_component_view_registry.h"
 
-#include "core/templates/hash_set.h"
+#include <react/renderer/uimanager/IMountingManager.h>
 
-#include <memory>
+#include <map>
+#include <mutex>
+#include <vector>
 
-class Control;
-class ReactNativeRootView;
+class RNMainThreadQueue;
 
-struct RNMountedNode {
-	RNMountedNodeSnapshot snapshot;
-	int logical_parent_tag = 0;
-	int native_parent_tag = 0;
-	int native_index = -1;
-	ObjectID object_id;
-	String view_name;
-	std::shared_ptr<const RNHostDescriptor> descriptor;
-	RNPreparedHostState prepared_state;
-	Ref<RNShadowNode> shadow_node;
-	Dictionary declarative_props;
-	Dictionary direct_prop_overrides;
-	uint64_t last_changed_revision = 0;
-	bool renderer_owned = false;
+struct RNMountedSurface {
+	RNComponentViewRegistry *views = nullptr;
+	std::function<void()> after_mount;
 };
 
-struct RNMountingManagerStats {
-	RNTreeDifferStats differ;
-	uint64_t hosts_created = 0;
-	uint64_t hosts_freed = 0;
-	uint64_t layout_boxes_applied = 0;
-	uint64_t rejected_transactions = 0;
-	uint64_t rollbacks = 0;
-	uint64_t mutations[5] = {};
-};
+// Receives upstream mounting transactions on the JS thread and applies them to
+// each surface's component views on the main thread, in commit order.
+class RNMountingManager : public facebook::react::IMountingManager {
+	std::shared_ptr<RNMainThreadQueue> main_thread;
+	std::shared_ptr<const RNComponentViewFactories> factories;
+	facebook::react::ComponentRegistryFactory registry_factory;
+	std::shared_ptr<facebook::react::IImageLoader> image_loader;
 
-class RNMountingManager {
-	ReactNativeRootView *owner = nullptr;
-	RNRegistry registry;
-	RNLayoutTree layout_tree;
-	HashMap<int, RNMountedNode> mounted_nodes;
-	HashMap<int, Dictionary> direct_prop_overrides;
-	Ref<RNShadowNode> declarative_root;
-	Ref<RNShadowNode> committed_root;
-	std::shared_ptr<const RNSurfaceSnapshot> published_snapshot;
-	ObjectID mount_container_id;
-	int root_tag = 0;
-	uint64_t runtime_generation = 0;
-	uint64_t surface_epoch = 0;
-	uint64_t published_revision = 0;
-	bool transaction_in_flight = false;
-	bool publication_pending = false;
-	HashMap<int, ObjectID> prepared_hosts;
-	int fail_before_mutation = -1;
-	int fail_after_mutation = -1;
-	RNMountingManagerStats stats;
+	std::mutex mutex;
+	std::map<facebook::react::SurfaceId, std::vector<facebook::react::MountingTransaction>> pending;
+	bool flush_scheduled = false;
+	facebook::react::SchedulerTaskExecutor scheduler_executor;
+	std::function<void(std::function<void()>)> js_thread_runner;
 
-	Control *mount_container() const;
-	Control *native_parent(int p_tag) const;
-	Control *host_for_tag(int p_tag) const;
-	void ensure_mount_container();
-	Ref<RNShadowNode> build_effective_tree(const Ref<RNShadowNode> &p_node, const HashMap<int, Dictionary> &p_overrides) const;
-	void reconcile_overrides(const Ref<RNShadowNode> &p_node, HashMap<int, Dictionary> &r_overrides, HashSet<int> &r_live_tags) const;
-	RNHostContext host_context(int p_tag, uint64_t p_revision) const;
-	Control *create_host(const Ref<RNShadowNode> &p_node, const RNHostContext &p_context);
-	bool apply_host_props(Control *p_host, const std::shared_ptr<const RNHostDescriptor> &p_descriptor, const RNPreparedHostState &p_state, const RNHostContext &p_context, String &r_error);
-	void apply_layout(Control *p_host, const Rect2 &p_layout);
-	int native_child_position(Control *p_parent, int p_index) const;
-	void refresh_geometry(RNSurfaceSnapshot &r_snapshot, const Transform2D &p_window_transform) const;
-	void sort_paint_order(HashMap<int, RNMountedNode> &r_records);
-	bool prepare_transaction(RNMountingTransaction &r_transaction, const Ref<RNShadowNode> &p_next_root, const Size2 &p_constraint, String &r_error);
-	bool apply_transaction(RNMountingTransaction &p_transaction, const Ref<RNShadowNode> &p_declarative_root, const HashMap<int, Dictionary> &p_next_overrides, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
-	void destroy_detached_hosts(RNMountingTransaction &p_transaction);
-	void restore_scene(const HashMap<int, RNMountedNode> &p_records, const Ref<RNShadowNode> &p_root, const Size2 &p_constraint, const RNMountingTransaction &p_transaction);
-	std::shared_ptr<RNSurfaceSnapshot> build_snapshot(const Ref<RNShadowNode> &p_root, const Ref<RNShadowNode> &p_declarative_root, const HashMap<int, Dictionary> &p_overrides, const HashMap<int, Rect2> &p_layouts, const HashMap<int, RNPreparedHostState> &p_prepared_states, const Transform2D &p_window_transform, uint64_t p_revision, HashMap<int, RNMountedNode> &r_records, String &r_error) const;
-	bool build_snapshot_node(const Ref<RNShadowNode> &p_node, int p_logical_parent, int p_native_parent, const Point2 &p_parent_origin, bool p_branch_targetable, const HashMap<int, Dictionary> &p_overrides, const HashMap<int, Rect2> &p_layouts, const HashMap<int, RNPreparedHostState> &p_prepared_states, const Transform2D &p_window_transform, uint64_t p_revision, RNSurfaceSnapshot &r_snapshot, HashMap<int, RNMountedNode> &r_records, HashMap<int, int> &r_native_indices, String &r_error) const;
-	bool hierarchy_matches(const HashMap<int, RNMountedNode> &p_records) const;
-	void queue_layout_events(const std::shared_ptr<const RNSurfaceSnapshot> &p_old_snapshot, const RNSurfaceSnapshot &p_new_snapshot, Vector<RNNativeEvent> &r_events) const;
+	std::map<facebook::react::SurfaceId, RNMountedSurface> surfaces;
+
+	void _flush();
+	RNComponentView *_find(facebook::react::Tag p_tag) const;
 
 public:
-	explicit RNMountingManager(ReactNativeRootView *p_owner);
-	~RNMountingManager();
+	RNMountingManager(std::shared_ptr<RNMainThreadQueue> p_main_thread, std::shared_ptr<const RNComponentViewFactories> p_factories, facebook::react::ComponentRegistryFactory p_registry_factory, std::shared_ptr<facebook::react::IImageLoader> p_image_loader);
 
-	void attach(uint64_t p_generation, int p_root_tag, uint64_t p_surface_epoch);
-	void clear(bool p_keep_container = false);
-	bool commit(const RNPendingCommit &p_commit, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
-	bool resize(const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
-	bool apply_direct_props(int p_tag, const Dictionary &p_patch, const Size2 &p_constraint, const Transform2D &p_window_transform, Vector<RNNativeEvent> &r_events, String &r_error);
-	void publish_transform(const Transform2D &p_window_transform);
-	bool dispatch_command(int p_tag, const StringName &p_command, const Variant &p_arguments, String &r_error);
-	bool is_transaction_in_flight() const { return transaction_in_flight; }
-	bool is_current_host(int p_tag, ObjectID p_id, uint64_t p_revision) const;
-	void activate_published_hosts();
-	int tag_for_input_control(Control *p_control) const;
-	Control *focus_control(int p_tag) const;
-	bool owns_native_activation(int p_tag) const;
+	void register_surface(facebook::react::SurfaceId p_surface, const RNMountedSurface &p_mounted);
+	void unregister_surface(facebook::react::SurfaceId p_surface);
+	const std::shared_ptr<const RNComponentViewFactories> &get_factories() const { return factories; }
+	// Mount reports lock the shadow tree, so they run on the JS thread.
+	void set_js_thread_runner(std::function<void(std::function<void()>)> p_runner) { js_thread_runner = std::move(p_runner); }
 
-	const Ref<RNShadowNode> &get_committed_root() const { return committed_root; }
-	const RNRegistry &get_registry() const { return registry; }
-	RNRegistry &get_registry() { return registry; }
-	std::shared_ptr<const RNSurfaceSnapshot> get_snapshot() const { return published_snapshot; }
-	uint64_t get_published_revision() const { return published_revision; }
-	const RNMountingManagerStats &get_stats() const { return stats; }
-	void reset_stats() {
-		stats = RNMountingManagerStats();
-		layout_tree.reset_stats();
-	}
-	void set_failure_injection(int p_before_mutation, int p_after_mutation) {
-		fail_before_mutation = p_before_mutation;
-		fail_after_mutation = p_after_mutation;
-	}
+	void executeMount(facebook::react::SurfaceId p_surface, facebook::react::MountingTransaction &&p_transaction) override;
+	void dispatchCommand(const facebook::react::ShadowView &p_view, const std::string &p_command, const folly::dynamic &p_args) override;
+	void synchronouslyUpdateViewOnUIThread(facebook::react::Tag p_tag, const folly::dynamic &p_props) override;
+	facebook::react::ComponentRegistryFactory getComponentRegistryFactory() override { return registry_factory; }
+	bool hasComponent(const std::string &p_name) override { return factories->has(p_name); }
+	void setSchedulerTaskExecutor(facebook::react::SchedulerTaskExecutor &&p_executor) noexcept override;
+	std::shared_ptr<facebook::react::IImageLoader> getImageLoader() noexcept override { return image_loader; }
 };

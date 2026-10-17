@@ -15,9 +15,9 @@
     "samples/view-text/assets/primary/badge@2x.godot.png",
     "samples/view-text/assets/primary/badge@3x.godot.png",
     "samples/view-text/assets/secondary/badge.png",
-    "js/godot/assets.cjs",
-    "js/godot/asset-scale.cjs",
-    "js/godot/adapters/resolveAssetSource.godot.js",
+    "packages/react-native-godot/assets.cjs",
+    "packages/react-native-godot/asset-scale.cjs",
+    "packages/react-native-godot/src/asset-source.js",
     "documentation/expected-warnings.txt",
     "samples/view-text/smoke/tests/godot_assets/GodotAssets.tscn",
     "samples/view-text/smoke/tests/godot_assets/godot_assets.gd"
