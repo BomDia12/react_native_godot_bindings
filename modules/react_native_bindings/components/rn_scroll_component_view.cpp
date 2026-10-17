@@ -93,3 +93,7 @@ void RNScrollComponentView::handle_command(const std::string &p_name, const foll
 		scroll->get_v_scroll_bar()->queue_redraw();
 	}
 }
+
+bool RNScrollComponentView::owns_input_control(Control *p_control) const {
+	return p_control == scroll || p_control == scroll->get_content() || p_control == scroll->get_h_scroll_bar() || p_control == scroll->get_v_scroll_bar();
+}

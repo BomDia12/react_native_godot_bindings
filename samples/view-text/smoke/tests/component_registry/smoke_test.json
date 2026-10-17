@@ -1,0 +1,25 @@
+{
+  "id": "component-registry",
+  "project_dir": "samples/view-text",
+  "scene": "res://smoke/tests/component_registry/ComponentRegistry.tscn",
+  "timeout_seconds": 60,
+  "allowlist": "documentation/expected-warnings-component-registry.txt",
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/view-text",
+    "script": "build:godot",
+    "output": "samples/view-text/dist/godot.bundle.js"
+  },
+  "inputs": [
+    "samples/view-text/project.godot",
+    "samples/view-text/package.json",
+    "samples/view-text/package-lock.json",
+    "samples/view-text/godot.entry.js",
+    "samples/view-text/component_registry.entry.js",
+    "packages/react-native-godot/specs/RNExampleMeterNativeComponent.js",
+    "packages/react-native-godot/Libraries/NativeComponent/BaseViewConfig.godot.js",
+    "documentation/expected-warnings-component-registry.txt",
+    "samples/view-text/smoke/tests/component_registry/ComponentRegistry.tscn",
+    "samples/view-text/smoke/tests/component_registry/component_registry.gd"
+  ]
+}

@@ -12,10 +12,9 @@
     "./GodotWindow": "./src/GodotWindow.js",
     "./fonts": "./src/fonts.js",
     "./values": "./src/values.js",
-    "./binary": "./src/binary.js",
     "./package.json": "./package.json",
     "./setup": "./src/setup.js",
-    "./modules": "./src/modules.js"
+    "./specs/*": "./specs/*.js"
   },
   "types": "./godot.d.ts",
   "scripts": {

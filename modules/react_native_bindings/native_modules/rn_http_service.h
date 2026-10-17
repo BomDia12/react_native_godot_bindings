@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../runtime/rn_service_settings.h"
+#include "../host/rn_service_settings.h"
 #include "rn_cookie_jar.h"
 #include "rn_image_service.h"
 
@@ -82,4 +82,3 @@ public:
 std::shared_ptr<RNImageTransport> rn_http_image_transport(const std::shared_ptr<RNHTTPService> &p_service);
 class RNBlobService;
 bool rn_build_http_request(const Variant &p_data, const std::shared_ptr<RNBlobService> &p_blobs, uint64_t p_upload_limit, const String &p_boundary, RNHTTPRequest &r_request, RNError &r_error);
-bool rn_register_http_module(RNNativeModuleRegistry &p_registry, const std::function<std::shared_ptr<RNHTTPService>()> &p_service, const std::function<std::shared_ptr<RNBlobService>()> &p_blobs, RNError &r_error);

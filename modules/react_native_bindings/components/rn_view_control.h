@@ -1,9 +1,10 @@
 #pragma once
 
-#include "rn_host_descriptor.h"
-
 #include "scene/gui/panel.h"
 #include "scene/gui/popup_menu.h"
+
+#include <functional>
+#include <memory>
 
 class RNViewControl : public Panel {
 	GDCLASS(RNViewControl, Panel);
@@ -26,7 +27,4 @@ public:
 	void set_menu_entries(const Array &p_entries);
 	void set_focus_callback(std::function<void(bool)> p_callback) { focus_changed = std::move(p_callback); }
 	void set_menu_callbacks(std::function<void(const String &)> p_action, std::function<void()> p_opening);
-	void publish_menu(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 };
-
-std::shared_ptr<const RNHostDescriptor> rn_view_descriptor();

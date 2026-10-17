@@ -1,5 +1,10 @@
 [
   {
+    "file": "Libraries/Alert/Alert.godot.js",
+    "baseFile": "Libraries/Alert/Alert.js",
+    "baseHash": "c1398741bde1e2ad4092c31c2677513f999249b6cdbc347236ae7be083806392"
+  },
+  {
     "file": "Libraries/Components/TextInput/TextInput.godot.js",
     "baseFile": "Libraries/Components/TextInput/TextInput.js",
     "baseHash": "92be0deff59c3716ebf88fc0b539a0370641aa04c8d24302d89c8b3193b8c599"

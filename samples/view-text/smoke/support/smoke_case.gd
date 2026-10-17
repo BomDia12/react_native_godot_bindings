@@ -4,44 +4,49 @@ const TIMEOUT_FRAMES := 600
 const SETTLE_FRAMES := 30
 
 var frames := 0
-var settle_frames := -1
 
 func smoke_id() -> String:
 	return ""
 
-func ready_to_validate() -> bool:
+func ready_to_validate():
 	return true
 
-func validate_smoke() -> String:
+func validate_smoke():
 	return "smoke test did not implement validate_smoke"
 
 func fail_smoke(message: String) -> void:
 	printerr("RN_SMOKE_FAILED: %s: %s" % [smoke_id(), message])
 	get_tree().quit(1)
 
-func _process(_delta: float) -> void:
+func mount_container() -> Control:
+	return get_child(0, true)
+
+func js(code: String) -> Variant:
+	return await ReactNativeHost.evaluate(code)
+
+func next_frame() -> void:
 	frames += 1
+	await get_tree().process_frame
 
-	if settle_frames < 0:
-		if get_child_count() > 0:
-			settle_frames = 0
-		elif frames >= TIMEOUT_FRAMES:
-			fail_smoke("no Fabric root commit after %d frames" % TIMEOUT_FRAMES)
-		return
+func _ready() -> void:
+	_run.call_deferred()
 
-	settle_frames += 1
-	if settle_frames < SETTLE_FRAMES:
-		return
-
-	if not ready_to_validate():
-		if frames >= TIMEOUT_FRAMES: fail_smoke("asynchronous fixture did not become ready")
-		return
-
-	set_process(false)
-	var failure := validate_smoke()
-	if not failure.is_empty():
+func _run() -> void:
+	while mount_container().get_child_count() == 0:
+		if frames >= TIMEOUT_FRAMES:
+			fail_smoke("no React Native mount after %d frames" % TIMEOUT_FRAMES)
+			return
+		await next_frame()
+	for i in SETTLE_FRAMES:
+		await next_frame()
+	while not await ready_to_validate():
+		if frames >= TIMEOUT_FRAMES:
+			fail_smoke("asynchronous fixture did not become ready")
+			return
+		await next_frame()
+	var failure = await validate_smoke()
+	if not String(failure).is_empty():
 		fail_smoke(failure)
 		return
-
 	print("RN_SMOKE_OK: %s" % smoke_id())
 	get_tree().quit(0)

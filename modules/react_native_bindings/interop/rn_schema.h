@@ -27,7 +27,6 @@ enum class RNValueType {
 	RECT2,
 	TRANSFORM2D,
 	OBJECT,
-	SESSION,
 };
 
 struct RNValueSchema;
@@ -53,7 +52,6 @@ struct RNValueSchema {
 	static RNValueSchema value(RNValueType p_type);
 	static RNValueSchema array(const RNValueSchema &p_element);
 	static RNValueSchema record(const Vector<RNRecordFieldSchema> &p_fields, bool p_closed = true);
-	Dictionary to_metadata() const;
 };
 
 struct RNArgumentSchema {
@@ -75,21 +73,11 @@ struct RNMethodSchema {
 	Vector<RNArgumentSchema> arguments;
 	RNValueSchema result = RNValueSchema::value(RNValueType::VOID);
 	RNCallMode mode = RNCallMode::SYNC;
-	bool requires_session = false;
-};
-
-struct RNEventSchema {
-	bool keeps_runtime_alive = true;
-	StringName name;
-	StringName subscription_name;
-	RNValueSchema payload;
-	bool requires_session = false;
 };
 
 bool rn_validate_value_schema(const RNValueSchema &p_schema, RNError &r_error, const String &p_path = "schema");
 bool rn_parse_value_schema(const Dictionary &p_definition, RNValueSchema &r_schema, RNError &r_error, const String &p_path = "schema");
 bool rn_validate_method_schema(const RNMethodSchema &p_schema, RNError &r_error, const String &p_path = "method");
-bool rn_validate_event_schema(const RNEventSchema &p_schema, RNError &r_error, const String &p_path = "event");
 bool rn_validate_native_value(const Variant &p_value, const RNValueSchema &p_schema, RNError &r_error, const String &p_path);
 
 Variant rn_apply_native_defaults(const Variant &p_value, const RNValueSchema &p_schema);

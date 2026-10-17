@@ -28,6 +28,12 @@ void HostPlatformViewEventEmitter::onKeyUp(const GodotKeyEvent &event) const {
 	dispatchEvent("keyUp", key_payload(event), RawEvent::Category::Discrete);
 }
 
+// Pressability treats a click without pointer fields as keyboard or
+// accessibility activation.
+void HostPlatformViewEventEmitter::onKeyboardClick() const {
+	dispatchEvent("click", folly::dynamic::object(), RawEvent::Category::Discrete);
+}
+
 void HostPlatformViewEventEmitter::onGodotContextMenuAction(const std::string &id) const {
 	dispatchEvent("godotContextMenuAction", folly::dynamic::object("id", id), RawEvent::Category::Discrete);
 }

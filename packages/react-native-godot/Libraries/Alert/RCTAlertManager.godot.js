@@ -1,5 +1,7 @@
 'use strict';
 
-export function alertWithArgs() {
-  global.__godotUnsupported('Alert.alert');
+import NativeAlertManager from 'react-native/Libraries/Alert/NativeAlertManager';
+
+export function alertWithArgs(args, callback) {
+  NativeAlertManager?.alertWithArgs(args, callback);
 }

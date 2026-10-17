@@ -23,10 +23,10 @@
           globalThis.__godotMountingRegressionEvents.push(name);
         });
         leaf = ui.createNode(90002, 'RCTView', rootTag, {
-          width: 100, height: 100, opacity: 1,
+          width: 100, height: 100, opacity: 1, backgroundColor: 0xff336699,
         }, handles[0]);
         sibling = ui.createNode(90004, 'RCTView', rootTag, {
-          width: 20, height: 20,
+          width: 20, height: 20, backgroundColor: 0xff996633,
         }, handles[1]);
         commit();
         break;
@@ -37,10 +37,6 @@
       case 'direct':
         ui.setNativeProps(leaf, {opacity: 0.4});
         break;
-      case 'sibling':
-        sibling = ui.cloneNodeWithNewProps(sibling, {width: 30});
-        commit();
-        break;
       case 'clone':
         leaf = ui.cloneNode(leaf);
         commit();
@@ -49,21 +45,6 @@
         leaf = ui.cloneNodeWithNewProps(leaf, {opacity: 0.6});
         commit();
         leaf = ui.cloneNodeWithNewProps(leaf, {width: 110});
-        commit();
-        break;
-      case 'roundtrip':
-        leaf = ui.cloneNodeWithNewProps(leaf, {opacity: 0.8});
-        commit();
-        leaf = ui.cloneNodeWithNewProps(leaf, {opacity: 0.6});
-        leaf = ui.cloneNodeWithNewChildren(leaf);
-        commit();
-        break;
-      case 'reject':
-        leaf = ui.cloneNodeWithNewProps(leaf, {opacity: 0.9});
-        commit();
-        break;
-      case 'recover':
-        leaf = ui.cloneNodeWithNewProps(leaf, {width: 120});
         commit();
         break;
       case 'clear':

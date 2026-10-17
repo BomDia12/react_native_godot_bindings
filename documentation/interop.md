@@ -1,99 +1,68 @@
 # JavaScript and Godot interop
 
-Native-module arguments, results, events, descriptor-owned typed props, and the public
-Hermes value bridge use one schema-driven codec. Conversion either succeeds completely
-or returns a structured error; it never truncates, stringifies an unknown value, or
-silently substitutes null.
+JavaScript runs on React Native's JS thread and Godot runs on the main thread. Godot
+TurboModules (`GodotScene`, `GodotAlert`, `ExampleScene` and the application, network and
+image modules) are implemented in C++ against codegen'd specs, so React Native checks
+their argument and result types. Values that Godot scripts declare at runtime cross
+through one schema-driven codec, which either converts a value completely or reports a
+structured error; it never truncates, stringifies an unknown value, or silently
+substitutes null.
+
+## Threads and synchronous calls
+
+TurboModule methods run on the JS thread. A method that needs Godot posts its work to
+the main thread. Synchronous methods, such as `GodotScene.call`, block the JS thread until
+that work finishes and then convert the result on the JS thread; asynchronous methods
+return a Promise that settles later. The main thread never waits for JavaScript. While
+the host shuts down or reloads, pending and new synchronous calls fail with
+`E_CANCELLED`. Nodes and scene-owned resources are only touched on the main thread; the
+JS thread uses only `FileAccess`, `TextServer` and already-loaded fonts.
+
+`ReactNativeHost.evaluate(code)` evaluates JavaScript from Godot without blocking. It
+returns a signal that completes with the converted result:
+
+```gdscript
+var count = await ReactNativeHost.evaluate("globalThis.counter")
+```
 
 ## Values
 
 Supported values are null, booleans, finite numbers, safe integers, strings without an
 embedded NUL, arrays, plain records, and `Uint8Array`. Typed wrappers represent `int64`,
-`Color`, `Vector2`, `Vector3`, `Rect2`, `Transform2D`, registered objects, and sessions.
-`Uint8Array` uses its actual byte offset and length and is copied into independent
-`PackedByteArray` storage. Full-range integers use a canonical signed decimal wrapper:
+`Color`, `Vector2`, `Vector3`, `Rect2`, `Transform2D` and registered objects.
+`react-native-godot/values` builds them. `Uint8Array` uses its actual byte offset and
+length and is copied into independent `PackedByteArray` storage. Full-range integers use
+a canonical signed decimal wrapper:
 
 ```js
 {$godot: 'int64', value: '9223372036854775807'}
 ```
 
 `INTEGER` schemas accept values from -9,007,199,254,740,991 through
-9,007,199,254,740,991, including native argument and record-field defaults. Use an
-`INT64` schema for larger signed 64-bit values. Defaults use the same nullability as
-explicit arguments or record fields: either the value schema or the argument/field
-may allow null.
+9,007,199,254,740,991. Use an `INT64` schema for larger signed 64-bit values. Without a
+schema, exact safe JavaScript integers become Godot integers; other finite numbers,
+including negative zero, stay floating point.
 
-A `DYNAMIC` schema infers Godot integers for exact safe JavaScript integers. Other
-finite numbers, including negative zero, retain their floating-point representation.
-
-Functions are not data values. Event subscriptions and internal microtasks validate and
-retain JSI functions through dedicated callback paths. Symbols, BigInt, sparse arrays,
-class instances, arbitrary HostObjects, cycles, non-finite numbers, unsafe integers,
-unknown wrappers, and unsupported Godot Variant kinds are rejected.
-
-Each conversion allows at most 32 container levels, 4,096 fields/elements in one
-container, 65,536 visited values, and 16 MiB of aggregate UTF-8/binary payload. These are
-safety ceilings. Large binary transfers should be chunked because validation and the
-initial copy run while Hermes is owned. Test-only statistics expose visited values,
-allocated containers, and copied bytes; the byte path performs one payload-sized copy.
+Functions, symbols, BigInt, sparse arrays, class instances, HostObjects, cycles,
+non-finite numbers, unsafe integers, unknown wrappers and unsupported Variant kinds are
+rejected. Each conversion allows at most 32 container levels, 4,096 fields or elements in
+one container, 65,536 visited values, and 16 MiB of aggregate UTF-8 and binary payload.
 
 ## Errors
 
-Errors carry `code`, `message`, `operation`, and `path`, plus relevant module,
-component, root, tag, generation, or revision context. Stable codes are
-`E_VALIDATION`, `E_UNSUPPORTED`, `E_UNKNOWN_COMPONENT`, `E_UNKNOWN_MODULE`,
-`E_DUPLICATE_REGISTRATION`, `E_STALE_HANDLE`, `E_OBJECT_GONE`, `E_CANCELLED`,
-`E_SESSION_CLOSED`, `E_RUNTIME_RESET`, `E_NATIVE`, `E_UNHANDLED_REJECTION`, and
-`E_LIMIT`. Sync methods throw this shape; async methods reject with it.
+Godot errors reach JavaScript as thrown errors or Promise rejections with a `code` and
+`message`. Stable codes are `E_VALIDATION`, `E_UNSUPPORTED`, `E_STALE_HANDLE`,
+`E_OBJECT_GONE`, `E_CANCELLED`, `E_NATIVE` and `E_LIMIT`. A component name without a
+Godot view prints `E_UNKNOWN_COMPONENT` to the Godot log once and mounts a plain View.
+JavaScript errors and unhandled Promise rejections follow upstream React Native's error
+handling; the host prints them and `ReactNativeHost.get_last_error()` returns the latest.
 
-Native strings exceeding the aggregate payload ceiling report `E_LIMIT`; embedded NUL
-characters report `E_VALIDATION`.
-
-Unhandled Promise rejections are reported through the native diagnostic path in both
-production and development bundles. A rejection handled later produces the matching
-handled record. Runtime reset is the exception: the old realm is destroyed, so its
-Promises cannot observe a final rejection.
-
-## Objects, sessions, and cancellation
+## Objects
 
 JavaScript never supplies an ObjectID. Native code registers an existing Godot object
-under a capability and receives an opaque generation-bound token. Resolution checks the
-generation, session, root/surface epoch, capability, and current ObjectDB lifetime on the
-main thread. Destroying an object, closing a session, removing a surface, or resetting
-Hermes revokes its handles.
-
-One module instance is created lazily per Hermes generation and shared by roots. Work
-that touches a scene opens an explicit root session. A frame processes copied native
-jobs, queues copied completions/events, then reacquires Hermes to deliver callbacks and
-run a microtask checkpoint after each callback. Late or duplicate completions are ignored.
-
-`callAsync(module, method, args, {signal})` in `packages/react-native-godot/src/modules.js` connects an
-`AbortSignal` to the native request token. An already-aborted signal rejects with
-`E_CANCELLED`; later abort, session closure, surface removal, and runtime reset settle or
-discard work once according to their lifetime. Subscription callbacks remain strong JSI
-references until `{remove()}`, session/surface closure, or reset.
-
-Event delivery snapshots the matching subscription tokens for each event. Callbacks may
-remove themselves or other subscriptions, close their session, or add subscriptions.
-Removed subscriptions are skipped immediately, and new subscriptions begin with the
-next event. The running callback remains retained until it returns.
-
-## Local resource paths
-
-Built-in local file/import operations accept normalized `res://` and `user://` paths
-only. Backslashes, absolute OS paths, empty paths, other schemes, `..` segments, and
-embedded NUL are rejected. `.` and repeated separator segments are normalized once;
-case and literal percent characters are preserved. Godot's FileAccess/ResourceLoader
-performs the final virtual-path lookup. A custom native import resolver is a trusted
-extension point and is outside this built-in rule.
-
-## Component service boundary
-
-Component events and GodotImageLoader reuse the existing schema registry and native
-completion queue. Image source records and queryCache arrays are validated before
-native casts. The shared HTTP transport is installed before bundle execution. Generic scene bindings
-provide direct script snapshots, declared commands and signals; the working game uses
-these without a network hop.
+under a capability and returns an opaque handle that belongs to one root. Resolution
+checks the root, the capability and the object's current lifetime on the main thread.
+Destroying the object or stopping the root revokes its handles.
 
 ## Script capability resources
 
@@ -106,7 +75,7 @@ it is live inside the SceneTree. Leaving the tree/death/rebinding revokes old ha
 
 Value schemas are Dictionaries with a `type`: `void`, `dynamic`, `null`, `boolean`,
 `number`, `integer`, `string`, `array`, `record`, `Uint8Array`, `int64`, `Color`,
-`Vector2`, `Vector3`, `Rect2`, `Transform2D`, `Object`, or `Session`. `nullable` is
+`Vector2`, `Vector3`, `Rect2`, `Transform2D` or `Object`. `nullable` is
 optional. Array schemas require `element`; records require `fields`, default to closed,
 and can set `closed=false`. Record fields allow `optional` and a validated `default`.
 Object schemas require a capability; Rect2 can allow negative size explicitly.
@@ -121,79 +90,36 @@ to `{event, arguments, payload}`: argument names zip to a record payload. Method
 arity, typed signatures, defaults and mapped signal fields are checked on attachment;
 arguments/returns/emitted values are checked on every call. Only declared public methods
 are callable; there is no unrestricted reflection from JS. Object-typed arguments
-resolve their opaque handles against the current session and declared capability
+resolve their opaque handles against the calling root and declared capability
 before invocation. Object results, snapshot fields and signal fields are registered
 and returned as `{$godot: 'Object', handle}` wrappers, including declared array/record
 fields and nullable values. Declared `int64` results preserve their decimal-string
 wrappers through the scene response envelope. Godot retains ownership of the objects; destroyed objects
-fail resolution and session closure invalidates their handles.
+fail resolution and stopping the root invalidates their handles.
 
 `react-native-godot/scene` exports `getBinding`, `read`, `call`, `callAsync`, `onChanged`
-and `useGodotScene(rootTag)`. Responses carry `ready`, opaque `binding`, monotonic
-`sequence`, `event`, `payload`, capability and schemaVersion. Subscribe, look up and read;
-ignore older sequences. The hook waits for readiness, re-reads snapshots and closes its
-session/subscription on cleanup. When the event queue is full, each session retains
-one resynchronization flag. A later `resync` notification carries current readiness and
-handle with a null payload; consumers re-read the snapshot. Intermediate signal payloads
-may coalesce under backpressure. Handles cannot cross sessions, even on the same root.
-All scene operations run on Godot's main thread. A sync script can trigger root reload;
-the coordinator defers runtime lifecycle work until the current Hermes call returns.
+and `useGodotScene(rootTag)`; each takes the root tag of the calling surface. Responses
+carry `ready`, an opaque `binding` handle, a monotonic `sequence`, `event`, `payload`,
+`capability` and `schemaVersion`. `onChanged` delivers each change once. The hook waits
+for readiness, re-reads the snapshot on later sequences and removes its subscription on
+cleanup. Handles cannot cross roots. Scene calls run on Godot's main thread; a call that
+reloads a root takes effect on the next frame.
 
-Application state events retain at most one latest notification per dimensions,
-appearance, app state, keyboard and focus channel while the native queue is full. Native
-layout invalidation proceeds immediately; notification retries do not repeat it.
+## Binary and network ownership
 
-## Scheduling, binary and transport ownership
-
-Timers use a generation-owned monotonic clock. Due callback IDs are snapshotted;
-nested registration waits for the next turn, cancellation applies immediately, missed
-intervals skip catch-up bursts, thrown callbacks do not stop later work, and Hermes owns
-microtasks. Tagged RN supplies `setImmediate`/`clearImmediate` through its bridgeless
-`immediateShim`, backed by the native Hermes microtask queue; cancellation, callback
-arguments and nested immediates are exercised in the real application. Recurring timers rotate behind waiting due callbacks to prevent starvation.
-rAF runs only with a visible eligible root. Timer/native delivery drains are
-bounded; idle deadlines cap configured work by remaining frame time (configured frame
-rate, or a 60 Hz budget when uncapped). Explicit idle timeout zero is immediately
-expired; an omitted timeout waits for spare frame time. Once all roots are removed,
-the coordinator drains outstanding work and disconnects frame polling; new root entry
-reconnects it. Game physics pause does not stop service time.
-A tree-owned lifecycle observer retains pause/resume state while no RN roots are
-mounted. Passive application-service listeners do not keep idle frame polling alive,
-and the shared Alert subscription is removed when its last root unregisters.
-Root-origin scopes are retained for timers and listener registrations; microtasks begin
-unattributed, so asynchronous app flows should retain `useGodotAlert()` explicitly.
-
-Queued completion values/error payloads share a 16 MiB aggregate budget, checked before
-deep copying. Overflow rejects that request with `E_LIMIT`; a bounded set of small
-terminal control records remains deliverable. Cancellation, delivery (including partial
-batches), stale-generation removal and reset release accounted bytes. The diagnostic
-`__godotNativeModules.getStats().completionBytes` reports retained payload bytes.
-
-General interop strings reject embedded NUL. Networking text uses byte transport and JS
-UTF-8 encoding/decoding, preserving NUL and replacing lone UTF-16 surrogates or
-malformed UTF-8 with U+FFFD. Binary facades never enlarge
-the 16 MiB codec ceiling: native read/append chunks are at most 1 MiB. FileReader yields
-between chunks, supports abort and pins native backing until completion/cancellation.
-Blob collectors enqueue an atomic release marker without touching SceneTree/Hermes;
-the main thread reclaims it after the final collector is gone. Collectors sharing a
-blobId use an atomic reference count; a new collector created before the pending
-release drains keeps the backing alive. Native pins remain independent.
-Tagged [BlobManager.release](https://github.com/facebook/react-native/blob/v0.87.1/packages/react-native/Libraries/Blob/BlobManager.js#L137-L148)
-reference-counts shared wrappers through BlobRegistry: native release occurs only after
-the last explicit close. A live slice survives closing its parent and vice versa.
-`new Blob([blob])` copies bytes into independent backing. Collector reference counts
-protect sibling views from automatic collection; object URLs and native HTTP/socket
-readers retain explicit pins independently of close.
-Queued HTTP Blob and multipart uploads pin borrowed backing synchronously before
-enqueue and unpin it on settlement, cancellation or submission failure. Closing the
-source Blob before the next frame cannot invalidate an accepted upload.
-Revoking a URL removes its pin. Reset closes all old-generation stores and collectors.
+Strings reject embedded NUL. Networking text uses byte transport, preserving NUL and
+replacing lone UTF-16 surrogates or malformed UTF-8 with U+FFFD. Blobs live in the native
+Blob service and follow upstream `BlobManager` ownership: native backing is released
+after the last wrapper closes and its garbage collector notification drains on the main
+thread. Native HTTP or WebSocket readers keep their own pins. As on iOS, an object URL
+names a Blob range and holds no reference: `fetch` fails once the Blob is closed, and
+`URL.revokeObjectURL` does nothing.
 
 HTTPRequest nodes are lazy, bounded, always processing and shared by fetch/XHR/images.
 A lease moves through IDLE → LEASED → DRAINING; cancellation releases no slot until the
 old native completion/deferred drain barrier. Queue timeout includes waiting time;
 zero means no caller deadline. Blob response descriptors preserve the case-insensitive
-Content-Type response header, including synthetic responses for typed Blob object URLs. Metadata and data delivery share a response ownership
+Content-Type response header; object URL responses carry no Content-Type. Metadata and data delivery share a response ownership
 guard: listener failures release storage unless a Blob descriptor was successfully
 handed off. Response headers use a prototype-free record, preserving names such as
 `constructor` and `__proto__`; duplicate field names merge case-insensitively
@@ -215,20 +141,16 @@ ignored before erasing an existing cookie; explicit expiry still deletes it. The
 
 HTTPRequest uses Godot worker threads, bounded by the active request limit. Network
 progress continues independently of render FPS. Completion callbacks are deferred onto
-the main thread, and cancellation joins the worker before the lease drains. Requests
-that complete during submission are never retained in the module ownership map;
-`GodotHTTP.stats().ownedRequests` reports its current pending ownership count.
+the main thread, and cancellation joins the worker before the lease drains.
+`ReactNativeHost.get_service_stats()` reports pool and Blob usage.
 
 WebSocketPeer owns protocol framing/TLS. Polling continues through CLOSING, with limits
 on peers, messages, queues, retained bytes and packets delivered per frame. A message can
 overshoot the per-frame byte target once so a legal packet cannot starve. Normal close,
 failure, cancellation and generation reset release native peers once.
-Open notifications retry when the native event queue is full, before messages are delivered.
-Handshake/connect/packet failures and close notifications retain the peer until terminal
-delivery is accepted, then release it once. If a Blob-mode message cannot allocate or
-finish its binary backing, the facade releases partial storage, closes the native peer
-and emits `websocketFailed`; tagged RN turns that into one error and abnormal close.
-Queued messages and the later native terminal event are suppressed for that socket.
+A socket reports open before its first message. Handshake, connect and packet failures
+report `websocketFailed` once and release the peer. If a Blob-mode message cannot
+allocate its binary backing, the socket fails the same way.
 
 ## Editor service limits
 
@@ -236,7 +158,7 @@ Limits below live under `react_native/`, expose editor ranges and are immutable 
 generation. Invalid types/ranges, HTTP idle > active, or HTTP body > aggregate buffer
 limits fail startup. A zero HTTP wait
 queue permits immediate leases only; zero idle retires every completed node. Zero cookie
-limits disable storage and zero scheduler idle budget runs only expired idle timeouts.
+limits disable storage.
 
 | Setting suffix | Default |
 |---|---|
@@ -246,9 +168,9 @@ limits disable storage and zero scheduler idle budget runs only expired idle tim
 | network/websocket/max_message_bytes / max_queued_packets / max_buffered_bytes | 1 MiB / 256 / 4 MiB |
 | network/websocket/packets_per_frame / close_timeout_ms | 64 / 2000 |
 | binary/max_blob_bytes | 32 MiB |
-| scheduler/max_tasks_per_frame / idle_budget_ms | 256 / 2 |
 | appearance/color_scheme / follow_system | light / false |
-| text/font_scale | 1.0 |
+| text/font_scale | 1.0 (changes apply at runtime) |
+| network/tls/trusted_certificates | empty |
 
 WebSocket message settings reserve codec envelope headroom below 16 MiB. Existing
 image cache/decode/total ceilings and font aliases remain separate generation snapshots;

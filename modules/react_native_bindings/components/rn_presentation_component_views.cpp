@@ -19,7 +19,7 @@ void RNModalComponentView::_report_screen_size() {
 	if (!concrete || !modal->is_inside_tree()) {
 		return;
 	}
-	const Size2 viewport = modal->get_viewport()->get_visible_rect().size;
+	const Size2 viewport = modal->get_presentation_size();
 	const Size screen{ .width = viewport.x, .height = viewport.y };
 	if (concrete->getData().screenSize != screen) {
 		concrete->updateState(ModalHostViewState(screen));
@@ -29,8 +29,7 @@ void RNModalComponentView::_report_screen_size() {
 void RNModalComponentView::update_props(const Props::Shared &p_old, const Props::Shared &p_new) {
 	props = std::static_pointer_cast<const ViewProps>(p_new);
 	const auto &next = static_cast<const ModalHostViewProps &>(*p_new);
-	const Size2 viewport = modal->is_inside_tree() ? modal->get_viewport()->get_visible_rect().size : Size2();
-	modal->present(next.visible, ::Color(0, 0, 0, 0), viewport);
+	modal->request_presentation(next.visible, ::Color(0, 0, 0, 0));
 }
 
 void RNModalComponentView::update_state(const State::Shared &p_state) {
@@ -47,6 +46,7 @@ void RNModalComponentView::update_event_emitter(const EventEmitter::Shared &p_em
 	RNComponentView::update_event_emitter(p_emitter);
 	auto emitter = std::static_pointer_cast<const ModalHostViewEventEmitter>(p_emitter);
 	RNPresentationCallbacks callbacks;
+	callbacks.presented = [this]() { _report_screen_size(); };
 	if (emitter) {
 		callbacks.show = [emitter]() { emitter->onShow({}); };
 		callbacks.dismiss = [emitter]() { emitter->onDismiss({}); };

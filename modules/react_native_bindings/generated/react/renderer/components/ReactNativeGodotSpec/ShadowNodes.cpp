@@ -12,7 +12,6 @@
 
 namespace facebook::react {
 
-extern const char GodotWindowComponentName[] = "GodotWindow";
 extern const char RNExampleMeterComponentName[] = "RNExampleMeter";
 
 } // namespace facebook::react

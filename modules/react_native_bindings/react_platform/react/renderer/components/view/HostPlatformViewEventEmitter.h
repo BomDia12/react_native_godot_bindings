@@ -22,6 +22,7 @@ public:
 	void onRightClick(PointerEvent event) const;
 	void onKeyDown(const GodotKeyEvent &event) const;
 	void onKeyUp(const GodotKeyEvent &event) const;
+	void onKeyboardClick() const;
 	void onGodotContextMenuAction(const std::string &id) const;
 };
 

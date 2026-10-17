@@ -16,6 +16,8 @@ public:
 	void update_state(const facebook::react::State::Shared &p_state) override;
 	void update_layout(const facebook::react::LayoutMetrics &p_metrics) override;
 	void update_event_emitter(const facebook::react::EventEmitter::Shared &p_emitter) override;
+	Vector<Control *> get_input_controls() const override { return { modal->get_overlay() }; }
+	bool owns_input_control(Control *p_control) const override { return p_control == modal || p_control == modal->get_overlay(); }
 };
 
 class RNWindowComponentView : public RNComponentView {

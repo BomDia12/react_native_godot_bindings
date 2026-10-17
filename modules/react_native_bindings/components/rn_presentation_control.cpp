@@ -1,98 +1,14 @@
 #include "rn_presentation_control.h"
 
-#include "../fabric/rn_shadow_node.h"
-#include "../fabric/rn_view_style.h"
 #include "../root_view/react_native_root_view.h"
-#include "rn_text_input_control.h"
 
 #include "core/math/math_funcs.h"
 #include "core/object/callable_mp.h"
+#include "scene/main/scene_tree.h"
 
 #include <map>
 
 namespace {
-Dictionary presentation_config(bool p_window) {
-	Dictionary events;
-	for (const char *name : { "Show", "Dismiss", "RequestClose" }) {
-		Dictionary registration;
-		registration["registrationName"] = String("on") + name;
-		events[String("top") + name] = registration;
-	}
-	if (p_window) {
-		Dictionary registration;
-		registration["registrationName"] = "onResize";
-		events["topResize"] = registration;
-	}
-	Dictionary config;
-	config["directEventTypes"] = events;
-	return config;
-}
-class RNPresentationDescriptor : public RNHostDescriptor {
-	bool native_window;
-
-public:
-	RNPresentationDescriptor(bool p_window) :
-			RNHostDescriptor(p_window ? "GodotWindow" : "RCTModalHostView", RNHostTraits{ true, true, true, false, false, false, false, true, true, true, true }, presentation_config(p_window)), native_window(p_window) {}
-	bool prepare(const RNShadowNode &p_node, RNPreparedHostState &r_state, RNError &r_error) const override {
-		if (!RNHostDescriptor::prepare(p_node, r_state, r_error)) {
-			return false;
-		}
-		auto component = std::make_shared<RNPresentationData>();
-		if (native_window) {
-			const double width = r_state.props.get("windowWidth", 640);
-			const double height = r_state.props.get("windowHeight", 480);
-			if (!Math::is_finite(width) || !Math::is_finite(height) || width < 1 || height < 1 || width > 16384 || height > 16384) {
-				r_error = RNError::make(RNErrorCode::VALIDATION, "Invalid native window size", "window.prepare");
-				return false;
-			}
-			component->viewport = Size2(width, height);
-		}
-		r_state.component_data = component;
-		return true;
-	}
-	bool resolve_resources(RNPreparedHostState &r_state, const RNHostContext &p_context, RNError &) const override {
-		auto component = std::make_shared<RNPresentationData>(*std::static_pointer_cast<const RNPresentationData>(r_state.component_data));
-		if (!native_window) {
-			component->viewport = p_context.presentation_size;
-		} else if (auto *host = Object::cast_to<RNWindowControl>(ObjectDB::get_instance(p_context.host_id))) {
-			component->viewport = host->resolve_size(component->viewport);
-		}
-		r_state.component_data = component;
-		r_state.dependency_revision = uint64_t(component->viewport.x * 65536 + component->viewport.y);
-		return true;
-	}
-	Size2 presentation_size(const RNPreparedHostState &p_state, const Size2 &p_inherited) const override { return native_window ? std::static_pointer_cast<const RNPresentationData>(p_state.component_data)->viewport : p_inherited; }
-	Control *create_host(const RNHostContext &) const override { return native_window ? static_cast<Control *>(memnew(RNWindowControl)) : static_cast<Control *>(memnew(RNModalControl)); }
-	Control *get_child_container(Control *p_host, const RNHostContext &) const override { return native_window ? static_cast<Control *>(Object::cast_to<RNWindowControl>(p_host)->get_content()) : static_cast<Control *>(Object::cast_to<RNModalControl>(p_host)->get_overlay()); }
-	RNChildLayoutPolicy get_child_layout_policy(const RNPreparedHostState &) const override { return RNChildLayoutPolicy::PRESENTATION; }
-	Rect2 get_child_layout_viewport(const RNPreparedHostState &p_state, const Size2 &) const override { return Rect2(Point2(), std::static_pointer_cast<const RNPresentationData>(p_state.component_data)->viewport); }
-	bool apply(Control *, const RNPreparedHostState &, const RNHostContext &, RNError &) const override { return true; }
-	Variant capture_state(Control *) const override { return Dictionary(); }
-	void restore_state(Control *, const Variant &) const override {}
-	void dispose_state(Control *p_host, const RNHostContext &) const override {
-		if (native_window) {
-			Object::cast_to<RNWindowControl>(p_host)->get_native_window()->hide();
-		} else {
-			Object::cast_to<RNModalControl>(p_host)->dismiss();
-		}
-	}
-	void after_publish(Control *p_host, const RNPreparedHostState &p_state, const RNHostContext &p_context) const override {
-		if (native_window) {
-			Object::cast_to<RNWindowControl>(p_host)->publish(p_state, p_context);
-		} else {
-			Object::cast_to<RNModalControl>(p_host)->publish(p_state, p_context);
-		}
-	}
-	RNHostGeometry read_geometry(Control *p_host, const RNHostContext &p_context) const override {
-		Control *content = get_child_container(p_host, p_context);
-		auto geometry = RNHostDescriptor::read_geometry(content, p_context);
-		geometry.viewport = Rect2(Point2(), content->get_size());
-		geometry.clips_contents = true;
-		return geometry;
-	}
-	bool owns_input_control(Control *p_host, Control *p_control) const override { return p_host == p_control || get_child_container(p_host, RNHostContext()) == p_control; }
-	Vector<Control *> get_input_controls(Control *p_host) const override { return { get_child_container(p_host, RNHostContext()) }; }
-};
 ReactNativeRootView *owning_root(Node *p_node) {
 	for (Node *node = p_node; node; node = node->get_parent()) {
 		if (auto *root = Object::cast_to<ReactNativeRootView>(node)) {
@@ -209,35 +125,33 @@ void RNModalControl::_update_focus_cycle() {
 		controls[i]->set_focus_previous(controls[i]->get_path_to(controls[(i + controls.size() - 1) % controls.size()]));
 	}
 }
-void RNModalControl::publish(const RNPreparedHostState &p_state, const RNHostContext &p_context) {
-	auto emit = [p_context](const StringName &p_event) {
-		if (p_context.event_sink && p_context.event_sink->emit) {
-			p_context.event_sink->emit(p_context.tag, p_event, Dictionary(), p_context.revision);
-		}
-	};
-	RNPresentationCallbacks published;
-	published.show = [emit]() { emit("topShow"); };
-	published.dismiss = [emit]() { emit("topDismiss"); };
-	published.request_close = [emit]() { emit("topRequestClose"); };
-	published.presented = [p_context]() {
-		if (p_context.event_sink && p_context.event_sink->cancel_input) {
-			p_context.event_sink->cancel_input();
-		}
-	};
-	published.geometry_changed = [p_context]() {
-		if (p_context.event_sink && p_context.event_sink->invalidate_geometry) {
-			p_context.event_sink->invalidate_geometry();
-		}
-	};
-	set_callbacks(published);
-	const auto component = std::static_pointer_cast<const RNPresentationData>(p_state.component_data);
-	Color backdrop(1, 1, 1, 1);
-	if (bool(p_state.props.get("transparent", false))) {
-		backdrop = Color(0, 0, 0, 0);
-	} else {
-		RNViewStyle::color_of(p_state.props, "backdropColor", backdrop);
+void RNModalControl::request_presentation(bool p_visible, const Color &p_backdrop) {
+	requested_visible = p_visible;
+	requested_backdrop = p_backdrop;
+	if (is_inside_tree()) {
+		_apply_request();
 	}
-	present(p_state.props.get("visible", true), backdrop, component->viewport);
+}
+// A native sub-window reports an empty visible rect until it is shown, so its
+// own size is the area a modal covers.
+Size2 RNModalControl::get_presentation_size() const {
+	Window *native_window = Object::cast_to<Window>(get_viewport());
+	if (native_window && native_window != get_tree()->get_root()) {
+		return native_window->get_size();
+	}
+	return get_viewport()->get_visible_rect().size;
+}
+void RNModalControl::_apply_request() {
+	if (is_inside_tree()) {
+		present(requested_visible, requested_backdrop, get_presentation_size());
+	}
+}
+// Presenting reparents the overlay, which the parent forbids while it is
+// still adding this modal.
+void RNModalControl::_notification(int p_what) {
+	if (p_what == NOTIFICATION_ENTER_TREE && requested_visible) {
+		callable_mp(this, &RNModalControl::_apply_request).call_deferred();
+	}
 }
 void RNModalControl::present(bool p_visible, const Color &p_backdrop, const Size2 &p_viewport) {
 	const bool showing = p_visible && !presented;
@@ -323,34 +237,6 @@ RNWindowControl::RNWindowControl() {
 Size2 RNWindowControl::resolve_size(const Size2 &p_declared) const {
 	return declared_size == p_declared ? Size2(window->get_size()) : p_declared;
 }
-void RNWindowControl::publish(const RNPreparedHostState &p_state, const RNHostContext &p_context) {
-	auto emit = [p_context](const StringName &p_event, const Dictionary &p_payload) {
-		if (p_context.event_sink && p_context.event_sink->emit) {
-			p_context.event_sink->emit(p_context.tag, p_event, p_payload, p_context.revision);
-		}
-	};
-	RNPresentationCallbacks published;
-	published.show = [emit]() { emit("topShow", Dictionary()); };
-	published.dismiss = [emit]() { emit("topDismiss", Dictionary()); };
-	published.request_close = [emit]() { emit("topRequestClose", Dictionary()); };
-	published.geometry_changed = [p_context]() {
-		if (p_context.event_sink && p_context.event_sink->invalidate_geometry) {
-			p_context.event_sink->invalidate_geometry();
-		}
-	};
-	published.resized = [emit, p_context](const Size2 &p_size) {
-		if (p_context.event_sink && p_context.event_sink->invalidate_layout) {
-			p_context.event_sink->invalidate_layout();
-		}
-		Dictionary size;
-		size["width"] = p_size.x;
-		size["height"] = p_size.y;
-		emit("topResize", size);
-	};
-	set_callbacks(published);
-	const auto component = std::static_pointer_cast<const RNPresentationData>(p_state.component_data);
-	present(p_state.props.get("title", "React Native"), component->viewport, Size2(p_state.props.get("windowWidth", 640), p_state.props.get("windowHeight", 480)), p_state.props.get("visible", true));
-}
 void RNWindowControl::present(const String &p_title, const Size2 &p_size, const Size2 &p_declared_size, bool p_visible) {
 	window->set_title(p_title);
 	publishing = true;
@@ -365,13 +251,19 @@ void RNWindowControl::present(const String &p_title, const Size2 &p_size, const 
 	} else if (changed && !p_visible && callbacks.dismiss) {
 		callbacks.dismiss();
 	}
+	if (callbacks.geometry_changed) {
+		callbacks.geometry_changed();
+	}
+}
+// The window's input bypasses the root's viewport, so the root sees it here.
+void RNWindowControl::_notification(int p_what) {
+	if (p_what != NOTIFICATION_ENTER_TREE) {
+		return;
+	}
 	ReactNativeRootView *root = owning_root(this);
 	if (root && root->get_instance_id() != observed_root) {
 		observed_root = root->get_instance_id();
 		window->connect("window_input", callable_mp(root, &ReactNativeRootView::_begin_input).bind(window->get_instance_id()));
-	}
-	if (callbacks.geometry_changed) {
-		callbacks.geometry_changed();
 	}
 }
 void RNWindowControl::_close_requested() {
@@ -387,10 +279,4 @@ void RNWindowControl::_resized() {
 	if (callbacks.resized) {
 		callbacks.resized(window->get_size());
 	}
-}
-std::shared_ptr<const RNHostDescriptor> rn_modal_descriptor() {
-	return std::make_shared<RNPresentationDescriptor>(false);
-}
-std::shared_ptr<const RNHostDescriptor> rn_window_descriptor() {
-	return std::make_shared<RNPresentationDescriptor>(true);
 }

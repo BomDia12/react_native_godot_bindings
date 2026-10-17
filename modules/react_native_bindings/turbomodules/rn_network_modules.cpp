@@ -32,6 +32,63 @@ PackedByteArray utf8_bytes(const std::string &p_value) {
 	return bytes;
 }
 
+int utf8_sequence_length(uint8_t p_lead) {
+	if (p_lead < 0x80) {
+		return 1;
+	}
+	if (p_lead < 0xC2) {
+		return 0;
+	}
+	if (p_lead < 0xE0) {
+		return 2;
+	}
+	if (p_lead < 0xF0) {
+		return 3;
+	}
+	return p_lead < 0xF5 ? 4 : 0;
+}
+
+// Decodes bytes the way the WHATWG UTF-8 decoder does: each maximal invalid
+// subsequence becomes one U+FFFD. Hermes would silently drop those bytes.
+std::string decoded_utf8(const PackedByteArray &p_bytes) {
+	const uint8_t *bytes = p_bytes.ptr();
+	const int64_t size = p_bytes.size();
+	std::string text;
+	text.reserve(size);
+	int64_t i = 0;
+	while (i < size) {
+		const uint8_t lead = bytes[i];
+		const int length = utf8_sequence_length(lead);
+		uint8_t second_min = 0x80;
+		uint8_t second_max = 0xBF;
+		if (lead == 0xE0) {
+			second_min = 0xA0;
+		} else if (lead == 0xF0) {
+			second_min = 0x90;
+		} else if (lead == 0xED) {
+			second_max = 0x9F;
+		} else if (lead == 0xF4) {
+			second_max = 0x8F;
+		}
+		int valid = length > 0 ? 1 : 0;
+		while (valid > 0 && valid < length && i + valid < size) {
+			const uint8_t next = bytes[i + valid];
+			if (next < (valid == 1 ? second_min : 0x80) || next > (valid == 1 ? second_max : 0xBF)) {
+				break;
+			}
+			++valid;
+		}
+		if (length > 0 && valid == length) {
+			text.append(reinterpret_cast<const char *>(bytes + i), length);
+			i += length;
+		} else {
+			text.append("\xEF\xBF\xBD");
+			i += MAX(valid, 1);
+		}
+	}
+	return text;
+}
+
 PackedByteArray base64_bytes(const std::string &p_value) {
 	PackedByteArray bytes;
 	bytes.resize(((p_value.size() + 3) / 4) * 3);
@@ -68,6 +125,20 @@ bool read_blob(const std::shared_ptr<RNBlobService> &p_blobs, const Dictionary &
 	}
 	p_blobs->unpin(p_descriptor["blobId"]);
 	return read;
+}
+
+// Parses the URLs built by upstream URL.createObjectURL: blob:<id>?offset=<n>&size=<n>.
+Dictionary blob_url_descriptor(const String &p_url) {
+	const String path = p_url.trim_prefix("blob:");
+	Dictionary descriptor;
+	descriptor["blobId"] = path.get_slicec('?', 0);
+	for (const String &parameter : path.get_slicec('?', 1).split("&", false)) {
+		const String name = parameter.get_slicec('=', 0);
+		if (name == "offset" || name == "size") {
+			descriptor[name] = parameter.get_slicec('=', 1).to_int();
+		}
+	}
+	return descriptor;
 }
 
 folly::dynamic blob_part_data(const folly::dynamic &p_part) {
@@ -305,8 +376,7 @@ void RNBlobModule::createFromParts(jsi::Runtime &rt, jsi::Array parts, const std
 		}
 		bytes.append_array(chunk);
 	}
-	const String id = godot_string(withId);
-	if (!context.blobs->begin(id, bytes.size(), error) || !context.blobs->append(id, 0, bytes, error) || !context.blobs->finish(id, error)) {
+	if (!context.blobs->create(godot_string(withId), bytes, error)) {
 		rn_throw_js_error(rt, error.code.utf8().get_data(), error.message.utf8().get_data());
 	}
 }
@@ -338,7 +408,7 @@ jsi::Value RNFileReaderModule::_read(jsi::Runtime &rt, jsi::Object data, bool p_
 			const std::string type = blob.getDefault("type", "").asString();
 			result = "data:" + (type.empty() ? std::string("application/octet-stream") : type) + ";base64," + CryptoCore::b64_encode_str(bytes.ptr(), bytes.size()).utf8().get_data();
 		} else {
-			result.assign(reinterpret_cast<const char *>(bytes.ptr()), bytes.size());
+			result = decoded_utf8(bytes);
 		}
 		p_promise->resolve([result](jsi::Runtime &p_runtime) { return jsi::String::createFromUtf8(p_runtime, result); });
 	});
@@ -406,7 +476,7 @@ void RNNetworkingModule::sendRequest(jsi::Runtime &rt, jsi::Object query, jsi::F
 		} else if (response_type == "base64") {
 			data = CryptoCore::b64_encode_str(p_response.body.ptr(), p_response.body.size()).utf8().get_data();
 		} else {
-			data = std::string(reinterpret_cast<const char *>(p_response.body.ptr()), p_response.body.size());
+			data = decoded_utf8(p_response.body);
 		}
 		_emit("didReceiveNetworkData", folly::dynamic::array(id, data));
 		_emit("didCompleteNetworkResponse", folly::dynamic::array(id, "", false));
@@ -416,15 +486,7 @@ void RNNetworkingModule::sendRequest(jsi::Runtime &rt, jsi::Object query, jsi::F
 			RNHTTPResponse response;
 			response.url = native.url;
 			response.status = 200;
-			Dictionary descriptor;
-			if (!blobs->resolve_url(native.url, descriptor, response.error) || !read_blob(blobs, descriptor, response.body, response.error)) {
-				respond(response);
-				return;
-			}
-			const String type = descriptor.get("type", String());
-			if (!type.is_empty()) {
-				response.headers.push_back("Content-Type: " + type);
-			}
+			read_blob(blobs, blob_url_descriptor(native.url), response.body, response.error);
 			respond(response);
 			return;
 		}

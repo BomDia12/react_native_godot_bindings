@@ -34,9 +34,19 @@ for (const dev of [false, true]) {
         assert.match(result.code, new RegExp(marker));
       }
       assert.doesNotMatch(result.code, /wrong-native-js|wrong-generic-js/);
-      const context = {console, __godotScheduler: Object.fromEntries(
-        ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'now', 'requestIdleCallback', 'cancelIdleCallback'].map(name => [name, () => 0]),
-      )};
+      // The bridgeless globals that upstream's ReactInstance installs before a bundle runs.
+      const context = {
+        console,
+        RN$Bridgeless: true,
+        RN$registerCallableModule() {},
+        __turboModuleProxy: () => null,
+        nativeModuleProxy: {},
+        setTimeout: () => 0,
+        clearTimeout() {},
+        setInterval: () => 0,
+        clearInterval() {},
+        queueMicrotask,
+      };
       context.globalThis = context;
       vm.runInNewContext(result.code, context);
       assert.equal(

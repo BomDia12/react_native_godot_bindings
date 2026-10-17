@@ -1,4 +1,4 @@
-# Phase 6 replaces this feature-flag shim with a native API.
-^Could not access feature flag 'enableIntersectionObserverByDefault' because native module method was not available$
-# Phase 6 replaces this feature-flag shim with a native API.
-^Could not access feature flag 'enableNativeCSSParsing' because native module method was not available$
+# Upstream's debug LeakChecker checks the previously stopped surface when the next
+# one stops. Host shutdown stops every surface at once, before React's deferred
+# deletion cleanup runs, so it reports those surfaces' components.
+^ERROR: LeakChecker\.cpp:[0-9]+\] \[LeakChecker\] Surface with id: [0-9]+ has leaked [0-9]+ components out of [0-9]+$

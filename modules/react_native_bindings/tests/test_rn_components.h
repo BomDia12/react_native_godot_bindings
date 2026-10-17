@@ -1,14 +1,11 @@
 #pragma once
-#include "../components/rn_host_descriptor_registry.h"
+
 #include "../components/rn_image_control.h"
 #include "../components/rn_presentation_control.h"
 #include "../components/rn_scroll_control.h"
 #include "../components/rn_small_controls.h"
 #include "../components/rn_text_input_control.h"
-#include "../fabric/rn_shadow_node.h"
-#include "../mounting/rn_layout_tree.h"
 #include "../native_modules/rn_image_probe.h"
-#include "../runtime/react_native_runtime_coordinator.h"
 #include "support/rn_test_display_server.h"
 
 #include "core/crypto/crypto_core.h"
@@ -18,21 +15,10 @@
 #include "tests/test_macros.h"
 
 namespace TestRNComponents {
-std::shared_ptr<const RNHostDescriptor> descriptor(const StringName &p_name) {
-	return ReactNativeRuntimeCoordinator::get_singleton()->get_descriptor_registry()->find(p_name);
-}
-RNPreparedHostState prepare(const StringName &p_name, const Dictionary &p_props) {
-	RNShadowNode node;
-	node.view_name = p_name;
-	node.tag = 42;
-	node.props = p_props;
-	node.descriptor = descriptor(p_name);
-	RNPreparedHostState state;
-	RNError error;
-	REQUIRE(bool(node.descriptor));
-	REQUIRE(node.descriptor->prepare(node, state, error));
-	REQUIRE(node.descriptor->resolve_resources(state, RNHostContext(), error));
-	return state;
+RNTextInputConfig input_config(bool p_multiline = false) {
+	RNTextInputConfig config;
+	config.multiline = p_multiline;
+	return config;
 }
 Dictionary source(const String &p_uri, bool p_stateless = false) {
 	Dictionary result;
@@ -195,17 +181,13 @@ TEST_CASE("[ReactNativeBindings][Images] credentialed sources bypass cache and d
 	CHECK(service->used_bytes() == 0);
 }
 TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] stale deferred editor signals for JS-applied values are ignored") {
-	Dictionary props;
-	props["text"] = "start";
-	auto state = prepare("GodotTextInput", props);
-	state.declarative_prop_revisions["text"] = 1;
 	auto *control = memnew(RNTextInputControl);
 	SceneTree::get_singleton()->get_root()->add_child(control);
-	control->apply(state);
+	control->configure(input_config());
+	control->reconcile(0, "start", -1, -1);
 	auto *line = Object::cast_to<LineEdit>(control->get_editor());
 	line->set_caret_column(5);
 	line->insert_text_at_caret("!");
-	line->delete_text(0, 0);
 	line->emit_signal("text_changed", line->get_text());
 	REQUIRE(control->get_event_count() == 1);
 	control->reconcile(1, "applied", 2, 4);
@@ -214,10 +196,7 @@ TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] stale deferred editor sig
 	CHECK(control->get_event_count() == 1);
 	CHECK(control->get_selection() == Point2i(2, 4));
 
-	props["multiline"] = true;
-	state = prepare("GodotTextInput", props);
-	control->apply(state);
-	control->publish(state, RNHostContext());
+	control->configure(input_config(true));
 	auto *edit = Object::cast_to<TextEdit>(control->get_editor());
 	REQUIRE(edit);
 	edit->insert_text_at_caret("?");
@@ -231,20 +210,13 @@ TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] stale deferred editor sig
 	CHECK(control->get_selection() == Point2i(1, 3));
 	memdelete(control);
 }
-TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] acknowledgments use UTF16 and mode staging rolls back the retained editor") {
-	Dictionary props;
-	props["text"] = String::utf8("A😀z");
-	props["fontSize"] = 16;
-	props["mostRecentEventCount"] = 0;
-	auto state = prepare("GodotTextInput", props);
-	state.declarative_prop_revisions["text"] = 1;
+TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] acknowledgments use UTF16 and stale replacements lose to native edits") {
 	RNTextInputControl *control = memnew(RNTextInputControl);
-	control->apply(state);
+	control->configure(input_config());
+	control->reconcile(0, String::utf8("A😀z"), -1, -1);
 	CHECK(control->get_text() == String::utf8("A😀z"));
 	control->reconcile(0, Variant(), 1, 3);
 	CHECK(control->get_selection() == Point2i(1, 3));
-	const auto checkpoint = control->capture_state();
-	const auto editor_id = control->get_editor()->get_instance_id();
 	auto *line = Object::cast_to<LineEdit>(control->get_editor());
 	line->set_text("native");
 	line->emit_signal("text_changed", "native");
@@ -253,206 +225,75 @@ TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] acknowledgments use UTF16
 	CHECK(control->get_text() == "native");
 	control->reconcile(1, "accepted", 0, 0);
 	CHECK(control->get_text() == "accepted");
-	props["multiline"] = true;
-	auto staged = prepare("GodotTextInput", props);
-	control->apply(staged);
-	CHECK(control->get_editor()->get_instance_id() == editor_id);
-	control->restore_state(checkpoint);
-	CHECK(control->get_editor()->get_instance_id() == editor_id);
-	CHECK(control->get_text() == String::utf8("A😀z"));
-	CHECK(control->get_selection() == Point2i(1, 3));
-	CHECK(control->get_event_count() == 0);
-	control->apply(staged);
-	control->publish(staged, RNHostContext());
+	const ObjectID single_line = control->get_editor()->get_instance_id();
+	control->configure(input_config(true));
 	CHECK(Object::cast_to<TextEdit>(control->get_editor()) != nullptr);
-	CHECK(control->get_editor()->get_instance_id() != editor_id);
+	CHECK(control->get_editor()->get_instance_id() != single_line);
+	CHECK(control->get_text() == "accepted");
+	CHECK_FALSE(Object::cast_to<TextEdit>(control->get_editor())->has_undo());
 	memdelete(control);
 }
-TEST_CASE("[ReactNativeBindings][SmallControls][SceneTree] controlled switch restores live state and publishes one native change") {
-	Dictionary props;
-	props["value"] = false;
-	auto state = prepare("RCTSwitch", props);
-	auto host_descriptor = descriptor("RCTSwitch");
-	auto *control = Object::cast_to<RNSwitchControl>(host_descriptor->create_host(RNHostContext()));
-	RNError error;
-	REQUIRE(host_descriptor->apply(control, state, RNHostContext(), error));
+TEST_CASE("[ReactNativeBindings][SmallControls][SceneTree] controlled switch reports only native changes") {
+	auto *control = memnew(RNSwitchControl);
 	int events = 0;
-	auto sink = std::make_shared<RNHostEventSink>();
-	sink->emit = [&events](int, const StringName &name, const Dictionary &payload, uint64_t) { CHECK(name == "topChange"); CHECK(bool(payload["value"])); ++events; };
-	RNHostContext context;
-	context.event_sink = sink;
-	host_descriptor->after_publish(control, state, context);
+	control->set_changed_callback([&events](bool p_value) {
+		CHECK(p_value);
+		++events;
+	});
+	control->set_pressed_no_signal(false);
 	control->set_pressed(true);
 	CHECK(events == 1);
-	const auto captured = host_descriptor->capture_state(control);
-	REQUIRE(host_descriptor->apply(control, state, context, error));
-	CHECK(events == 1);
-	CHECK_FALSE(control->is_pressed());
-	host_descriptor->restore_state(control, captured);
-	CHECK(control->is_pressed());
+	control->set_pressed_no_signal(false);
 	CHECK(events == 1);
 	memdelete(control);
 }
-TEST_CASE("[ReactNativeBindings][SmallControls][SceneTree] native switch pointer eligibility preserves enabled visuals and restores on rollback") {
-	Dictionary props;
-	auto state = prepare("RCTSwitch", props);
-	auto host = descriptor("RCTSwitch");
-	auto *control = Object::cast_to<RNSwitchControl>(host->create_host(RNHostContext()));
-	RNError error;
-	REQUIRE(host->apply(control, state, RNHostContext(), error));
-	const Variant original = host->capture_state(control);
-	state.branch_targetable = false;
-	REQUIRE(host->apply(control, state, RNHostContext(), error));
-	CHECK(control->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE);
-	CHECK_FALSE(control->is_disabled());
-	host->restore_state(control, original);
-	CHECK(control->get_mouse_filter() == Control::MOUSE_FILTER_STOP);
-	for (const char *mode : { "none", "box-none", "box-only", "auto" }) {
-		props["pointerEvents"] = mode;
-		REQUIRE(host->apply(control, prepare("RCTSwitch", props), RNHostContext(), error));
-		CHECK((control->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE) == (String(mode) == "none" || String(mode) == "box-none"));
-		CHECK_FALSE(control->is_disabled());
-	}
-	memdelete(control);
-}
-
-TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] pointer rejection covers active and staged native editors and survives rollback") {
+TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] pointer rejection covers the wrapper and both native editors") {
 	auto *control = memnew(RNTextInputControl);
 	SceneTree::get_singleton()->get_root()->add_child(control);
-	Dictionary props;
-	props["text"] = "Retained";
-	auto state = prepare("GodotTextInput", props);
-	control->apply(state);
-	control->publish(state, RNHostContext());
-	const auto original = control->capture_state();
-	state.branch_targetable = false;
-	control->apply(state);
+	RNTextInputConfig config = input_config();
+	config.targetable = false;
+	control->configure(config);
+	control->reconcile(0, "Retained", -1, -1);
 	CHECK(control->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE);
 	CHECK(control->get_editor()->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE);
 	CHECK(Object::cast_to<LineEdit>(control->get_editor())->is_editable());
-	props["multiline"] = true;
-	auto staged = prepare("GodotTextInput", props);
-	staged.branch_targetable = false;
-	control->apply(staged);
-	CHECK(control->get_editor()->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE);
-	CHECK(Object::cast_to<Control>(control->get_child(1))->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE);
-	control->restore_state(original);
-	CHECK(control->get_child_count() == 1);
-	CHECK(control->get_mouse_filter() == Control::MOUSE_FILTER_PASS);
-	CHECK(control->get_editor()->get_mouse_filter() == Control::MOUSE_FILTER_STOP);
-	control->apply(staged);
-	control->publish(staged, RNHostContext());
+	config.multiline = true;
+	control->configure(config);
 	CHECK(Object::cast_to<TextEdit>(control->get_editor())->is_editable());
 	CHECK(control->get_editor()->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE);
 	CHECK(control->get_text() == "Retained");
-	for (const char *mode : { "none", "box-none", "auto" }) {
-		props["pointerEvents"] = mode;
-		control->apply(prepare("GodotTextInput", props));
-		CHECK((control->get_editor()->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE) == (String(mode) != "auto"));
-	}
+	config.targetable = true;
+	control->configure(config);
+	CHECK(control->get_mouse_filter() == Control::MOUSE_FILTER_PASS);
+	CHECK(control->get_editor()->get_mouse_filter() == Control::MOUSE_FILTER_STOP);
 	memdelete(control);
 }
-
-TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] autofocus runs once after initial publication and preserves later native focus") {
+TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] autofocus runs once after the first configuration and preserves later native focus") {
 	auto *control = memnew(RNTextInputControl);
 	auto *peer = memnew(LineEdit);
 	SceneTree::get_singleton()->get_root()->add_child(control);
 	SceneTree::get_singleton()->get_root()->add_child(peer);
-	Dictionary props;
-	props["autoFocus"] = true;
-	auto state = prepare("GodotTextInput", props);
+	RNTextInputConfig config = input_config();
+	config.auto_focus = true;
 	peer->grab_focus();
-	control->apply(state);
-	CHECK(peer->has_focus());
-	control->publish(state, RNHostContext());
+	control->configure(config);
 	CHECK(control->get_editor()->has_focus());
 	peer->grab_focus();
-	control->apply(state);
-	control->publish(state, RNHostContext());
+	control->configure(config);
 	CHECK(peer->has_focus());
-	props["multiline"] = true;
-	state = prepare("GodotTextInput", props);
-	control->apply(state);
-	control->publish(state, RNHostContext());
+	config.multiline = true;
+	control->configure(config);
 	CHECK(peer->has_focus());
 	memdelete(control);
 	memdelete(peer);
 }
-
-TEST_CASE("[ReactNativeBindings][SmallControls][SceneTree] indicator opacity composes with tint alpha and restores on rollback") {
-	Dictionary props;
-	props["color"] = Color(0.2, 0.4, 0.6, 0.5);
-	props["opacity"] = 0.3;
-	auto host = descriptor("RCTActivityIndicatorView");
-	auto *control = host->create_host(RNHostContext());
-	RNError error;
-	REQUIRE(host->apply(control, prepare("RCTActivityIndicatorView", props), RNHostContext(), error));
-	CHECK(control->get_modulate().r == doctest::Approx(0.2));
-	CHECK(control->get_modulate().a == doctest::Approx(0.15));
-	const auto original = host->capture_state(control);
-	props["opacity"] = 0.0;
-	REQUIRE(host->apply(control, prepare("RCTActivityIndicatorView", props), RNHostContext(), error));
-	CHECK(control->get_modulate().a == 0.0);
-	host->restore_state(control, original);
-	CHECK(control->get_modulate().a == doctest::Approx(0.15));
-	memdelete(control);
-}
-
-TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] native wheel honors local pointer rejection and rollback restores input") {
-	Window *viewport = SceneTree::get_singleton()->get_root();
-	viewport->set_size(Size2i(640, 480));
-	auto *scroll = memnew(RNScrollControl);
-	viewport->add_child(scroll);
-	scroll->set_position(Point2(10, 10));
-	scroll->set_size(Size2(240, 100));
-	auto *rows = memnew(Control);
-	rows->set_mouse_filter(Control::MOUSE_FILTER_PASS);
-	rows->set_size(Size2(200, 1000));
-	scroll->get_content()->add_child(rows);
-	auto host = descriptor("RCTScrollView");
-	Dictionary props;
-	auto state = prepare("RCTScrollView", props);
-	RNError error;
-	REQUIRE(host->apply(scroll, state, RNHostContext(), error));
-	scroll->publish(state, RNHostContext());
-	auto wheel = [&]() {
-		Ref<InputEventMouseButton> event;
-		event.instantiate();
-		event->set_position(Point2(50, 50));
-		event->set_global_position(Point2(50, 50));
-		event->set_button_index(MouseButton::WHEEL_DOWN);
-		event->set_pressed(true);
-		viewport->push_input(event, true);
-	};
-	wheel();
-	REQUIRE(scroll->get_v_scroll() > 0);
-	const auto original = host->capture_state(scroll);
-	for (const char *mode : { "none", "box-none" }) {
-		props["pointerEvents"] = mode;
-		REQUIRE(host->apply(scroll, prepare("RCTScrollView", props), RNHostContext(), error));
-		const int before = scroll->get_v_scroll();
-		wheel();
-		CHECK(scroll->get_v_scroll() == before);
-		CHECK(scroll->get_v_scroll_bar()->get_mouse_filter() == Control::MOUSE_FILTER_IGNORE);
-	}
-	host->restore_state(scroll, original);
-	CHECK(scroll->get_v_scroll_bar()->get_mouse_filter() == Control::MOUSE_FILTER_STOP);
-	const int before = scroll->get_v_scroll();
-	wheel();
-	CHECK(scroll->get_v_scroll() > before);
-	memdelete(scroll);
-}
-
-TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native preedit defers the latest acknowledged replacement and rollback retains composition") {
+TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native preedit defers the latest acknowledged replacement") {
 	memdelete(DisplayServer::get_singleton());
 	RNTestDisplayServer *display = memnew(RNTestDisplayServer);
-	Dictionary props;
-	props["text"] = "start";
-	auto state = prepare("GodotTextInput", props);
 	auto *control = memnew(RNTextInputControl);
 	SceneTree::get_singleton()->get_root()->add_child(control);
-	control->apply(state);
-	control->publish(state, RNHostContext());
+	control->configure(input_config());
+	control->reconcile(0, "start", -1, -1);
 	auto *line = Object::cast_to<LineEdit>(control->get_editor());
 	line->grab_focus();
 	line->edit();
@@ -463,8 +304,6 @@ TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native preedit defers the
 	control->reconcile(0, "older", 0, 0);
 	control->reconcile(0, "latest", 0, 0);
 	CHECK(control->get_text() == "start");
-	control->restore_state(control->capture_state());
-	CHECK(control->is_composing());
 	display->simulate_ime("", Vector2i());
 	line->notification(MainLoop::NOTIFICATION_OS_IME_UPDATE);
 	control->notification(Node::NOTIFICATION_PROCESS);
@@ -481,51 +320,28 @@ TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] native preedit defers the
 	CHECK(control->get_event_count() == 1);
 	memdelete(control);
 }
-
-TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] independent content layout and native offsets use a constrained usable viewport") {
+TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] content taller than the viewport scrolls and short content resets the offset") {
 	auto *scroll = memnew(RNScrollControl);
 	SceneTree::get_singleton()->get_root()->add_child(scroll);
 	scroll->set_size(Size2(240, 100));
-	Dictionary props;
-	props["horizontal"] = false;
-	props["showsVerticalScrollIndicator"] = true;
-	auto state = prepare("RCTScrollView", props);
-	auto host = descriptor("RCTScrollView");
-	RNError error;
-	REQUIRE(host->apply(scroll, state, RNHostContext(), error));
-	const Rect2 expected = host->get_child_layout_viewport(state, scroll->get_size());
-	CHECK(expected.size.x < 240);
-	CHECK(expected.size.y <= 100);
-	CHECK(scroll->usable_viewport().size.is_equal_approx(expected.size));
-	auto *content = memnew(Control);
-	content->set_size(Size2(expected.size.x, 1000));
-	scroll->get_content()->add_child(content);
-	scroll->publish(state, RNHostContext());
+	scroll->set_overlay_indicators(false, true);
+	CHECK(scroll->usable_viewport().size.is_equal_approx(Size2(240, 100) - scroll->get_theme_stylebox("panel", "ScrollContainer")->get_minimum_size()));
+	scroll->set_content_extent(Size2(240, 1000));
 	scroll->scroll_to(Point2(0, 800), false);
 	CHECK(scroll->get_v_scroll() == 800);
-	const Variant retained = host->capture_state(scroll);
-	scroll->set_offset(Point2());
-	host->restore_state(scroll, retained);
-	CHECK(scroll->get_v_scroll() == 800);
-	scroll->publish(state, RNHostContext());
-	CHECK(scroll->get_v_scroll() == 800);
-	content->set_size(Size2(expected.size.x, 20));
+	scroll->set_content_extent(Size2(240, 20));
 	scroll->refresh_content();
 	CHECK(scroll->get_v_scroll() == 0);
 	memdelete(scroll);
 }
-TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] visible anchors follow retained rows and explicit offsets take precedence") {
+TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] visible anchors follow retained rows") {
 	auto *scroll = memnew(RNScrollControl);
 	SceneTree::get_singleton()->get_root()->add_child(scroll);
 	scroll->set_size(Size2(240, 100));
-	Dictionary anchor;
-	anchor["minIndexForVisible"] = 0;
-	Dictionary props;
-	props["maintainVisibleContentPosition"] = anchor;
-	auto state = prepare("RCTScrollView", props);
-	auto host = descriptor("RCTScrollView");
-	RNError error;
-	REQUIRE(host->apply(scroll, state, RNHostContext(), error));
+	RNScrollSettings settings;
+	settings.maintain_visible_position = true;
+	scroll->set_settings(settings);
+	scroll->set_content_extent(Size2(200, 1000));
 	auto *rows = memnew(Control);
 	rows->set_size(Size2(200, 1000));
 	scroll->get_content()->add_child(rows);
@@ -535,93 +351,52 @@ TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] visible anchors follow r
 		row->set_size(Size2(200, 100));
 		rows->add_child(row);
 	}
-	scroll->publish(state, RNHostContext());
 	scroll->scroll_to(Point2(0, 150), false);
-	host->capture_state(scroll);
+	scroll->prepare_anchor();
 	for (int i = 0; i < rows->get_child_count(); ++i) {
 		auto *row = Object::cast_to<Control>(rows->get_child(i));
 		row->set_position(row->get_position() + Point2(0, 50));
 	}
-	scroll->publish(state, RNHostContext());
+	scroll->restore_visible_anchor();
 	CHECK(scroll->get_v_scroll() == 200);
-	host->capture_state(scroll);
-	Dictionary offset;
-	offset["x"] = 0;
-	offset["y"] = 25;
-	props["contentOffset"] = offset;
-	scroll->publish(prepare("RCTScrollView", props), RNHostContext());
-	CHECK(scroll->get_v_scroll() == 25);
 	memdelete(scroll);
 }
-
 TEST_CASE("[ReactNativeBindings][Presentation][SceneTree] nested modal stack preserves order and restores focus in its native window") {
 	auto *background = memnew(LineEdit);
-	const auto modal = descriptor("RCTModalHostView");
-	Dictionary props;
-	props["visible"] = true;
-	auto state = prepare("RCTModalHostView", props);
-	auto data = std::make_shared<RNPresentationData>();
-	data->viewport = Size2(320, 200);
-	state.component_data = data;
-	auto *lower = Object::cast_to<RNModalControl>(modal->create_host(RNHostContext()));
-	auto *upper = Object::cast_to<RNModalControl>(modal->create_host(RNHostContext()));
+	auto *lower = memnew(RNModalControl);
+	auto *upper = memnew(RNModalControl);
 	SceneTree::get_singleton()->get_root()->add_child(lower);
 	lower->add_child(background);
 	lower->add_child(upper);
 	background->grab_focus();
-	modal->after_publish(lower, state, RNHostContext());
+	const Size2 viewport(320, 200);
+	lower->present(true, Color(), viewport);
 	CHECK(lower->is_top());
 	CHECK(lower->get_overlay()->has_focus());
-	CHECK(lower->get_overlay()->get_size() == data->viewport);
-	modal->after_publish(upper, state, RNHostContext());
+	CHECK(lower->get_overlay()->get_size() == viewport);
+	upper->present(true, Color(), viewport);
 	CHECK(upper->is_top());
 	CHECK(upper->get_overlay()->has_focus());
 	CHECK_FALSE(lower->is_top());
-	modal->after_publish(lower, state, RNHostContext());
+	lower->present(true, Color(), viewport);
 	CHECK(upper->is_top());
-	modal->dispose_state(lower, RNHostContext());
+	lower->dismiss();
 	CHECK(upper->is_top());
-	modal->dispose_state(upper, RNHostContext());
+	upper->dismiss();
 	CHECK_FALSE(upper->is_top());
 	CHECK(background->has_focus());
 	memdelete(upper);
 	memdelete(background);
 	memdelete(lower);
-	auto window_state = prepare("GodotWindow", Dictionary());
-	const auto window_descriptor = descriptor("GodotWindow");
-	auto *window = Object::cast_to<RNWindowControl>(window_descriptor->create_host(RNHostContext()));
+	auto *window = memnew(RNWindowControl);
 	SceneTree::get_singleton()->get_root()->add_child(window);
-	window_descriptor->after_publish(window, window_state, RNHostContext());
+	window->present("React Native", Size2(640, 480), Size2(640, 480), true);
 	CHECK(window->get_native_window()->get_size() == Size2i(640, 480));
 	window->get_native_window()->set_size(Size2i(800, 600));
 	CHECK(window->resolve_size(Size2(640, 480)) == Size2(800, 600));
 	CHECK(window->resolve_size(Size2(480, 320)) == Size2(480, 320));
 	memdelete(window);
 }
-
-TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] initial zero prop revision is applied once through later native acknowledgments") {
-	Dictionary props;
-	props["text"] = "initial";
-	auto state = prepare("GodotTextInput", props);
-	auto *control = memnew(RNTextInputControl);
-	control->apply(state);
-	auto *line = Object::cast_to<LineEdit>(control->get_editor());
-	line->set_text("native value");
-	line->emit_signal("text_changed", line->get_text());
-	props["mostRecentEventCount"] = 1;
-	state = prepare("GodotTextInput", props);
-	control->apply(state);
-	CHECK(control->get_text() == "native value");
-	props["multiline"] = true;
-	state = prepare("GodotTextInput", props);
-	control->apply(state);
-	control->publish(state, RNHostContext());
-	CHECK(Object::cast_to<TextEdit>(control->get_editor()) != nullptr);
-	CHECK(control->get_text() == "native value");
-	CHECK_FALSE(Object::cast_to<TextEdit>(control->get_editor())->has_undo());
-	memdelete(control);
-}
-
 TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] drag and momentum phases follow the stock scroll signals") {
 	Window *viewport = SceneTree::get_singleton()->get_root();
 	viewport->set_size(Size2i(640, 480));
@@ -629,24 +404,15 @@ TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] drag and momentum phases
 	auto *scroll = memnew(RNScrollControl);
 	viewport->add_child(scroll);
 	scroll->set_size(Size2(240, 100));
-	auto *rows = memnew(Control);
-	rows->set_mouse_filter(Control::MOUSE_FILTER_PASS);
-	rows->set_size(Size2(200, 1000));
-	scroll->get_content()->add_child(rows);
-	auto host = descriptor("RCTScrollView");
-	auto state = prepare("RCTScrollView", Dictionary());
-	RNError error;
-	REQUIRE(host->apply(scroll, state, RNHostContext(), error));
+	scroll->set_content_extent(Size2(200, 1000));
 	Vector<StringName> phases;
-	auto sink = std::make_shared<RNHostEventSink>();
-	sink->emit = [&phases](int, const StringName &p_name, const Dictionary &, uint64_t) {
-		if (p_name != StringName("topScroll") && p_name != StringName("topContentSizeChange")) {
+	RNScrollCallbacks callbacks;
+	callbacks.event = [&phases](const StringName &p_name) {
+		if (p_name != StringName("topScroll")) {
 			phases.push_back(p_name);
 		}
 	};
-	RNHostContext context;
-	context.event_sink = sink;
-	scroll->publish(state, context);
+	scroll->set_callbacks(callbacks);
 	REQUIRE(scroll->get_v_scroll_bar()->get_max() > 100);
 
 	auto button = [&](bool p_pressed, const Point2 &p_position) {

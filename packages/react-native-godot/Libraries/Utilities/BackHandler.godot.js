@@ -1,7 +1,8 @@
 'use strict';
 
+import {unsupported} from '../../src/unsupported';
+
 export default {
-  exitApp: () => global.__godotUnsupported('BackHandler.exitApp'),
-  addEventListener: () =>
-    global.__godotUnsupported('BackHandler.addEventListener'),
+  exitApp: () => unsupported('BackHandler.exitApp'),
+  addEventListener: () => unsupported('BackHandler.addEventListener'),
 };

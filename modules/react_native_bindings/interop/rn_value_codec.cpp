@@ -358,7 +358,7 @@ bool from_js_object(jsi::Runtime &p_runtime, const jsi::Object &p_object, const 
 		r_value = Transform2D(Vector2(xx, xy), Vector2(yx, yy), Vector2(ox, oy));
 		return true;
 	}
-	if ((p_schema.type == RNValueType::OBJECT && require_wrapper("Object")) || (p_schema.type == RNValueType::SESSION && require_wrapper("Session"))) {
+	if (p_schema.type == RNValueType::OBJECT && require_wrapper("Object")) {
 		String handle;
 		if (!read_string(p_runtime, p_object.getProperty(p_runtime, "handle"), handle, r_context, r_error, child_path(p_path, "handle"))) {
 			return false;
@@ -385,8 +385,6 @@ bool from_js_object(jsi::Runtime &p_runtime, const jsi::Object &p_object, const 
 			inferred = RNValueType::TRANSFORM2D;
 		} else if (wrapper == "Object") {
 			inferred = RNValueType::OBJECT;
-		} else if (wrapper == "Session") {
-			inferred = RNValueType::SESSION;
 		}
 		if (inferred == RNValueType::DYNAMIC) {
 			return fail(r_context, r_error, RNErrorCode::VALIDATION, vformat("unknown Godot wrapper '%s'", wrapper), p_path);
@@ -726,13 +724,12 @@ bool to_js_value(jsi::Runtime &p_runtime, const Variant &p_value, const RNValueS
 			r_value = jsi::Value(p_runtime, result);
 			return true;
 		}
-		case RNValueType::OBJECT:
-		case RNValueType::SESSION: {
+		case RNValueType::OBJECT: {
 			if (p_value.get_type() != Variant::STRING || String(p_value).is_empty()) {
 				return fail(r_context, r_error, RNErrorCode::VALIDATION, "expected opaque handle token", p_path);
 			}
 			jsi::Object result(p_runtime);
-			set_string(p_runtime, result, "$godot", type == RNValueType::OBJECT ? "Object" : "Session");
+			set_string(p_runtime, result, "$godot", "Object");
 			set_string(p_runtime, result, "handle", p_value);
 			r_value = jsi::Value(p_runtime, result);
 			return true;

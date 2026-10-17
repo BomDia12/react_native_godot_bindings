@@ -1,79 +1,65 @@
 #pragma once
 
-#include "../fabric/rn_native_event.h"
-#include "../runtime/react_native_runtime_coordinator.h"
+#include "../mounting/rn_component_view.h"
 
 #include "core/input/input_event.h"
 #include "core/templates/hash_map.h"
-#include "core/templates/vector.h"
 
-struct RNHitTestResult {
-	int tag = 0;
-	Point2 root_origin;
-};
-
+// Translates Godot input on the control Godot picked into React Native touch,
+// pointer and key events, sent through the target's upstream event emitter.
 class RNInputRouter {
 public:
-	struct RouteResult {
-		Vector<RNNativeEvent> events;
-		int focus_tag = 0;
-		bool accepted = false;
+	struct Target {
+		facebook::react::Tag tag = 0;
+		std::shared_ptr<const facebook::react::TouchEventEmitter> emitter;
+		ObjectID control;
+		ObjectID focus;
+		bool owns_activation = false;
+
+		bool is_valid() const { return emitter != nullptr; }
+	};
+
+	// One pointer position: in the root's coordinates, on the screen, and in the
+	// viewport of the control that received it.
+	struct Position {
+		Point2 page;
+		Point2 screen;
+		Point2 viewport;
 	};
 
 private:
-	struct TouchContact {
-		int tag = 0;
-		Point2 root_position;
-		Point2 screen_position;
+	struct Contact {
+		Target target;
+		Position position;
 		float pressure = 0.5f;
-		float size = 1.0f;
-	};
-	struct PointerSample {
-		int tag = 0;
-		Point2 root_position;
-		Point2 screen_position;
-		Point2 target_origin;
-		int button = -1;
-		int buttons = 0;
-		String pointer_type;
-		int pointer_id = 0;
-		float pressure = 0.0f;
-		float width = 1.0f;
-		float height = 1.0f;
-		bool primary = false;
-		const InputEventWithModifiers *modifiers = nullptr;
-		uint64_t timestamp = 0;
 	};
 
-	int hover_tag = 0;
-	int mouse_active_tag = 0;
+	Target hover;
+	Target mouse_active;
 	int mouse_buttons = 0;
-	Point2 mouse_root_position;
-	Point2 mouse_screen_position;
-	HashMap<int, TouchContact> touch_contacts;
-	int primary_touch_id = -1;
+	Position mouse_position;
+	HashMap<int, Contact> touches;
+	int primary_touch = -1;
 
-	static RNHitTestResult hit_test_node(const RNSurfaceSnapshot &p_snapshot, int p_tag, const Point2 &p_point, const Rect2 &p_clip, bool p_include_children = true);
-	static Point2 target_origin(const RNSurfaceSnapshot &p_snapshot, int p_tag);
-	static Dictionary pointer_payload(const PointerSample &p_sample);
-	static Dictionary touch_value(const PointerSample &p_sample, int p_root_tag);
-	static Dictionary touch_payload(const Dictionary &p_touch, const Array &p_touches);
-	static RNNativeEvent event(int p_tag, const String &p_name, int p_priority, uint64_t p_generation, const Dictionary &p_payload);
-	static int mouse_button(MouseButton p_button);
-	static int mouse_button_mask(MouseButton p_button);
-	static String key_name(const Ref<InputEventKey> &p_key);
-	static String code_name(const Ref<InputEventKey> &p_key);
+	static facebook::react::Point point(const Point2 &p_point);
+	static Point2 offset_in(const Target &p_target, const Position &p_position);
+	static facebook::react::Touch touch(const Target &p_target, const Position &p_position, int p_identifier, float p_force);
+	static facebook::react::PointerEvent pointer(const Target &p_target, const Position &p_position, int p_pointer_id, const char *p_type, int p_button, int p_buttons, float p_pressure, bool p_primary, const InputEventWithModifiers *p_modifiers);
+	facebook::react::TouchEvent touch_event(const facebook::react::Touch &p_changed, bool p_ended) const;
 
-	RouteResult route_pointer_impl(const Ref<InputEvent> &p_event, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation, const Point2 &p_root_position, const Point2 &p_screen_position, int p_native_tag = -1);
-	Array current_touches(const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_timestamp) const;
-	void append_mouse_hover(RouteResult &r_result, const RNSurfaceSnapshot &p_snapshot, const RNHitTestResult &p_hit, const Point2 &p_root_position, const Point2 &p_screen_position, const InputEventWithModifiers *p_modifiers, uint64_t p_generation, uint64_t p_timestamp);
+	void _hover(const Target &p_target, const Position &p_position, const InputEventWithModifiers *p_modifiers);
+	void _mouse_motion(const Ref<InputEventMouseMotion> &p_motion, const Target &p_target, const Position &p_position);
+	Control *_mouse_button(const Ref<InputEventMouseButton> &p_button, const Target &p_target, const Position &p_position);
+	Control *_screen_touch(const Ref<InputEventScreenTouch> &p_touch, const Target &p_target, const Position &p_position);
+	void _screen_drag(const Ref<InputEventScreenDrag> &p_drag, const Position &p_position);
+	void _cancel(const Target &p_target, const Position &p_position, int p_touch, int p_pointer, const char *p_type, bool p_primary);
 
 public:
-	static RNHitTestResult hit_test(const RNSurfaceSnapshot &p_snapshot, const Point2 &p_point);
+	static Target target_for(const RNComponentView *p_view, const Point2 &p_local);
 
-	RouteResult route_pointer(const Ref<InputEvent> &p_event, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation, const Point2 &p_root_position, const Point2 &p_screen_position, int p_native_tag = -1);
-	RouteResult route_key(const Ref<InputEventKey> &p_key, int p_target_tag, uint64_t p_generation);
-	Vector<RNNativeEvent> reconcile_snapshot(const RNSurfaceSnapshot *p_old_snapshot, const RNSurfaceSnapshot &p_snapshot, int p_root_tag, uint64_t p_generation);
-	Vector<RNNativeEvent> cancel_all(const RNSurfaceSnapshot *p_snapshot, int p_root_tag, uint64_t p_generation);
-	void clear();
+	// Returns the pressed view's focus control after a primary press.
+	Control *route_pointer(const Ref<InputEvent> &p_event, const Target &p_target, const Position &p_position);
+	void route_key(const Ref<InputEventKey> &p_key, const Target &p_target);
+	void view_destroyed(facebook::react::Tag p_tag);
+	void cancel_all();
 };

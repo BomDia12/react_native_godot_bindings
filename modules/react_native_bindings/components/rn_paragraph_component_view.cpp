@@ -22,20 +22,23 @@ void RNParagraphComponentView::update_state(const State::Shared &p_state) {
 	RNComponentView::update_state(p_state);
 	const auto &data = std::static_pointer_cast<const ConcreteState<ParagraphState>>(p_state)->getData();
 	const auto &paragraph = static_cast<const ParagraphProps &>(*props);
-	const AttributedString attributed = data.attributedString;
+	attributed = data.attributedString;
 	const ParagraphAttributes attributes = data.paragraphAttributes;
-	text->set_content(String::utf8(attributed.getString().c_str()), [shaper = shaper, attributed, attributes](float p_width, RNParagraphLayout &r_layout) { shaper->shape(attributed, attributes, p_width, r_layout); }, paragraph.isSelectable);
+	text->set_content(String::utf8(attributed.getString().c_str()), [shaper = shaper, attributed = attributed, attributes](float p_width, RNParagraphLayout &r_layout) { shaper->shape(attributed, attributes, p_width, r_layout); }, paragraph.isSelectable);
 }
 
-Tag RNParagraphComponentView::fragment_tag_at(const Point2 &p_point) const {
-	const RNParagraphLayout &layout = text->get_layout();
-	const int character = layout.hit_test(p_point);
+RNTouchTarget RNParagraphComponentView::touch_target_at(const Point2 &p_local) const {
+	const int character = text->get_layout().hit_test(p_local);
 	int offset = 0;
-	for (const RNParagraphLayout::Fragment &fragment : layout.get_fragments()) {
-		offset += fragment.text.length();
+	for (const AttributedString::Fragment &fragment : attributed.getFragments()) {
+		if (fragment.isAttachment()) {
+			continue;
+		}
+		offset += String::utf8(fragment.string.c_str()).length();
 		if (character < offset) {
-			return fragment.tag;
+			auto emitter = std::dynamic_pointer_cast<const TouchEventEmitter>(fragment.parentShadowView.eventEmitter);
+			return emitter ? RNTouchTarget{ fragment.parentShadowView.tag, emitter } : RNComponentView::touch_target_at(p_local);
 		}
 	}
-	return tag;
+	return RNComponentView::touch_target_at(p_local);
 }

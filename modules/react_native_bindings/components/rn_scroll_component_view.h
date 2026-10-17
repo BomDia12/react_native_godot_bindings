@@ -17,4 +17,6 @@ public:
 	void update_event_emitter(const facebook::react::EventEmitter::Shared &p_emitter) override;
 	void handle_command(const std::string &p_name, const folly::dynamic &p_args) override;
 	RNScrollControl *get_scroll_control() const { return scroll; }
+	Vector<Control *> get_input_controls() const override { return { scroll->get_h_scroll_bar(), scroll->get_v_scroll_bar() }; }
+	bool owns_input_control(Control *p_control) const override;
 };

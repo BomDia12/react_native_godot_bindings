@@ -4,14 +4,18 @@
   "scene": "res://smoke/tests/native_module_interop/NativeModuleInterop.tscn",
   "timeout_seconds": 60,
   "allowlist": "documentation/expected-warnings.txt",
-  "bundle": {"mode": "shared", "package_dir": "samples/view-text", "script": "build:godot", "output": "samples/view-text/dist/godot.bundle.js"},
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/view-text",
+    "script": "build:godot",
+    "output": "samples/view-text/dist/godot.bundle.js"
+  },
   "inputs": [
     "samples/view-text/project.godot",
     "samples/view-text/package.json",
     "samples/view-text/package-lock.json",
     "samples/view-text/godot.entry.js",
     "samples/view-text/native_module.entry.js",
-    "packages/react-native-godot/src/modules.js",
     "packages/react-native-godot/src/values.js",
     "documentation/expected-warnings.txt",
     "samples/view-text/smoke/tests/native_module_interop/NativeModuleInterop.tscn",

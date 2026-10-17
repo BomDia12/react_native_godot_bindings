@@ -38,6 +38,8 @@ env_rn.Append(
 	CXXFLAGS=["-isystem%s" % path for path in react_native_sources.hermes_include_dirs() + react_native_sources.include_dirs()[1:]]
 )
 env_rn.Prepend(CPPPATH=[react_native_sources.REACT_PLATFORM_DIR])
+# Godot platform headers under react_platform/ include module headers by module-relative path.
+env_rn.Append(CPPPATH=[module_dir])
 env_rn.Append(CPPDEFINES=react_native_sources.REACT_NATIVE_DEFINES)
 
 env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
@@ -59,14 +61,12 @@ module_source_dirs = [
 	"components",
 	"editor",
 	"examples",
-	"fabric",
 	"host",
 	"input",
 	"interop",
 	"mounting",
 	"native_modules",
 	"root_view",
-	"runtime",
 	"singletons",
 	"turbomodules",
 ]

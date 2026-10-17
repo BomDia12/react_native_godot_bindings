@@ -16,4 +16,8 @@ public:
 	void update_event_emitter(const facebook::react::EventEmitter::Shared &p_emitter) override;
 	void handle_command(const std::string &p_name, const folly::dynamic &p_args) override;
 	RNTextInputControl *get_input_control() const { return input; }
+	Vector<Control *> get_input_controls() const override { return { input->get_editor() }; }
+	bool owns_input_control(Control *p_control) const override { return p_control == input || p_control == input->get_editor() || input->get_editor()->is_ancestor_of(p_control); }
+	Control *get_focus_control() const override { return input->get_editor(); }
+	bool owns_activation() const override { return true; }
 };

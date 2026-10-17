@@ -1,15 +1,10 @@
 #pragma once
 #include "../native_modules/rn_image_service.h"
-#include "rn_host_descriptor.h"
 
 #include "scene/gui/texture_rect.h"
-struct RNImageData : RNComponentData {
-	RNImageSource source;
-	bool has_source = false;
-	Size2 intrinsic;
-	std::shared_ptr<RNImageService> service;
-	std::shared_ptr<const RNImageResource> resource;
-};
+
+#include <functional>
+#include <memory>
 struct RNImageCallbacks {
 	std::function<void()> load_start;
 	std::function<void(const RNImageSource &, const Size2 &)> load;
@@ -40,6 +35,4 @@ public:
 	~RNImageControl();
 	void set_callbacks(RNImageCallbacks p_callbacks) { callbacks = std::move(p_callbacks); }
 	void load(const RNImageSource *p_source, const std::shared_ptr<RNImageService> &p_service);
-	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 };
-std::shared_ptr<const RNHostDescriptor> rn_image_descriptor();

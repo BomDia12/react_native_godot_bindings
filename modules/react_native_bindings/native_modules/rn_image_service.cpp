@@ -1,7 +1,6 @@
 #include "rn_image_service.h"
 
 #include "rn_image_probe.h"
-#include "rn_native_module_registry.h"
 
 #include "core/config/project_settings.h"
 #include "core/crypto/crypto_core.h"
@@ -160,7 +159,7 @@ bool RNImageService::normalize(const Dictionary &p_source, RNImageSource &r_sour
 		}
 	}
 	r_source.shared = !r_source.remote || r_source.stateless;
-	if (!r_source.remote && !r_source.uri.begins_with("data:")) {
+	if (!r_source.remote && !r_source.uri.begins_with("data:") && FileAccess::exists(ResourceLoader::import_remap(r_source.uri))) {
 		const String imported = ResourceLoader::import_remap(r_source.uri);
 		hash_part(String::num_uint64(FileAccess::get_modified_time(imported)));
 		hash_part(String::num_uint64(FileAccess::get_size(imported)));
@@ -416,92 +415,4 @@ void rn_register_image_settings() {
 	for (const auto &entry : { std::pair<const char *, int64_t>("cache_bytes", 64 * 1024 * 1024), { "max_encoded_bytes", 8 * 1024 * 1024 }, { "max_decoded_bytes", 64 * 1024 * 1024 }, { "total_bytes", 256 * 1024 * 1024 }, { "max_concurrent_decodes", 2 } }) {
 		GLOBAL_DEF(PropertyInfo(Variant::INT, String("react_native/images/") + entry.first, PROPERTY_HINT_RANGE, String(entry.first) == "max_concurrent_decodes" ? "1,32,1" : "0,2147483647,1"), entry.second);
 	}
-}
-
-namespace {
-class RNImageModule : public RNNativeModule {
-	std::shared_ptr<RNImageService> service;
-	std::shared_ptr<std::map<String, uint64_t>> subscriptions = std::make_shared<std::map<String, uint64_t>>();
-
-public:
-	~RNImageModule() {
-		if (service) {
-			const auto pending = *subscriptions;
-			subscriptions->clear();
-			for (const auto &entry : pending) {
-				service->cancel(entry.second);
-			}
-		}
-	}
-	RNModuleResult invoke_sync(const StringName &p_method, const Array &p_arguments, const RNCallContext &p_context) override {
-		service = RNImageService::for_generation(p_context.generation);
-		if (p_method == "queryCache") {
-			Dictionary result;
-			if (p_arguments.size() != 1 || p_arguments[0].get_type() != Variant::ARRAY) {
-				return RNModuleResult::failure(RNError::make(RNErrorCode::VALIDATION, "queryCache requires source records", "image.module"));
-			}
-			const Array sources = p_arguments[0];
-			for (const Variant &value : sources) {
-				if (value.get_type() != Variant::DICTIONARY) {
-					return RNModuleResult::failure(RNError::make(RNErrorCode::VALIDATION, "queryCache requires source records", "image.module"));
-				}
-				const Dictionary source = value;
-				RNImageSource normalized;
-				RNError error;
-				if (!RNImageService::normalize(source, normalized, error)) {
-					return RNModuleResult::failure(error);
-				}
-				if (service->cached(normalized)) {
-					result[normalized.uri] = "memory";
-				}
-			}
-			return RNModuleResult::success(result);
-		}
-		return RNModuleResult::failure(RNError::make(RNErrorCode::UNSUPPORTED, "Unknown ImageLoader method", "image.module"));
-	}
-	void start_async(const StringName &p_method, const Array &p_arguments, const RNCallContext &p_context, const RNCompletionToken &p_completion) override {
-		service = RNImageService::for_generation(p_context.generation);
-		RNImageSource source;
-		RNError error;
-		if (p_arguments.size() != 1 || p_arguments[0].get_type() != Variant::DICTIONARY) {
-			p_completion.fail(RNError::make(RNErrorCode::VALIDATION, "ImageLoader requires a source record", "image.module"));
-			return;
-		}
-		if (!RNImageService::normalize(p_arguments[0], source, error)) {
-			p_completion.fail(error);
-			return;
-		}
-		auto completed = std::make_shared<bool>(false);
-		const String token = p_context.request_token;
-		uint64_t subscription = service->request(source, [p_completion, source, p_method, completed, token, tracking = subscriptions](RNImageResult result) { *completed = true; tracking->erase(token); if (result.error.is_set()) { p_completion.fail(result.error); } else if (p_method == "prefetch") { p_completion.complete(true); } else { Dictionary size; size["width"] = result.resource->texture->get_width() / source.scale; size["height"] = result.resource->texture->get_height() / source.scale; p_completion.complete(size); } });
-		if (subscription && !*completed) {
-			(*subscriptions)[p_context.request_token] = subscription;
-		}
-	}
-	void cancel(const String &p_request) override {
-		auto found = subscriptions->find(p_request);
-		if (found != subscriptions->end()) {
-			const uint64_t subscription = found->second;
-			subscriptions->erase(found);
-			service->cancel(subscription);
-		}
-	}
-};
-} //namespace
-bool rn_register_image_module(RNNativeModuleRegistry &p_registry, RNError &r_error) {
-	RNModuleDefinition definition;
-	definition.name = "GodotImageLoader";
-	for (const char *name : { "getSize", "prefetch", "queryCache" }) {
-		RNMethodSchema method;
-		method.name = name;
-		method.mode = String(name) == "queryCache" ? RNCallMode::SYNC : RNCallMode::ASYNC;
-		RNArgumentSchema argument;
-		argument.name = "source";
-		argument.value = RNValueSchema::value(RNValueType::DYNAMIC);
-		method.arguments.push_back(argument);
-		method.result = RNValueSchema::value(RNValueType::DYNAMIC);
-		definition.methods.push_back(method);
-	}
-	definition.factory = []() { return std::make_unique<RNImageModule>(); };
-	return p_registry.register_module(definition, r_error);
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../runtime/rn_service_settings.h"
+#include "../host/rn_service_settings.h"
 
 #include "modules/websocket/websocket_peer.h"
 

@@ -1,12 +1,13 @@
 #pragma once
-#include "rn_native_module.h"
 
-class RNNativeModuleRegistry;
+#include "../interop/rn_error.h"
 
 #include "core/io/image.h"
 #include "scene/resources/texture.h"
 
+#include <functional>
 #include <map>
+#include <memory>
 
 struct RNImageSource {
 	String uri;
@@ -97,5 +98,4 @@ public:
 	uint64_t used_bytes() const { return budget->used; }
 	void clear_cache();
 };
-bool rn_register_image_module(RNNativeModuleRegistry &p_registry, RNError &r_error);
 void rn_register_image_settings();

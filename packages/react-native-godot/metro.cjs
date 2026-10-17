@@ -27,14 +27,8 @@ function createGodotMetroConfig(projectRoot) {
       resolveRequest: createGodotResolver({projectRoot: resolvedProjectRoot, reactNativeRoot}),
     },
     serializer: {
-      getPolyfills: options => [
-        ...(defaults.serializer.getPolyfills?.(options) ?? []),
-        path.join(packageRoot, 'src/bootstrap.js'),
-      ],
       getModulesRunBeforeMainModule: () => [
-        path.join(packageRoot, 'src/native-facades-install.js'),
         projectRequire.resolve('react-native/Libraries/Core/InitializeCore'),
-        path.join(packageRoot, 'src/bootstrap-finalize.js'),
         path.join(packageRoot, 'src/setup.js'),
       ],
     },

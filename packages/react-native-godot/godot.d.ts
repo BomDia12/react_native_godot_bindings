@@ -34,7 +34,6 @@ declare module 'react-native' {
   }
 }
 
-export type GodotRootOrigin = {generation: number; rootTag: number; epoch: number};
 export type GodotAlertResult =
   | {buttonId: number; dismissed: false}
   | {buttonId: null; dismissed: true};
@@ -49,7 +48,7 @@ export type GodotRegistrationOptions = {
   alerts?: boolean | ((payload: GodotAlertPayload) => GodotAlertResult | {handled: false} | Promise<GodotAlertResult | {handled: false}>);
 };
 export type GodotSceneSnapshot<T> = {
-  session: {$godot: 'Session'; handle: string};
+  rootTag: number;
   handle: string;
   value: T;
   sequence: number;
@@ -61,13 +60,13 @@ declare module 'react-native-godot/app-registry' {
     registerComponent(key: string, provider: () => React.ComponentType<{rootTag: number}>, options?: GodotRegistrationOptions): string;
   };
   export function useGodotAlert(): (title?: string | null, message?: string | null, buttons?: readonly {text?: string; onPress?: () => void}[], options?: {cancelable?: boolean; onDismiss?: () => void}) => Promise<GodotAlertResult>;
-  export function useGodotRoot(): {session: GodotSceneSnapshot<unknown>['session']; origin: GodotRootOrigin; alert: ReturnType<typeof useGodotAlert>} | null;
+  export function useGodotRoot(): {rootTag: number; alert: ReturnType<typeof useGodotAlert>} | null;
 }
 declare module 'react-native-godot/scene' {
   export function useGodotScene<T = unknown>(rootTag: number): GodotSceneSnapshot<T> | null;
-  export function getBinding(session: GodotSceneSnapshot<unknown>['session']): {ready: boolean; binding: string | null; sequence: number};
-  export function read<T = unknown>(session: GodotSceneSnapshot<T>['session'], handle: string): {payload: T; sequence: number};
-  export function call<T = unknown>(session: GodotSceneSnapshot<unknown>['session'], handle: string, command: string, args?: readonly unknown[]): T;
-  export function callAsync<T = unknown>(session: GodotSceneSnapshot<unknown>['session'], handle: string, command: string, args?: readonly unknown[], options?: {signal?: AbortSignal}): Promise<T>;
-  export function onChanged(session: GodotSceneSnapshot<unknown>['session'], callback: (event: {ready: boolean; sequence: number; event: string; payload: unknown}) => void): {remove(): void};
+  export function getBinding(rootTag: number): {ready: boolean; binding: string | null; sequence: number; capability?: string; schemaVersion?: number};
+  export function read<T = unknown>(rootTag: number, handle: string): {payload: T; sequence: number};
+  export function call<T = unknown>(rootTag: number, handle: string, command: string, args?: readonly unknown[]): T;
+  export function callAsync<T = unknown>(rootTag: number, handle: string, command: string, args?: readonly unknown[]): Promise<T>;
+  export function onChanged(rootTag: number, callback: (event: {rootTag: number; binding: string | null; ready: boolean; sequence: number; event: string; payload?: unknown}) => void): {remove(): void};
 }

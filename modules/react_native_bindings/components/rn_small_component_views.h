@@ -8,6 +8,7 @@ class RNSwitchComponentView : public RNComponentView {
 
 public:
 	explicit RNSwitchComponentView(facebook::react::Tag p_tag);
+	bool owns_activation() const override { return true; }
 	void update_props(const facebook::react::Props::Shared &p_old, const facebook::react::Props::Shared &p_new) override;
 	void update_event_emitter(const facebook::react::EventEmitter::Shared &p_emitter) override;
 	void handle_command(const std::string &p_name, const folly::dynamic &p_args) override;

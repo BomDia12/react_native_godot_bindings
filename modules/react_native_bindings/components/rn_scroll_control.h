@@ -1,15 +1,11 @@
 #pragma once
-#include "rn_host_descriptor.h"
-
 #include "scene/animation/tween.h"
+#include "scene/gui/control.h"
 #include "scene/gui/panel.h"
 #include "scene/gui/scroll_container.h"
 
-struct RNScrollData : RNComponentData {
-	bool horizontal = false;
-	bool indicator = true;
-	Rect2 usable_viewport;
-};
+#include <functional>
+#include <memory>
 
 struct RNScrollSettings {
 	bool horizontal = false;
@@ -85,7 +81,6 @@ public:
 	void restore_visible_anchor();
 	void set_overlay_indicators(bool p_horizontal, bool p_vertical);
 	void set_content_extent(const Size2 &p_extent);
-	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 	void refresh_content();
 	void scroll_to(const Point2 &p_offset, bool p_animated);
 	void set_offset(const Point2 &p_offset);
@@ -101,5 +96,3 @@ public:
 	Size2 get_combined_minimum_size() const override { return Size2(); }
 	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
 };
-std::shared_ptr<const RNHostDescriptor> rn_scroll_descriptor(const StringName &p_name = "RCTScrollView", bool p_horizontal = false);
-std::shared_ptr<const RNHostDescriptor> rn_scroll_content_descriptor(const StringName &p_name);

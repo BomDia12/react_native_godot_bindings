@@ -4,17 +4,19 @@
   "scene": "res://smoke/tests/godot_platform/GodotPlatform.tscn",
   "timeout_seconds": 60,
   "allowlist": "documentation/expected-warnings.txt",
-  "bundle": {"mode": "shared", "package_dir": "samples/view-text", "script": "build:godot", "output": "samples/view-text/dist/godot.bundle.js"},
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/view-text",
+    "script": "build:godot",
+    "output": "samples/view-text/dist/godot.bundle.js"
+  },
   "inputs": [
     "samples/view-text/project.godot",
     "samples/view-text/package.json",
     "samples/view-text/package-lock.json",
     "samples/view-text/godot.entry.js",
     "samples/view-text/platform.entry.js",
-    "packages/react-native-godot/src/bootstrap.js",
-    "packages/react-native-godot/src/bootstrap-finalize.js",
     "packages/react-native-godot/Libraries/Utilities/Platform.godot.js",
-    "packages/react-native-godot/Libraries/StyleSheet/processColor.godot.js",
     "documentation/expected-warnings.txt",
     "samples/view-text/smoke/tests/godot_platform/GodotPlatform.tscn",
     "samples/view-text/smoke/tests/godot_platform/godot_platform.gd"

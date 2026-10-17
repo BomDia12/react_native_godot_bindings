@@ -16,7 +16,7 @@ const state = {
 global.__godotPlatformState = state;
 
 Promise.resolve().then(() => state.microtasks.push('promise'));
-global.__godotQueueMicrotask(() => state.microtasks.push('native'));
+queueMicrotask(() => state.microtasks.push('native'));
 state.microtasks.push('sync');
 try {
   BackHandler.addEventListener('hardwareBackPress', () => true);

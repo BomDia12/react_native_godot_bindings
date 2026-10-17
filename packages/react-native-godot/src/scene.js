@@ -1,48 +1,46 @@
 'use strict';
 
 import {useEffect, useState} from 'react';
-import {openSession, closeSession, callAsync as nativeCallAsync} from './modules';
+import NativeGodotScene from '../specs/NativeGodotScene';
 
-const scene = () => global.__godotNativeModules.get('GodotScene');
-export const getBinding = session => scene().getBinding(session);
-export const read = (session, handle) => scene().read(session, handle);
-export const call = (session, handle, command, args = []) =>
-  scene().call(session, handle, command, args);
-export const callAsync = (session, handle, command, args = [], options = {}) =>
-  nativeCallAsync(scene(), 'callAsync', [session, handle, command, args], options);
-export const onChanged = (session, callback) => scene().onChanged(session, callback);
+export const getBinding = rootTag => NativeGodotScene.getBinding(rootTag);
+export const read = (rootTag, handle) => NativeGodotScene.read(rootTag, handle);
+export const call = (rootTag, handle, command, args = []) => NativeGodotScene.call(rootTag, handle, command, args);
+export const callAsync = (rootTag, handle, command, args = []) => NativeGodotScene.callAsync(rootTag, handle, command, args);
+export const onChanged = (rootTag, callback) =>
+  NativeGodotScene.onChanged(change => {
+    if (change.rootTag === rootTag) {
+      callback(change);
+    }
+  });
 
 export function useGodotScene(rootTag) {
   const [state, setState] = useState(null);
   useEffect(() => {
-    const session = openSession(rootTag);
-    let current = null;
     let sequence = -1;
-    let disposed = false;
+    // A root can stop or its binding can change between the event and the read;
+    // either way there is nothing current to show.
     const update = () => {
-      const binding = getBinding(session);
-      if (!binding.ready) {
-        current = null;
+      try {
+        const binding = getBinding(rootTag);
+        if (!binding.ready) {
+          setState(null);
+          return;
+        }
+        const snapshot = read(rootTag, binding.binding);
+        sequence = snapshot.sequence;
+        setState({rootTag, handle: binding.binding, value: snapshot.payload, sequence});
+      } catch {
         setState(null);
-        return;
       }
-      current = binding.binding;
-      const snapshot = read(session, current);
-      sequence = snapshot.sequence;
-      setState({session, handle: current, value: snapshot.payload, sequence});
     };
-    const subscription = onChanged(session, event => {
-      if (disposed || event.sequence <= sequence) {
-        return;
+    const subscription = onChanged(rootTag, change => {
+      if (change.sequence > sequence) {
+        update();
       }
-      update();
     });
     update();
-    return () => {
-      disposed = true;
-      subscription.remove();
-      closeSession(session);
-    };
+    return () => subscription.remove();
   }, [rootTag]);
   return state;
 }

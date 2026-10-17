@@ -30,6 +30,6 @@ type NativeProps = $ReadOnly<{
   onResize?: ?DirectEventHandler<ResizeEvent>,
 }>;
 
-export default (codegenNativeComponent<NativeProps>(
-  'GodotWindow',
-): HostComponent<NativeProps>);
+export default (codegenNativeComponent<NativeProps>('GodotWindow', {
+  interfaceOnly: true,
+}): HostComponent<NativeProps>);

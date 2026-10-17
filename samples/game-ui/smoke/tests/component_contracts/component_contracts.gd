@@ -15,12 +15,27 @@ var overlapping_root_index := 0
 var inventory: ReactNativeRootView
 var failures: Array[String] = []
 
+var cached_fixture := {}
+var polling := false
+var polled_frame := -1
+
+# Godot never waits on the JS thread, so the latest JS state is fetched in the
+# background; a stage only runs once a fetch started after the stage began.
+func poll_fixture() -> void:
+	if polling:
+		return
+	polling = true
+	var started := frames
+	var result = await ReactNativeHost.evaluate("__gallery")
+	cached_fixture = result if result is Dictionary else {}
+	polled_frame = started
+	polling = false
+
 func fixture() -> Dictionary:
-	var result = HermesRuntime.get_global("__phase6a")
-	return result if result is Dictionary else {}
+	return cached_fixture
 
 func action(name: String, value = null) -> void:
-	HermesRuntime.call_function("__phase6aAction", [name, value])
+	ReactNativeHost.evaluate("__galleryAction(%s, %s)" % [JSON.stringify(name), JSON.stringify(value)])
 
 func require_condition(condition: bool, message: String) -> void:
 	if not condition:
@@ -31,7 +46,7 @@ func target(id: String, node: Node = null) -> Control:
 		node = self
 	if node is Control and node.get_meta("react_native_test_id", "") == id:
 		return node
-	for child in node.get_children():
+	for child in node.get_children(true):
 		var found := target(id, child)
 		if found != null:
 			return found
@@ -43,7 +58,7 @@ func controls_of(type_name: String, node: Node = null) -> Array[Node]:
 	var result: Array[Node] = []
 	if node.is_class(type_name):
 		result.append(node)
-	for child in node.get_children():
+	for child in node.get_children(true):
 		result.append_array(controls_of(type_name, child))
 	return result
 
@@ -86,13 +101,16 @@ func _process(_delta: float) -> void:
 		failures.append("Timed out at stage %d" % stage)
 		finish()
 		return
-	if frames - stage_frame < 15:
+	poll_fixture()
+	if frames - stage_frame < 15 or polled_frame < stage_frame:
 		return
 	match stage:
 		0:
 			inventory = get_node_or_null("Inventory")
-			if target("inventory-editor") == null or fixture().get("enemies", {}).size() != 3:
-				return
+			var loaded: Array = fixture().get("events", [])
+			if target("inventory-editor") == null or fixture().get("enemies", {}).size() != 3 or not "asset-load" in loaded or not "data-load" in loaded:
+				if frames < 600:
+					return
 			for index in range(3):
 				initial_enemy_ids.append(get_node("Enemy%d" % index).get_instance_id())
 			require_condition(target("asset-image") is RNImageControl, "Asset image host is missing")

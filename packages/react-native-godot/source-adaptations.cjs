@@ -1,12 +1,6 @@
 'use strict';
 const crypto = require('crypto');
 const adaptations = {
-  'Libraries/vendor/emitter/EventEmitter.js': source => source.replace('    const registrations = allocate<', `    const origin = global.__godotScheduler?.getOrigin?.() ?? null;
-    if (global.__godotScheduler?.withOrigin != null) {
-      const callback = listener;
-      listener = (...args) => global.__godotScheduler.withOrigin(origin, () => callback.apply(context, args));
-    }
-    const registrations = allocate<`),
   'Libraries/Components/Touchable/TouchableOpacity.js': source => source.replace('useNativeDriver: true,', "useNativeDriver: Platform.OS !== 'godot',"),
   'src/private/animated/createAnimatedPropsHook.js': source => source.replace("import NativeAnimatedHelper from './NativeAnimatedHelper';", "import NativeAnimatedHelper from './NativeAnimatedHelper';\nimport Platform from '../../../Libraries/Utilities/Platform';").replace('if (!NativeAnimatedHelper.shouldSignalBatch) {', "if (Platform.OS !== 'godot' && !NativeAnimatedHelper.shouldSignalBatch) {"),
   'Libraries/Components/ScrollView/ScrollView.js': source => {

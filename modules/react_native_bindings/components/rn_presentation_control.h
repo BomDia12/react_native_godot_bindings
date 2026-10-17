@@ -1,12 +1,11 @@
 #pragma once
-#include "rn_host_descriptor.h"
-
+#include "scene/gui/control.h"
 #include "scene/gui/panel.h"
 #include "scene/main/window.h"
 
-struct RNPresentationData : RNComponentData {
-	Size2 viewport;
-};
+#include <functional>
+#include <memory>
+
 class RNModalOverlay : public Panel {
 	GDCLASS(RNModalOverlay, Panel);
 
@@ -48,12 +47,16 @@ class RNModalControl : public Control {
 	std::shared_ptr<RNModalDomain> domain;
 	ObjectID last_focus;
 	bool presented = false;
+	bool requested_visible = false;
+	Color requested_backdrop;
+	void _apply_request();
 	void _remove_presentation();
 	void _update_focus_cycle();
 
 protected:
 	static void _bind_methods() {}
 	void input(const Ref<InputEvent> &p_event) override;
+	void _notification(int p_what);
 
 public:
 	Size2 get_combined_minimum_size() const override { return Size2(); }
@@ -64,7 +67,9 @@ public:
 	bool is_top() const;
 	void set_callbacks(RNPresentationCallbacks p_callbacks) { callbacks = std::move(p_callbacks); }
 	void present(bool p_visible, const Color &p_backdrop, const Size2 &p_viewport);
-	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
+	// Presents over the current viewport once the modal is in the tree.
+	void request_presentation(bool p_visible, const Color &p_backdrop);
+	Size2 get_presentation_size() const;
 	void request_close();
 	void dismiss() { _remove_presentation(); }
 };
@@ -81,6 +86,7 @@ class RNWindowControl : public Control {
 
 protected:
 	static void _bind_methods() {}
+	void _notification(int p_what);
 
 public:
 	Size2 get_combined_minimum_size() const override { return Size2(); }
@@ -91,7 +97,4 @@ public:
 	Size2 resolve_size(const Size2 &p_declared) const;
 	void set_callbacks(RNPresentationCallbacks p_callbacks) { callbacks = std::move(p_callbacks); }
 	void present(const String &p_title, const Size2 &p_size, const Size2 &p_declared_size, bool p_visible);
-	void publish(const RNPreparedHostState &p_state, const RNHostContext &p_context);
 };
-std::shared_ptr<const RNHostDescriptor> rn_modal_descriptor();
-std::shared_ptr<const RNHostDescriptor> rn_window_descriptor();

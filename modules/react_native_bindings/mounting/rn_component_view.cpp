@@ -8,10 +8,8 @@ using namespace facebook::react;
 
 namespace {
 
-constexpr const char *COMPONENT_VIEW_META = "_react_native_tag";
-
 bool is_component_control(Node *p_node) {
-	return p_node->has_meta(COMPONENT_VIEW_META);
+	return p_node->has_meta(RNComponentView::TAG_META) && !p_node->has_meta(RNComponentView::DETACHING_META);
 }
 
 } // namespace
@@ -51,10 +49,16 @@ Ref<StyleBoxFlat> rn_view_stylebox(const ViewProps &p_props, const LayoutMetrics
 
 RNComponentView::RNComponentView(Tag p_tag, Control *p_control) :
 		control(p_control), control_id(p_control->get_instance_id()), tag(p_tag) {
-	control->set_meta(COMPONENT_VIEW_META, tag);
+	control->set_meta(TAG_META, tag);
 }
 
 RNComponentView::~RNComponentView() {
+	if (!owns_control) {
+		if (ObjectDB::get_instance(control_id)) {
+			control->remove_meta(TAG_META);
+		}
+		return;
+	}
 	if (ObjectDB::get_instance(control_id)) {
 		if (control->get_parent()) {
 			control->get_parent()->remove_child(control);
@@ -73,6 +77,7 @@ void RNComponentView::apply_view_props(const ViewProps &p_props) {
 	control->set_clip_contents(p_props.getClipsContentToBounds());
 	const bool branch_enabled = p_props.pointerEvents != PointerEventsMode::None;
 	control->set_mouse_filter(branch_enabled ? Control::MOUSE_FILTER_PASS : Control::MOUSE_FILTER_IGNORE);
+	control->set_mouse_behavior_recursive(branch_enabled ? Control::MOUSE_BEHAVIOR_INHERITED : Control::MOUSE_BEHAVIOR_DISABLED);
 	control->set_meta("react_native_test_id", String::utf8(p_props.testId.c_str()));
 	apply_transform();
 }
@@ -116,24 +121,47 @@ void RNComponentView::update_event_emitter(const EventEmitter::Shared &p_emitter
 void RNComponentView::insert_child(RNComponentView *p_child, int p_index) {
 	Control *container = get_child_container();
 	Control *child = p_child->get_control();
-	if (child->get_parent()) {
-		child->get_parent()->remove_child(child);
-	}
+	child->remove_meta(DETACHING_META);
+	Node *anchor = nullptr;
 	int react_index = 0;
-	int position = container->get_child_count();
 	for (int i = 0; i < container->get_child_count(); ++i) {
-		if (is_component_control(container->get_child(i)) && react_index++ == p_index) {
-			position = i;
+		Node *sibling = container->get_child(i);
+		if (sibling != child && is_component_control(sibling) && react_index++ == p_index) {
+			anchor = sibling;
 			break;
 		}
 	}
-	container->add_child(child);
-	container->move_child(child, position);
+	if (child->get_parent() != container) {
+		if (child->get_parent()) {
+			child->get_parent()->remove_child(child);
+		}
+		container->add_child(child);
+	}
+	if (!anchor) {
+		container->move_child(child, container->get_child_count() - 1);
+	} else {
+		container->move_child(child, anchor->get_index() - (child->get_index() < anchor->get_index() ? 1 : 0));
+	}
 }
 
+// Fabric moves a view as Remove then Insert. Detaching right away would drop
+// Godot focus and state, so the control stays until the transaction ends.
 void RNComponentView::remove_child(RNComponentView *p_child) {
 	Control *child = p_child->get_control();
 	if (child->get_parent() == get_child_container()) {
-		get_child_container()->remove_child(child);
+		child->set_meta(DETACHING_META, true);
 	}
+}
+
+void RNComponentView::finish_removal() {
+	if (control->has_meta(DETACHING_META)) {
+		control->remove_meta(DETACHING_META);
+		if (control->get_parent()) {
+			control->get_parent()->remove_child(control);
+		}
+	}
+}
+
+RNTouchTarget RNComponentView::touch_target_at(const Point2 &) const {
+	return { tag, std::dynamic_pointer_cast<const TouchEventEmitter>(event_emitter) };
 }

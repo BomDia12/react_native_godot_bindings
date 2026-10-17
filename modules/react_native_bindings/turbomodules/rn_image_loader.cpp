@@ -8,8 +8,13 @@ namespace facebook::react {
 namespace {
 
 bool normalized_source(const std::string &p_uri, RNImageSource &r_source, RNError &r_error) {
+	// Godot strings end at NUL, so a URI hiding one would be read as a shorter path.
+	if (p_uri.find('\0') != std::string::npos) {
+		r_error = RNError::make(RNErrorCode::VALIDATION, "Invalid image URI or scale", "image.source");
+		return false;
+	}
 	Dictionary source;
-	source["uri"] = String::utf8(p_uri.c_str());
+	source["uri"] = String::utf8(p_uri.data(), p_uri.size());
 	return RNImageService::normalize(source, r_source, r_error);
 }
 
