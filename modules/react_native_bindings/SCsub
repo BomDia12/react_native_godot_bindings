@@ -44,6 +44,10 @@ env_rn.Append(CPPDEFINES=react_native_sources.REACT_NATIVE_DEFINES)
 
 env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
 env.AppendUnique(LIBS=["hermesvm", "jsi"])
+# Upstream feature flags keep std::atomic<std::optional<double>>, whose 16-byte
+# operations GCC lowers to libatomic calls.
+if env["platform"] == "linuxbsd":
+	env.AppendUnique(LIBS=["atomic"])
 env.AppendUnique(LINKFLAGS=["-Wl,-rpath,\\$$ORIGIN"])
 
 if env["platform"] == "linuxbsd" and env["library_type"] == "executable":
