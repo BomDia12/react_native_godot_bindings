@@ -71,6 +71,9 @@ async function main() {
     host: values.host,
     unstable_extraMiddleware: [devTools.middleware],
     websocketEndpoints: {...devTools.websocketEndpoints, '/message': messages.server},
+    // Metro stops watching files when it detects a CI environment, which
+    // would leave Fast Refresh without any edits to send.
+    watch: true,
   });
   attachKeys(messages, serverBaseUrl);
 }
