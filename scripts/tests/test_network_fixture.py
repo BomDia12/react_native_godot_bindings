@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from network_fixture import LocalNetworkFixture
+from network_fixture import LocalNetworkFixture, MetroFixture
 
 
 class NetworkFixtureTests(unittest.TestCase):
@@ -59,3 +59,21 @@ class NetworkFixtureTests(unittest.TestCase):
             value.update({"https": "https://localhost:9002", "ca": "/outside.crt"})
             with self.assertRaisesRegex(RuntimeError, "escapes"):
                 fixture.validate_readiness(value)
+
+
+class MetroFixtureTests(unittest.TestCase):
+    def test_startup_failure_stops_and_removes_the_app_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "samples/app/source").mkdir(parents=True)
+            (root / "samples/app/source/index.js").write_text("", encoding="utf-8")
+            (root / "samples/app/metro.json").write_text(json.dumps({"project": "samples/app", "app": "samples/app/source", "entry": "index"}), encoding="utf-8")
+            start = root / "packages/react-native-godot/scripts/start.cjs"
+            start.parent.mkdir(parents=True)
+            start.write_text("process.exit(1);\n", encoding="utf-8")
+            fixture = MetroFixture(root, Path("samples/app/metro.json"), root / "artifacts")
+            with self.assertRaisesRegex(RuntimeError, "Metro exited"):
+                with fixture:
+                    self.fail("failed Metro accepted")
+            self.assertIsNotNone(fixture.process.poll())
+            self.assertEqual(sorted(path.name for path in (root / "samples/app").iterdir()), ["metro.json", "source"])

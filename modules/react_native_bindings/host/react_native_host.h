@@ -90,6 +90,7 @@ public:
 	String get_last_error() const;
 	Dictionary get_service_stats() const;
 	void reload();
+	void open_debugger();
 	void set_application_paused(bool p_paused);
 
 	void register_root(ReactNativeRootView *p_root);

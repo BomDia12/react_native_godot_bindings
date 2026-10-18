@@ -12,7 +12,9 @@ func validate_smoke() -> String:
 	if not state.get("explicitUndefinedPreserved", false):
 		return "Platform.select did not preserve explicit undefined"
 	if state.get("unsupportedCode") != "E_UNSUPPORTED":
-		return "pending BackHandler operation did not fail explicitly"
+		return "BackHandler.exitApp did not fail explicitly"
+	if not state.get("backListenerRemovable", false):
+		return "BackHandler listeners did not return a removable subscription"
 	var constants = state.get("constants", {})
 	if constants.get("reactNativeVersion", {}).get("minor") != 87:
 		return "native PlatformConstants did not report the pinned RN version"

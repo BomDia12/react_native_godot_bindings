@@ -21,9 +21,11 @@ class RunLoopObserverManager;
 
 class ReactNativeRootView;
 class RNBlobService;
+class RNDevServer;
 class RNGodotApplication;
 class RNHTTPService;
 class RNImageService;
+class RNLogBoxSurface;
 class RNMainThreadQueue;
 class RNMountingManager;
 class RNSceneBindings;
@@ -57,6 +59,8 @@ private:
 	std::shared_ptr<RNSceneBindings> scenes;
 	std::shared_ptr<RNMountingManager> mounting;
 	std::shared_ptr<facebook::react::RunLoopObserverManager> run_loop_observers;
+	std::unique_ptr<RNDevServer> dev_server;
+	std::shared_ptr<RNLogBoxSurface> log_box;
 	std::mutex animation_mutex;
 	std::function<void()> animation_frame;
 	RNHostRuntime runtime;
@@ -78,6 +82,7 @@ public:
 	void set_paused(bool p_paused);
 	void evaluate(const String &p_code, std::function<void(const Variant &p_result)> p_done);
 	Dictionary stats() const;
+	void open_debugger();
 	void process_frame();
 
 	void retire(std::vector<facebook::react::SurfaceId> p_surfaces);

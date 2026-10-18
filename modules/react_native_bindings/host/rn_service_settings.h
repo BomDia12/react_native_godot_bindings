@@ -4,12 +4,20 @@
 
 #include "core/templates/hash_map.h"
 
+struct RNDevServerSettings {
+	bool enabled = false;
+	String host = "localhost";
+	int64_t port = 8081;
+	String entry = "index";
+};
+
 struct RNServiceSettings {
 	HashMap<String, int64_t> limits;
 	double font_scale = 1;
 	String color_scheme = "light";
 	bool follow_system = false;
 	String trusted_certificates;
+	RNDevServerSettings dev_server;
 	int64_t limit(const String &p_name) const {
 		const int64_t *value = limits.getptr(p_name);
 		return value ? *value : 0;

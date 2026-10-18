@@ -18,7 +18,7 @@ function canonicalRNPath(filePath, reactNativeRoot) {
 
 function godotOverrideFor(filePath, reactNativeRoot) {
   const key = canonicalRNPath(filePath, reactNativeRoot);
-  if (key == null || !key.startsWith('Libraries/')) {
+  if (key == null || !(key.startsWith('Libraries/') || key.startsWith('src/private/'))) {
     return null;
   }
   const override = path.join(packageRoot, key + '.godot.js');
@@ -37,7 +37,18 @@ function createGodotResolver({projectRoot, reactNativeRoot}) {
   return (context, moduleName) => {
     const bareFromPackage = !moduleName.startsWith('.') && isInsidePackage(context.originModulePath);
     const origin = bareFromPackage ? {...context, originModulePath: projectOrigin} : context;
-    const resolved = origin.resolveRequest(origin, moduleName, 'godot');
+    let resolved;
+    try {
+      resolved = origin.resolveRequest(origin, moduleName, 'godot');
+    } catch (error) {
+      // Modules that React Native ships only as Android and iOS files have no
+      // generic file to resolve, so only their Godot platform file can match.
+      const override = moduleName.startsWith('.') ? godotOverrideFor(path.resolve(path.dirname(context.originModulePath), moduleName), reactNativeRoot) : null;
+      if (override == null) {
+        throw error;
+      }
+      return {type: 'sourceFile', filePath: override};
+    }
     if (resolved.type !== 'sourceFile') {
       return resolved;
     }

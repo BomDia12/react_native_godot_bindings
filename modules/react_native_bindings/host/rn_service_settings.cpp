@@ -1,6 +1,7 @@
 #include "rn_service_settings.h"
 
 #include "core/config/project_settings.h"
+#include "core/os/os.h"
 
 #include <cmath>
 
@@ -42,6 +43,11 @@ void rn_register_service_settings() {
 	GLOBAL_DEF("react_native/appearance/follow_system", false);
 	GLOBAL_DEF("react_native/network/tls/trusted_certificates", "");
 	settings->set_custom_property_info(PropertyInfo(Variant::STRING, "react_native/network/tls/trusted_certificates", PROPERTY_HINT_FILE, "*.crt,*.pem"));
+	GLOBAL_DEF("react_native/dev_server/enabled", false);
+	GLOBAL_DEF("react_native/dev_server/host", "localhost");
+	GLOBAL_DEF("react_native/dev_server/port", 8081);
+	settings->set_custom_property_info(PropertyInfo(Variant::INT, "react_native/dev_server/port", PROPERTY_HINT_RANGE, "1,65535,1"));
+	GLOBAL_DEF("react_native/dev_server/entry", "index");
 }
 bool RNServiceSettings::snapshot(RNServiceSettings &r_settings, RNError &r_error) {
 	ProjectSettings *settings = ProjectSettings::get_singleton();
@@ -69,6 +75,19 @@ bool RNServiceSettings::snapshot(RNServiceSettings &r_settings, RNError &r_error
 	}
 	snapshot.follow_system = follow;
 	snapshot.trusted_certificates = settings->get_setting("react_native/network/tls/trusted_certificates", "");
+	const Variant dev_enabled = settings->get_setting("react_native/dev_server/enabled", false);
+	const Variant dev_host = settings->get_setting("react_native/dev_server/host", "localhost");
+	const Variant dev_port = settings->get_setting("react_native/dev_server/port", 8081);
+	const Variant dev_entry = settings->get_setting("react_native/dev_server/entry", "index");
+	if (dev_enabled.get_type() != Variant::BOOL || dev_host.get_type() != Variant::STRING || String(dev_host).is_empty() || dev_port.get_type() != Variant::INT || int64_t(dev_port) < 1 || int64_t(dev_port) > 65535 || dev_entry.get_type() != Variant::STRING || String(dev_entry).is_empty()) {
+		r_error = RNError::make(RNErrorCode::VALIDATION, "invalid developer server configuration", "settings.snapshot", "react_native/dev_server");
+		return false;
+	}
+	// Exported games never reach a developer machine's Metro server.
+	snapshot.dev_server.enabled = bool(dev_enabled) && !OS::get_singleton()->has_feature("template");
+	snapshot.dev_server.host = dev_host;
+	snapshot.dev_server.port = dev_port;
+	snapshot.dev_server.entry = dev_entry;
 	if (snapshot.limit("network/http/max_idle_requests") > snapshot.limit("network/http/max_active_requests")) {
 		r_error = RNError::make(RNErrorCode::VALIDATION, "HTTP idle limit exceeds active limit", "settings.snapshot");
 		return false;

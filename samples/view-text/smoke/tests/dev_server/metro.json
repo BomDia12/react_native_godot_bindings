@@ -1,0 +1,5 @@
+{
+  "project": "samples/view-text",
+  "app": "samples/view-text/smoke/tests/dev_server/app",
+  "entry": "index"
+}
