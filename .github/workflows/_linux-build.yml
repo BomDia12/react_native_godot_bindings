@@ -197,6 +197,9 @@ jobs:
       - name: Run native component display checks
         run: scripts/run_component_display.sh
 
+      - name: Run the staged game demo
+        run: scripts/run_staged_game.sh
+
       - name: Package Linux baseline
         if: inputs.package_release
         run: scripts/package_linux_baseline.sh

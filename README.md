@@ -50,6 +50,7 @@ npm --prefix packages/react-native-godot test
 npm --prefix samples/view-text ci
 scripts/run_baseline.sh
 scripts/run_component_display.sh
+scripts/run_staged_game.sh
 ```
 
 `bootstrap.sh` creates or verifies the pinned `godot/` checkout, initializes the pinned
@@ -61,7 +62,9 @@ Godot's `custom_modules` option. `run_baseline.sh` discovers the restricted mani
 `samples/*/smoke/tests/*/smoke_test.json`, creates fresh Metro bundles, and runs every
 declared headless smoke test. Shared manifests with the same package, npm script, and
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the
-default concurrency of two Godot processes.
+default concurrency of two Godot processes. `run_staged_game.sh` stages the game demo
+built by the smoke run into a temporary project outside the repository, imports it, and
+checks that all four of its roots mount without diagnostics.
 
 The JavaScript platform is the `react-native-godot` package in `packages/react-native-godot/`.
 Samples depend on it through `file:../../packages/react-native-godot`, and the sample's
