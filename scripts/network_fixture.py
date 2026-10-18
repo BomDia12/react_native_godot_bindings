@@ -119,6 +119,7 @@ class MetroFixture:
             self.process = subprocess.Popen(
                 ["node", str(self.repo_root / "packages/react-native-godot/scripts/start.cjs"), "--port", str(port), "--host", "127.0.0.1"],
                 cwd=project, stdin=subprocess.DEVNULL, stdout=self.log, stderr=subprocess.STDOUT, start_new_session=True,
+                env={**os.environ, "DEBUG": "Metro:HMR,Metro:Watcher,Metro:FileMap,Metro:DeltaCalculator"},
             )
             url = f"http://127.0.0.1:{port}"
             entry = f"{self.app_copy.name}/{settings['entry']}"
