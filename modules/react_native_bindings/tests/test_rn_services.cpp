@@ -1,3 +1,5 @@
+#include "../host/rn_dev_server.h"
+#include "../host/rn_inspector_socket.h"
 #include "../host/rn_service_settings.h"
 #include "../interop/rn_scene_binding.h"
 #include "../native_modules/rn_blob_service.h"
@@ -11,6 +13,8 @@
 #include "support/rn_upstream_test_macros.h"
 
 #include "core/config/project_settings.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/object/message_queue.h"
@@ -19,6 +23,10 @@
 #include "scene/main/window.h"
 
 #include "modules/websocket/websocket_peer.h"
+
+#include <cxxreact/JSBigString.h>
+#include <folly/json.h>
+#include <react/io/ResourceLoader.h>
 
 #include <algorithm>
 
@@ -216,6 +224,97 @@ TEST_CASE("[ReactNativeBindings][Settings] immutable snapshots reject bad limits
 	CHECK_FALSE(RNServiceSettings::snapshot(settings, error));
 	project->set_setting(scale, old_scale);
 }
+TEST_CASE("[ReactNativeBindings][Settings] developer server settings validate and stay off by default") {
+	auto project = ProjectSettings::get_singleton();
+	RNServiceSettings settings;
+	RNError error;
+	REQUIRE(RNServiceSettings::snapshot(settings, error));
+	CHECK_FALSE(settings.dev_server.enabled);
+	CHECK(settings.dev_server.host == "localhost");
+	CHECK(settings.dev_server.port == 8081);
+	CHECK(settings.dev_server.entry == "index");
+	project->set_setting("react_native/dev_server/enabled", true);
+	project->set_setting("react_native/dev_server/port", 19000);
+	REQUIRE(RNServiceSettings::snapshot(settings, error));
+	CHECK(settings.dev_server.enabled);
+	CHECK(settings.dev_server.port == 19000);
+	project->set_setting("react_native/dev_server/port", 0);
+	CHECK_FALSE(RNServiceSettings::snapshot(settings, error));
+	CHECK(error.path == "react_native/dev_server");
+	project->set_setting("react_native/dev_server/port", 8081);
+	project->set_setting("react_native/dev_server/entry", "");
+	CHECK_FALSE(RNServiceSettings::snapshot(settings, error));
+	project->set_setting("react_native/dev_server/entry", "index");
+	project->set_setting("react_native/dev_server/enabled", false);
+}
+
+TEST_CASE("[ReactNativeBindings][DevServer] Metro bundles are requested for the Godot platform and load from their download") {
+	RNDevServerSettings settings;
+	settings.host = "127.0.0.1";
+	settings.port = 19000;
+	settings.entry = "app/index";
+	const std::string url = RNDevServer(settings).bundle_url();
+	CHECK(String::utf8(url.c_str()).begins_with("http://127.0.0.1:19000/app/index.bundle?platform=godot&dev=true&"));
+
+	const String path = rn_downloaded_resource_path(url);
+	DirAccess::make_dir_recursive_absolute(path.get_base_dir());
+	Ref<FileAccess> file = FileAccess::open(path, FileAccess::WRITE);
+	REQUIRE(file.is_valid());
+	file->store_string("globalThis.__downloaded = 1;");
+	file.unref();
+	CHECK(facebook::react::ResourceLoader::isFile(url));
+	CHECK(facebook::react::ResourceLoader::getFileContents(url)->c_str() == std::string("globalThis.__downloaded = 1;"));
+	DirAccess::remove_absolute(path);
+	CHECK_FALSE(facebook::react::ResourceLoader::isFile(url));
+}
+
+namespace {
+
+class RecordingWebSocket : public facebook::react::IWebSocketClient {
+public:
+	OnMessageCallback on_message;
+	std::vector<std::string> sent;
+	void setOnClosedCallback(OnClosedCallback &&) noexcept override {}
+	void setOnMessageCallback(OnMessageCallback &&p_callback) noexcept override { on_message = std::move(p_callback); }
+	void connect(const std::string &, OnConnectCallback &&) override {}
+	void close(const std::string &) override {}
+	void send(const std::string &p_message) override { sent.push_back(p_message); }
+	void ping() override {}
+};
+
+} // namespace
+
+TEST_CASE("[ReactNativeBindings][DevServer] DevTools page reloads go to the host and other inspector messages pass through") {
+	const std::string reload = R"({"event":"wrappedEvent","payload":{"pageId":"1","wrappedEvent":"{\"id\":7,\"method\":\"Page.reload\",\"params\":{\"ignoreCache\":true}}"}})";
+	const std::string evaluate = R"({"event":"wrappedEvent","payload":{"pageId":"1","wrappedEvent":"{\"id\":8,\"method\":\"Runtime.evaluate\"}"}})";
+	const std::optional<std::string> reply = facebook::react::rn_inspector_reload_reply(reload);
+	REQUIRE(reply.has_value());
+	const folly::dynamic message = folly::parseJson(*reply);
+	CHECK(message["event"] == "wrappedEvent");
+	CHECK(message["payload"]["pageId"] == "1");
+	CHECK(folly::parseJson(message["payload"]["wrappedEvent"].getString()) == folly::parseJson(R"({"id":7,"result":{}})"));
+	CHECK_FALSE(facebook::react::rn_inspector_reload_reply(evaluate).has_value());
+	CHECK_FALSE(facebook::react::rn_inspector_reload_reply(R"({"event":"getPages"})").has_value());
+	CHECK_FALSE(facebook::react::rn_inspector_reload_reply("not json").has_value());
+
+	RecordingWebSocket *socket = nullptr;
+	int reloads = 0;
+	auto factory = facebook::react::rn_inspector_web_socket_client_factory([&socket] {
+		auto created = std::make_unique<RecordingWebSocket>();
+		socket = created.get();
+		return created; },
+			[&reloads] { ++reloads; });
+	std::unique_ptr<facebook::react::IWebSocketClient> client = factory();
+	std::vector<std::string> received;
+	client->setOnMessageCallback([&received](const std::string &p_message) { received.push_back(p_message); });
+	REQUIRE(socket != nullptr);
+	socket->on_message(evaluate);
+	socket->on_message(reload);
+	CHECK(received == std::vector<std::string>{ evaluate });
+	CHECK(socket->sent == std::vector<std::string>{ *reply });
+	CHECK(reloads == 1);
+}
+
 TEST_CASE("[ReactNativeBindings][HTTP] redirects resolve query fragment relative paths and dot segments") {
 	const String base = "https://example.test/foo/bar?old=1";
 	const std::pair<const char *, const char *> cases[] = {
@@ -591,6 +690,28 @@ TEST_CASE("[ReactNativeBindings][HTTP][SceneTree] immediate native start failure
 		CHECK_FALSE(service->has_pending_work());
 	}
 	CHECK(failures == 20);
+	service->shutdown();
+	memdelete(service);
+}
+TEST_CASE("[ReactNativeBindings][HTTP][SceneTree] requests submitted before the service enters the tree wait for it") {
+	RNServiceSettings settings;
+	RNError error;
+	REQUIRE(RNServiceSettings::snapshot(settings, error));
+	RNHTTPService *service = memnew(RNHTTPService(settings));
+	int failures = 0;
+	RNHTTPRequest request;
+	request.url = "http://localhost?unused:invalid";
+	CHECK(service->submit(request, [&failures](RNHTTPResponse p_response) { failures += p_response.error.is_set() ? 1 : 0; }, error) != 0);
+	service->process_requests();
+	CHECK(service->has_pending_work());
+	CHECK(failures == 0);
+	SceneTree::get_singleton()->get_root()->add_child(service);
+	ERR_PRINT_OFF;
+	service->process_requests();
+	ERR_PRINT_ON;
+	MessageQueue::get_singleton()->flush();
+	CHECK_FALSE(service->has_pending_work());
+	CHECK(failures == 1);
 	service->shutdown();
 	memdelete(service);
 }

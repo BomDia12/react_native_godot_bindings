@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 from contextlib import nullcontext
-from network_fixture import LocalNetworkFixture
+from network_fixture import FIXTURES
 import resource
 import subprocess
 import sys
@@ -134,7 +134,7 @@ def run_test(
     # cache, so tests are parallel across projects and serial within one.
     with project_lock:
         try:
-            fixture = LocalNetworkFixture(repo_root, manifest.fixture.config, log_dir / (manifest.id + "-fixture")) if manifest.fixture else nullcontext()
+            fixture = FIXTURES[manifest.fixture.kind](repo_root, manifest.fixture.config, log_dir / (manifest.id + "-fixture")) if manifest.fixture else nullcontext()
             with fixture as server:
                 environment = os.environ.copy()
                 if server:

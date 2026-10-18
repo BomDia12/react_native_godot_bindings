@@ -12,14 +12,16 @@ const state = {
   constants: Platform.constants,
   microtasks: [],
   unsupportedCode: null,
+  backListenerRemovable: false,
 };
 global.__godotPlatformState = state;
 
 Promise.resolve().then(() => state.microtasks.push('promise'));
 queueMicrotask(() => state.microtasks.push('native'));
 state.microtasks.push('sync');
+state.backListenerRemovable = typeof BackHandler.addEventListener('hardwareBackPress', () => true).remove === 'function';
 try {
-  BackHandler.addEventListener('hardwareBackPress', () => true);
+  BackHandler.exitApp();
 } catch (error) {
   state.unsupportedCode = error.code;
 }

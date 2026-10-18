@@ -16,6 +16,7 @@ MANIFEST_FIELDS = {
     "inputs",
 }
 BUNDLE_FIELDS = {"mode", "package_dir", "script", "output"}
+FIXTURE_KINDS = {"local_network", "metro"}
 ID_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SCRIPT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]*")
 
@@ -186,12 +187,12 @@ def load_manifest(repo_root: Path, manifest_path: Path) -> SmokeManifest:
     fixture = None
     if "fixture" in data:
         fixture_data = _require_exact_fields(data["fixture"], {"kind", "config"}, "fixture")
-        if fixture_data["kind"] != "local_network":
+        if fixture_data["kind"] not in FIXTURE_KINDS:
             raise ManifestError("unknown fixture kind")
         config = _relative_path(repo_root, fixture_data["config"], "fixture.config")
         if config not in inputs or not (repo_root / config).is_file():
             raise ManifestError("fixture configuration must be a declared input file")
-        fixture = Fixture(kind="local_network", config=config)
+        fixture = Fixture(kind=fixture_data["kind"], config=config)
 
     return SmokeManifest(
         id=test_id,

@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:godot": "node ../../scripts/build_godot_bundle.cjs --project . --entry godot.entry.js --out dist/godot.bundle.js"
+    "build:godot": "node ../../scripts/build_godot_bundle.cjs --project . --entry godot.entry.js --out dist/godot.bundle.js",
+    "start:godot": "react-native-godot-start"
   },
   "dependencies": {
     "react": "19.2.3",

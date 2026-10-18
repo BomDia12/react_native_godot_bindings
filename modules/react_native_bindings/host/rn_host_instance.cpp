@@ -20,15 +20,20 @@
 #include "../turbomodules/rn_godot_alerts.h"
 #include "../turbomodules/rn_godot_turbo_module_provider.h"
 #include "../turbomodules/rn_image_loader.h"
+#include "rn_dev_server.h"
+#include "rn_inspector_socket.h"
+#include "rn_log_box_surface.h"
 #include "rn_main_thread_queue.h"
 
 #include "core/config/project_settings.h"
+#include "core/io/file_access.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
 
 #include <jsi/hermes-interfaces.h>
 #include <logger/react_native_log.h>
 #include <react/http/platform/godot/GodotNetworkClients.h>
+#include <react/renderer/animated/NativeAnimatedNodesManagerProvider.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
 #include <react/renderer/components/ReactNativeGodotSpec/ComponentDescriptors.h>
 #include <react/renderer/components/godotwindow/GodotWindowShadowNode.h>
@@ -145,6 +150,15 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	auto image_loader = std::make_shared<RNImageLoader>(images, main_thread);
 	mounting = std::make_shared<RNMountingManager>(main_thread, component_view_factories(shaper, images), component_registry_factory(), image_loader);
 	run_loop_observers = std::make_shared<RunLoopObserverManager>();
+	log_box = std::make_shared<RNLogBoxSurface>(main_thread);
+	if (p_setup.settings.dev_server.enabled) {
+		dev_server = std::make_unique<RNDevServer>(p_setup.settings.dev_server);
+	}
+	const auto reload_from_main_thread = [queue = std::weak_ptr<RNMainThreadQueue>(main_thread), reload = p_setup.reload] {
+		if (auto alive = queue.lock()) {
+			alive->post(reload);
+		}
+	};
 	mounting->set_js_thread_runner([this](std::function<void()> p_task) {
 		if (!retired) {
 			_on_js_thread(std::move(p_task));
@@ -154,11 +168,15 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	auto context = std::make_shared<ContextContainer>();
 	context->insert(HttpClientFactoryKey, rn_http_client_factory(http, main_thread));
 	context->insert(WebSocketClientFactoryKey, rn_web_socket_client_factory(main_thread));
+	if (dev_server) {
+		context->insert(DevToolsWebSocketClientFactoryKey, rn_inspector_web_socket_client_factory(rn_web_socket_client_factory(main_thread), reload_from_main_thread));
+	}
 	context->insert(RNTextShaper::CONTEXT_KEY, std::shared_ptr<const RNTextShaper>(shaper));
 	context->insert(GodotSwitchComponentDescriptor::THEME_KEY, std::shared_ptr<const RNThemeMetricsStore>(p_setup.theme));
 
 	RNTurboModuleContext modules;
-	modules.host = { main_thread, [find_root = p_setup.find_root](int p_root_tag) -> Object * { return find_root(p_root_tag); }, p_setup.reload };
+	modules.host = { main_thread, [find_root = p_setup.find_root](int p_root_tag) -> Object * { return find_root(p_root_tag); }, p_setup.reload, [this] { open_debugger(); } };
+	modules.source_url = dev_server ? dev_server->bundle_url() : "";
 	modules.application = { application, main_thread };
 	modules.network = { blobs, http, websockets, main_thread };
 	modules.scenes = scenes;
@@ -170,6 +188,9 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	ReactInstanceConfig config;
 	config.enableDevMode = false;
 	config.enableInspector = false;
+	if (dev_server) {
+		dev_server->configure(config);
+	}
 	config.platformTimerRegistryFactory = [this, context] {
 		auto registry = std::make_unique<GodotTimerRegistry>(context);
 		runtime.timers = registry.get();
@@ -193,7 +214,22 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 		jsi::Object provider = jsi::Object::createFromHostObject(p_runtime, blob_service->collector_provider());
 		p_runtime.global().setProperty(p_runtime, "__blobCollectorProvider", provider.getProperty(p_runtime, "create"));
 	};
-	runtime.react_host = std::make_unique<ReactHost>(config, mounting, run_loop_observers, context, js_error, logger, nullptr, TurboModuleProviders{ rn_godot_turbo_module_provider(modules) }, nullptr, nullptr, install_bindings);
+	// Native Animated starts and stops its frame callback from the JS thread and
+	// from inside a frame, so the callback is swapped under a lock and runs on
+	// the main thread once per Godot frame.
+	auto animated = std::make_shared<NativeAnimatedNodesManagerProvider>(
+			[this](std::function<void()> &&p_on_render, bool) {
+				std::lock_guard lock(animation_mutex);
+				animation_frame = std::move(p_on_render);
+			},
+			[this](bool) {
+				std::lock_guard lock(animation_mutex);
+				animation_frame = nullptr;
+			});
+	runtime.react_host = std::make_unique<ReactHost>(config, mounting, run_loop_observers, context, js_error, logger, nullptr, TurboModuleProviders{ rn_godot_turbo_module_provider(modules) }, log_box, animated, install_bindings);
+	if (dev_server) {
+		dev_server->connect(rn_web_socket_client_factory(main_thread), reload_from_main_thread);
+	}
 
 	const auto emit = [this](const std::string &p_name, folly::dynamic p_payload) {
 		main_thread->post([this, p_name, payload = std::move(p_payload)]() mutable {
@@ -206,8 +242,24 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 
 RNHostInstance::~RNHostInstance() = default;
 
+// A Metro bundle loads under its URL, which ResourceLoader resolves to the
+// downloaded copy. Surfaces started meanwhile wait for the bundle in ReactHost.
 bool RNHostInstance::load_script(const String &p_bundle) {
-	return runtime.react_host->loadScript(p_bundle.utf8().get_data(), "");
+	if (!dev_server) {
+		return runtime.react_host->loadScript(p_bundle.utf8().get_data(), "");
+	}
+	dev_server->download_bundle(*http, [this, p_bundle](bool p_downloaded) {
+		if (retired) {
+			return;
+		}
+		const bool loaded = p_downloaded ? runtime.react_host->loadScript(dev_server->bundle_url(), "") : FileAccess::exists(p_bundle) && runtime.react_host->loadScript(p_bundle.utf8().get_data(), "");
+		if (!loaded) {
+			const String error = vformat("React Native bundle '%s' could not be loaded from Metro or from disk.", p_bundle);
+			on_error(error);
+			ERR_PRINT(error);
+		}
+	});
+	return true;
 }
 
 void RNHostInstance::_report_error(const String &p_error) {
@@ -300,8 +352,24 @@ Dictionary RNHostInstance::stats() const {
 	return stats;
 }
 
+void RNHostInstance::open_debugger() {
+	runtime.react_host->openDebugger();
+}
+
+void RNHostInstance::_run_animation_frame() {
+	std::function<void()> frame;
+	{
+		std::lock_guard lock(animation_mutex);
+		frame = animation_frame;
+	}
+	if (frame) {
+		frame();
+	}
+}
+
 void RNHostInstance::process_frame() {
 	main_thread->drain();
+	_run_animation_frame();
 	application->poll();
 	websockets->process_frame();
 	http->process_requests();
@@ -313,6 +381,8 @@ void RNHostInstance::process_frame() {
 void RNHostInstance::retire(std::vector<SurfaceId> p_surfaces) {
 	retired = true;
 	main_thread->close();
+	dev_server.reset();
+	log_box->close();
 	scenes->shutdown();
 	websockets->shutdown();
 	http->shutdown();

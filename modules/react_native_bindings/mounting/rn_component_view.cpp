@@ -72,6 +72,13 @@ void RNComponentView::update_props(const Props::Shared &, const Props::Shared &p
 	apply_view_props(*props);
 }
 
+// Native Animated changes props between commits. They layer over the props
+// this view applied last, as the next commit would.
+void RNComponentView::synchronously_update_props(const ComponentDescriptor &p_descriptor, const PropsParserContext &p_context, const folly::dynamic &p_props) {
+	const Props::Shared old_props = props;
+	update_props(old_props, p_descriptor.cloneProps(p_context, old_props, RawProps(p_props)));
+}
+
 void RNComponentView::apply_view_props(const ViewProps &p_props) {
 	control->set_modulate(::Color(1, 1, 1, p_props.opacity));
 	control->set_clip_contents(p_props.getClipsContentToBounds());

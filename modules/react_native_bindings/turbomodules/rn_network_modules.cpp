@@ -556,7 +556,12 @@ void RNWebSocketModule::connect(jsi::Runtime &rt, const std::string &url, std::o
 			headers.push_back(header);
 		}
 	}
-	const String target = godot_string(url);
+	String target = godot_string(url);
+	// iOS and Android open http and https URLs as ws and wss, which React
+	// Native's Fast Refresh client relies on.
+	if (target.begins_with("http://") || target.begins_with("https://")) {
+		target = "ws" + target.substr(4);
+	}
 	if (!target.begins_with("ws://") && !target.begins_with("wss://")) {
 		rn_throw_js_error(rt, "E_VALIDATION", "Socket URL must use ws or wss");
 	}

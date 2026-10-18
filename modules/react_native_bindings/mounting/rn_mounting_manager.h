@@ -32,7 +32,7 @@ class RNMountingManager : public facebook::react::IMountingManager {
 	std::map<facebook::react::SurfaceId, RNMountedSurface> surfaces;
 
 	void _flush();
-	RNComponentView *_find(facebook::react::Tag p_tag) const;
+	RNComponentView *_find(facebook::react::Tag p_tag, facebook::react::SurfaceId &r_surface) const;
 
 public:
 	RNMountingManager(std::shared_ptr<RNMainThreadQueue> p_main_thread, std::shared_ptr<const RNComponentViewFactories> p_factories, facebook::react::ComponentRegistryFactory p_registry_factory, std::shared_ptr<facebook::react::IImageLoader> p_image_loader);

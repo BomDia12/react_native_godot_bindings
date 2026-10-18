@@ -34,7 +34,6 @@ function createGodotMetroConfig(projectRoot) {
     },
     transformer: {
       assetPlugins: [path.join(packageRoot, 'assets.cjs')],
-      babelTransformerPath: path.join(packageRoot, 'transformer.cjs'),
     },
   });
 }

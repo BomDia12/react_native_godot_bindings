@@ -6,6 +6,7 @@
 #include <folly/dynamic.h>
 #include <react/renderer/components/view/TouchEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
+#include <react/renderer/core/ComponentDescriptor.h>
 #include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/core/LayoutMetrics.h>
 #include <react/renderer/core/State.h>
@@ -29,6 +30,7 @@ class RNComponentView {
 
 protected:
 	facebook::react::Tag tag = 0;
+	facebook::react::ComponentHandle component_handle = 0;
 	bool owns_control = true;
 	std::shared_ptr<const facebook::react::ViewProps> props;
 	facebook::react::State::Shared state;
@@ -54,6 +56,8 @@ public:
 	RNComponentView &operator=(const RNComponentView &) = delete;
 
 	facebook::react::Tag get_tag() const { return tag; }
+	facebook::react::ComponentHandle get_component_handle() const { return component_handle; }
+	void set_component_handle(facebook::react::ComponentHandle p_handle) { component_handle = p_handle; }
 	const facebook::react::EventEmitter::Shared &get_event_emitter() const { return event_emitter; }
 
 	Control *get_control() const { return control; }
@@ -65,7 +69,7 @@ public:
 	virtual void remove_child(RNComponentView *p_child);
 	void finish_removal();
 	virtual void handle_command(const std::string &p_name, const folly::dynamic &p_args) {}
-	virtual void synchronously_update_props(const folly::dynamic &p_props) {}
+	void synchronously_update_props(const facebook::react::ComponentDescriptor &p_descriptor, const facebook::react::PropsParserContext &p_context, const folly::dynamic &p_props);
 
 	// Controls besides get_control() whose gui_input belongs to this view.
 	virtual Vector<Control *> get_input_controls() const { return {}; }
