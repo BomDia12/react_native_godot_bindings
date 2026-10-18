@@ -6,6 +6,7 @@
 #include "rn_dev_settings_module.h"
 #include "rn_godot_alerts.h"
 
+#include <react/devsupport/SourceCodeModule.h>
 #include <react/io/ImageLoaderModule.h>
 
 namespace facebook::react {
@@ -60,6 +61,9 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 		return module;
 	});
 	add(RNDevSettingsModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNDevSettingsModule>(p_invoker, host); });
+	if (!context.source_url.empty()) {
+		add(SourceCodeModule::kModuleName, [url = context.source_url](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<SourceCodeModule>(p_invoker, url); });
+	}
 	add(ImageLoaderModule::kModuleName, [loader = std::weak_ptr<IImageLoader>(context.image_loader)](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<ImageLoaderModule>(p_invoker, loader); });
 	return [factories, host](const std::string &p_name, const std::shared_ptr<CallInvoker> &p_invoker) -> std::shared_ptr<TurboModule> {
 		auto factory = factories->find(p_name);

@@ -1,0 +1,6 @@
+# The fixture throws an uncaught error to open the LogBox inspector.
+^ERROR: \[Error: Godot LogBox smoke\]$
+# React DevTools, which development bundles install, keeps stopped surfaces
+# alive, so upstream's LeakChecker reports the closed LogBox surface. With the
+# DevTools hook disabled the surface is released.
+^ERROR: LeakChecker\.cpp:[0-9]+\] \[LeakChecker\] Surface with id: [0-9]+ has leaked [0-9]+ components out of [0-9]+$

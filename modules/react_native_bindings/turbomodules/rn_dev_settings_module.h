@@ -7,8 +7,8 @@
 namespace facebook::react {
 
 // React Native's DevSettings. A reload replaces the runtime through
-// ReactNativeHost.reload(); the developer menu, debugger and hot loading
-// settings do nothing without a development server.
+// ReactNativeHost.reload() and openDebugger opens DevTools for it; Godot has
+// no developer menu, and the other settings do nothing, as upstream's do.
 class RNDevSettingsModule : public NativeDevSettingsCxxSpec<RNDevSettingsModule> {
 	RNHostModuleContext context;
 
@@ -21,7 +21,7 @@ public:
 	void setProfilingEnabled(jsi::Runtime &rt, bool isProfilingEnabled) {}
 	void toggleElementInspector(jsi::Runtime &rt) {}
 	void addMenuItem(jsi::Runtime &rt, const std::string &title) {}
-	void openDebugger(jsi::Runtime &rt) {}
+	void openDebugger(jsi::Runtime &rt);
 	void addListener(jsi::Runtime &rt, const std::string &eventName) {}
 	void removeListeners(jsi::Runtime &rt, double count) {}
 	void setIsShakeToShowDevMenuEnabled(jsi::Runtime &rt, bool enabled) {}

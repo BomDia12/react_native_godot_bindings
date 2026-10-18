@@ -72,6 +72,8 @@ class SmokeManifestTests(unittest.TestCase):
             load_manifest(self.root, self.write_manifest(data))
         data["inputs"].append("samples/app/network.json")
         self.assertEqual(load_manifest(self.root, self.write_manifest(data)).fixture.kind, "local_network")
+        data["fixture"]["kind"] = "metro"
+        self.assertEqual(load_manifest(self.root, self.write_manifest(data)).fixture.kind, "metro")
         data["fixture"]["command"] = "arbitrary"
         with self.assertRaisesRegex(ManifestError, "unknown fields"):
             load_manifest(self.root, self.write_manifest(data))

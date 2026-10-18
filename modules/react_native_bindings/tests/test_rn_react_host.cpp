@@ -95,14 +95,18 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 			".then(text => { globalThis.__textLength = text === 'héllo' ? text.length : -1; blobs.release('turbo-blob'); }, () => { globalThis.__textLength = -2; });"
 			"try { nativeModuleProxy.Appearance.setColorScheme('purple'); } catch (error) { globalThis.__rejected = error.code === 'E_VALIDATION' ? 1 : 0; }"
 			"nativeModuleProxy.DevSettings.reloadWithReason('test');"
+			"nativeModuleProxy.DevSettings.openDebugger();"
+			"globalThis.__sourceMatches = nativeModuleProxy.SourceCode.getConstants().scriptURL === 'http://localhost:8081/index.bundle?platform=godot' ? 1 : 0;"
 			"globalThis.__reloadRequested = 1;");
 	write_script(script_path, source);
 
 	auto main_thread = std::make_shared<RNMainThreadQueue>();
 	auto blobs = std::make_shared<RNBlobService>(1024 * 1024);
 	int reloads = 0;
+	int debugger_requests = 0;
 	react::RNTurboModuleContext modules;
-	modules.host = { main_thread, nullptr, [&reloads] { ++reloads; } };
+	modules.host = { main_thread, nullptr, [&reloads] { ++reloads; }, [&debugger_requests] { ++debugger_requests; } };
+	modules.source_url = "http://localhost:8081/index.bundle?platform=godot";
 	modules.application = { std::make_shared<RNGodotApplication>(), main_thread };
 	modules.network = { blobs, nullptr, nullptr, main_thread };
 	auto context = std::make_shared<react::ContextContainer>();
@@ -132,9 +136,14 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 	auto reload_requested = read_answer(host, "__reloadRequested");
 	REQUIRE(reload_requested.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
 	CHECK(reload_requested.get() == 1);
+	auto source_matches = read_answer(host, "__sourceMatches");
+	REQUIRE(source_matches.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+	CHECK(source_matches.get() == 1);
 	CHECK(reloads == 0);
+	CHECK(debugger_requests == 0);
 	main_thread->drain();
 	CHECK(reloads == 1);
+	CHECK(debugger_requests == 1);
 }
 
 void start_runtime(RNHostRuntime &r_runtime, const String &p_script_path, const String &p_source) {

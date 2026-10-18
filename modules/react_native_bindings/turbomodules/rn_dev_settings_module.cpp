@@ -18,4 +18,10 @@ void RNDevSettingsModule::reloadWithReason(jsi::Runtime &, const std::string &) 
 	}
 }
 
+void RNDevSettingsModule::openDebugger(jsi::Runtime &) {
+	if (context.open_debugger) {
+		context.main_thread->post(context.open_debugger);
+	}
+}
+
 } // namespace facebook::react

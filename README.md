@@ -93,6 +93,29 @@ and assigns it a new root tag. A React Native file refresh is process-wide: it r
 the host once, evaluates the shared bundle once, and restarts every live root with a new
 tag.
 
+## Developer server
+
+Turn on `react_native/dev_server/enabled` in Project Settings and start Metro in the
+JavaScript project:
+
+```sh
+npm --prefix samples/view-text run start:godot
+```
+
+`start:godot` runs the package's `react-native-godot-start`, which serves the project's
+`metro.config.godot.js` with React Native's dev middleware. `react_native/dev_server/host`
+and `react_native/dev_server/port` (default `localhost:8081`) locate Metro, and
+`react_native/dev_server/entry` (default `index`) names the entry file without its
+extension, for example `godot.entry` in `samples/view-text`. The entry file imports
+`react-native-godot/setup`. The runtime downloads its bundle from Metro and falls back to
+`react_native/bundle/path` when Metro can't serve it. Exported games always load the
+bundle file.
+
+Saved edits apply through Fast Refresh, and errors open LogBox above the game. Press **r**
+in Metro, reload from DevTools or call `DevSettings.reload()` to reload every root through
+`ReactNativeHost.reload()`. Press **j** in Metro or call `ReactNativeHost.open_debugger()`
+to open React Native DevTools.
+
 Successful merges to `main` replace the `baseline-linux-latest` rolling prerelease. Its
 Linux archive contains the Godot editor executable, `libhermesvm.so`, and `libjsi.so`,
 with a separate SHA-256 checksum asset.

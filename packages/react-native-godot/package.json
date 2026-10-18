@@ -17,6 +17,9 @@
     "./specs/*": "./specs/*.js"
   },
   "types": "./godot.d.ts",
+  "bin": {
+    "react-native-godot-start": "./scripts/start.cjs"
+  },
   "scripts": {
     "test": "node --test tests/*.test.cjs",
     "check-overrides": "node scripts/check-overrides.cjs",

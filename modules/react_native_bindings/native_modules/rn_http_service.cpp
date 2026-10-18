@@ -84,7 +84,7 @@ bool RNHTTPService::set_trust_resource(const String &p_path, RNError &r_error) {
 }
 uint64_t RNHTTPService::submit(const RNHTTPRequest &p_request, std::function<void(RNHTTPResponse)> p_completion, RNError &r_error) {
 	RNParsedURL url;
-	if (closed || !is_inside_tree()) {
+	if (closed) {
 		r_error = http_error("HTTP service is closed");
 		return 0;
 	}
@@ -271,6 +271,11 @@ void RNHTTPService::process_requests() {
 			}
 		}
 		settle(id, std::move(response));
+	}
+	// The host adds the service to the tree at the end of the frame that
+	// created it; requests submitted before then wait here.
+	if (!is_inside_tree()) {
+		return;
 	}
 	while (!waiting.empty()) {
 		const uint64_t id = waiting.front();

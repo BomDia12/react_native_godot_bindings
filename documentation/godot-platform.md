@@ -26,9 +26,11 @@ Metro uses its normal per-extension order: `.godot`, then `.native`, then the ge
 file. This applies independently to `.js`, `.jsx`, `.ts`, and `.tsx`. Unmapped imports
 delegate once to Metro's normal Godot resolver; there is no Android or iOS retry.
 
-For a file inside the installed `react-native/Libraries/<path>`, the resolver uses
-`packages/react-native-godot/Libraries/<path>.godot.js` when that file exists; file
-presence is the only rule. A same-named application file outside React Native is never
+For a file inside the installed `react-native/Libraries/<path>` or
+`react-native/src/private/<path>`, the resolver uses the package's file at the same path
+with a `.godot.js` extension when that file exists; file presence is the only rule. A
+React Native import that only has Android and iOS files resolves to the Godot file
+directly. A same-named application file outside React Native is never
 remapped. Bare imports made by the package resolve from the application, so the bundle
 always contains one React Native installation.
 
@@ -36,8 +38,8 @@ The `Libraries/` files are of three kinds:
 
 - Platform files implement modules that React Native splits by platform: Platform,
   Image, RCTAlertManager, BaseViewConfig, RCTNetworking, PlatformColorValueTypes,
-  BackHandler, legacySendAccessibilityEvent, and the DrawerLayoutAndroid and
-  ToastAndroid fallbacks.
+  BackHandler, legacySendAccessibilityEvent, the DrawerLayoutAndroid and
+  ToastAndroid fallbacks, and the React DevTools settings manager.
 - Derived overrides are whole-file copies of generic upstream files with a Godot branch:
   Alert, TextInput, TextInputState and Modal. `overrides.json` records the SHA-256 of
   each base file, and `scripts/check-overrides.cjs` fails when the installed React Native
@@ -93,7 +95,8 @@ components whose React cleanup is still pending. Runtime teardown and roots that
 tree together therefore stop their surfaces one at a time, each after React has finished
 with the previous one. Before a root's surface stops, events and state updates its
 controls sent while leaving the tree are flushed, so they cannot keep its components
-alive when the game quits.
+alive when the game quits. In development bundles React DevTools keeps stopped surfaces
+alive, so LeakChecker reports them there, such as a closed LogBox.
 
 Each `ReactNativeRootView` runs one surface. Surface ids, which React Native calls root
 tags, are allocated as `1, 11, 21, …` and never reused. A root starts its surface when it
@@ -104,13 +107,43 @@ start a new surface. Root size, layout direction, content scale and the
 runtime.
 
 A hard reload replaces the runtime and restarts every live root. It comes only from
-`ReactNativeHost.reload()`, from a bundle change signalled by `ReactNativeFileSingleton`, or
-from JavaScript's `DevSettings.reload()`, which only `__DEV__` bundles call through. Each
+`ReactNativeHost.reload()`, from a bundle change signalled by `ReactNativeFileSingleton`,
+from JavaScript's `DevSettings.reload()`, which only `__DEV__` bundles call through, or
+from the developer server's reload requests. Each
 runtime runs one bundle. `force_refresh()` always reloads, even when the file is
 unchanged, and so does a new `set_monitored_file()` path. Only the editor process watches
 the bundle file for changes; a running game or an exported build doesn't. A bundle that is
 missing when roots start leaves them empty, and the bundle-change signal that makes it
 available starts the runtime and every waiting root.
+
+## Developer server
+
+With `react_native/dev_server/enabled` on, each runtime downloads its bundle from
+`http://<host>:<port>/<entry>.bundle?platform=godot&dev=true&…` through the Godot HTTP
+service, caches it under `user://react_native/cache/downloads/`, and loads it under its
+Metro URL; `ResourceLoader` resolves that URL to the cached copy. Surfaces that start
+meanwhile wait for the bundle. When the download fails, the runtime loads
+`react_native/bundle/path`. Export templates ignore the setting. The bundle must stay
+within `react_native/network/http/max_body_bytes`.
+
+Upstream `ReactHost` stays out of dev mode, because its dev mode asks Metro for an Android
+bundle and reloads the runtime in place. Godot instead reuses upstream's pieces:
+
+- The `SourceCode` module reports the Metro URL, so LogBox symbolication and Fast Refresh
+  find Metro. `react-native-godot/setup` starts upstream's Fast Refresh client for a
+  bundle Metro served.
+- Upstream's packager connection listens on Metro's `/message` socket. Its reload request
+  goes to `ReactNativeHost.reload()`; Godot has no developer menu.
+- Upstream's inspector registers the runtime with Metro's DevTools proxy. Godot's
+  DevTools socket answers DevTools page reloads itself and reloads through
+  `ReactNativeHost.reload()`. Each reload registers a new inspector page, so DevTools
+  reconnects to it.
+- LogBox opens its inspector in its own `ReactNativeRootView` with the `LogBox`
+  application key, on a `CanvasLayer` above every other layer. A reload closes it.
+
+Debug builds report `Platform.isTesting`, which turns LogBox notifications off, so only
+uncaught errors open it there unless the app calls `LogBox.ignoreAllLogs(false)`. With the
+inspector on, warnings go to the DevTools console instead of LogBox, as upstream.
 
 ## Colors
 
@@ -138,10 +171,11 @@ the bundle.
 ## Pending APIs
 
 Imports of pending adapters are safe, but attempted operations report `E_UNSUPPORTED`.
-BackHandler listeners, legacy accessibility
+`BackHandler.exitApp`, legacy accessibility
 dispatch, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid (upstream's
 non-Android fallbacks) are not claimed as
-supported services or components.
+supported services or components. Godot reports no hardware back presses, so, as on iOS,
+`BackHandler` listeners return a subscription and never fire.
 
 ## Native components
 

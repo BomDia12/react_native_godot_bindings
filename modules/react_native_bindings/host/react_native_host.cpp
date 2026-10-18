@@ -50,6 +50,7 @@ void ReactNativeHost::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_last_error"), &ReactNativeHost::get_last_error);
 	ClassDB::bind_method(D_METHOD("get_service_stats"), &ReactNativeHost::get_service_stats);
 	ClassDB::bind_method(D_METHOD("reload"), &ReactNativeHost::reload);
+	ClassDB::bind_method(D_METHOD("open_debugger"), &ReactNativeHost::open_debugger);
 }
 
 void ReactNativeHost::_record_error(uint64_t p_generation, const String &p_error) {
@@ -82,7 +83,7 @@ bool ReactNativeHost::_start() {
 	}
 	ReactNativeFileSingleton *files = ReactNativeFileSingleton::get_singleton();
 	const String bundle = files ? files->get_monitored_file() : String();
-	if (!files || !files->has_file()) {
+	if (!settings.dev_server.enabled && (!files || !files->has_file())) {
 		_record_error(generation, vformat("React Native bundle '%s' is missing.", bundle));
 		ERR_PRINT(get_last_error());
 		return false;
@@ -256,6 +257,12 @@ void ReactNativeHost::reload() {
 		if (ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(ObjectDB::get_instance(id))) {
 			_start_surface(root);
 		}
+	}
+}
+
+void ReactNativeHost::open_debugger() {
+	if (instance) {
+		instance->open_debugger();
 	}
 }
 

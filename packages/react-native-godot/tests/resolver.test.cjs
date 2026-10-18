@@ -3,9 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {createRequire} = require('node:module');
+const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const {isForeignPlatformModule} = require('../resolver.cjs');
+const {createGodotResolver, isForeignPlatformModule} = require('../resolver.cjs');
 
 const packageRoot = path.resolve(__dirname, '..');
 const Metro = createRequire(path.join(packageRoot, 'package.json'))('metro');
@@ -66,4 +67,20 @@ test('foreign platform module detection is extension-specific', () => {
   assert.equal(isForeignPlatformModule('/x/Thing.ios.tsx'), true);
   assert.equal(isForeignPlatformModule('/x/AndroidNamedGeneric.js'), false);
   assert.equal(isForeignPlatformModule('/x/Thing.native.js'), false);
+});
+
+test('React Native modules without a generic file resolve to their Godot platform file', () => {
+  const reactNativeRoot = path.dirname(require.resolve('react-native/package.json', {paths: [packageRoot]}));
+  const resolve = createGodotResolver({projectRoot: packageRoot, reactNativeRoot});
+  const context = {
+    originModulePath: path.join(reactNativeRoot, 'Libraries/Core/setUpReactDevTools.js'),
+    resolveRequest() {
+      throw new Error('unresolved');
+    },
+  };
+  assert.deepEqual(resolve(context, '../../src/private/devsupport/rndevtools/ReactDevToolsSettingsManager'), {
+    type: 'sourceFile',
+    filePath: path.join(fs.realpathSync(packageRoot), 'src/private/devsupport/rndevtools/ReactDevToolsSettingsManager.godot.js'),
+  });
+  assert.throws(() => resolve(context, './Missing'), /unresolved/);
 });
