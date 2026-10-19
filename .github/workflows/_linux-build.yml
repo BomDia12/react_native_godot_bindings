@@ -159,7 +159,6 @@ jobs:
             cache_path=${{ github.workspace }}/.scons-cache \
             cache_limit=6 \
             import_env_vars=CCACHE_DIR,CCACHE_MAXSIZE \
-            accesskit=no \
             module_mono_enabled=no \
             module_openxr_enabled=no \
             module_webxr_enabled=no \
@@ -197,6 +196,9 @@ jobs:
       - name: Run native component display checks
         run: scripts/run_component_display.sh
 
+      - name: Run visual regression checks
+        run: scripts/run_visual_regression.sh
+
       - name: Run the staged game demo
         run: scripts/run_staged_game.sh
 
@@ -225,3 +227,4 @@ jobs:
             hermes-build.log
             godot-build.log
             artifacts/smoke-logs/**
+            artifacts/visual/**

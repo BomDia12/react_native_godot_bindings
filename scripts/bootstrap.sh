@@ -71,5 +71,9 @@ if [[ $(git -C "$HERMES_DIR" rev-parse HEAD) != "$HERMES_COMMIT" ]]; then
 	exit 1
 fi
 
+if [[ ! -d "$GODOT_SOURCE_DIR/bin/build_deps/accesskit" ]]; then
+	(cd "$GODOT_SOURCE_DIR" && python3 misc/scripts/install_accesskit.py)
+fi
+
 printf 'Godot: %s\nHermes: %s\nNext: scripts/build_hermes.sh && scripts/build_godot.sh && scripts/run_baseline.sh\n' \
 	"$GODOT_SOURCE_DIR" "$HERMES_DIR"
