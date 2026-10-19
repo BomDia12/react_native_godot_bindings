@@ -33,7 +33,7 @@ function StyleGallery() {
         <View style={{height: 48, backgroundColor: '#edae49'}} />
       </ScrollView>
     </View>
-    <View style={{...tile, backgroundColor: 'transparent'}}>
+    <View style={{...tile, backgroundColor: 'transparent', zIndex: 0}}>
       <View style={{position: 'absolute', left: 0, top: 0, width: 48, height: 48, backgroundColor: '#30638e', zIndex: 2}} />
       <View style={{position: 'absolute', left: 16, top: 16, width: 48, height: 48, backgroundColor: '#edae49', zIndex: 1}} />
       <View style={{position: 'absolute', left: 32, top: 32, width: 40, height: 40, backgroundColor: '#d1495b', zIndex: -1}} />
@@ -42,4 +42,57 @@ function StyleGallery() {
   </Screen>;
 }
 
+const swatch = {width: 40, height: 40};
+const photo = {width: 40, height: 40, backgroundImage: 'linear-gradient(90deg, #d1495b, #edae49, #00798c, #30638e)'};
+const filters = [
+  [{brightness: 1.6}], [{contrast: 2}], [{grayscale: 1}], [{hueRotate: '90deg'}], [{invert: 1}],
+  [{opacity: 0.4}], [{saturate: 3}], [{sepia: 1}], [{blur: 3}], [{dropShadow: '3px 3px 2px #003d5b'}],
+  [{sepia: 1}, {hueRotate: '180deg'}, {blur: 1}],
+];
+const blendModes = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity', 'plus-lighter'];
+const backdrop = {position: 'absolute', left: 0, top: 0, width: 456, height: 104, backgroundImage: 'linear-gradient(90deg, #003d5b, #f4f1ea 50%, #d1495b)'};
+
+function EffectsGallery() {
+  return <Screen name="EffectsGallery">
+    {filters.map((filter, index) => <View key={'f' + index} style={{...photo, filter}} />)}
+    <View style={{width: 456, height: 104}}>
+      <View style={backdrop} />
+      <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 4}}>
+        {blendModes.map(mode => <View key={mode} style={{...swatch, backgroundColor: '#edae49', borderRadius: 8, mixBlendMode: mode}} />)}
+      </View>
+    </View>
+    <View style={{width: 96, height: 72}}>
+      <View style={{position: 'absolute', left: 0, top: 0, width: 56, height: 56, backgroundColor: '#00798c', mixBlendMode: 'multiply'}} />
+      <View style={{position: 'absolute', left: 28, top: 16, width: 56, height: 56, backgroundColor: '#edae49', mixBlendMode: 'multiply'}} />
+    </View>
+    <View style={{width: 96, height: 72, backgroundColor: '#30638e', isolation: 'isolate'}}>
+      <View style={{margin: 12, width: 56, height: 40, backgroundColor: '#edae49', mixBlendMode: 'difference'}} />
+    </View>
+    <View style={{width: 72, height: 72, borderRadius: 24, overflow: 'hidden', backgroundColor: '#ffffff'}}>
+      <View style={{...photo, width: 72, height: 72, filter: [{hueRotate: '120deg'}]}} />
+    </View>
+    <View style={{width: 72, height: 72, filter: [{grayscale: 1}]}}>
+      <View style={{width: 72, height: 72, borderRadius: 36, overflow: 'hidden'}}>
+        <View style={{...photo, width: 72, height: 72}} />
+      </View>
+    </View>
+  </Screen>;
+}
+
+function RTLGallery() {
+  return <Screen name="RTLGallery">
+    <View style={{width: 456, height: 48, flexDirection: 'row', gap: 8}}>
+      {['#d1495b', '#edae49', '#00798c', '#30638e'].map(color => <View key={color} style={{width: 48, height: 48, backgroundColor: color}} />)}
+    </View>
+    <View style={{width: 456, height: 56, backgroundColor: '#ffffff', borderStartWidth: 8, borderStartColor: '#d1495b', borderEndWidth: 2, borderEndColor: '#30638e', marginStart: 24, borderTopStartRadius: 16}} />
+    <View style={{width: 456, height: 72, backgroundColor: '#ffffff'}}>
+      <View style={{position: 'absolute', start: 8, top: 8, width: 56, height: 56, backgroundColor: '#00798c'}} />
+      <View style={{position: 'absolute', end: 8, top: 8, width: 56, height: 56, backgroundColor: '#edae49'}} />
+      <View style={{position: 'absolute', left: 120, top: 8, width: 56, height: 56, backgroundColor: '#30638e'}} />
+    </View>
+  </Screen>;
+}
+
 AppRegistry.registerComponent('StyleGallery', () => StyleGallery);
+AppRegistry.registerComponent('EffectsGallery', () => EffectsGallery);
+AppRegistry.registerComponent('RTLGallery', () => RTLGallery);

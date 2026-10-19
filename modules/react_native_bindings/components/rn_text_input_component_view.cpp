@@ -92,6 +92,11 @@ RNTextInputComponentView::~RNTextInputComponentView() {
 	}
 }
 
+void RNTextInputComponentView::update_layout(const LayoutMetrics &p_metrics) {
+	RNComponentView::update_layout(p_metrics);
+	input->set_right_to_left(p_metrics.layoutDirection == LayoutDirection::RightToLeft);
+}
+
 void RNTextInputComponentView::update_event_emitter(const EventEmitter::Shared &p_emitter) {
 	RNComponentView::update_event_emitter(p_emitter);
 	input->set_callbacks([this](const StringName &p_event, const Dictionary &p_payload) { _emit(p_event, p_payload); }, nullptr);

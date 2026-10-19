@@ -5,6 +5,7 @@ const PIXEL_RATIO_TOLERANCE := 0.002
 const WAIT_MSEC := 30000
 
 @export var application := ""
+@export var right_to_left := false
 
 var root: ReactNativeRootView
 var output_dir := ""
@@ -15,10 +16,15 @@ func _ready() -> void:
 		if argument.begins_with("--visual-output="):
 			output_dir = argument.trim_prefix("--visual-output=")
 	DirAccess.make_dir_recursive_absolute(output_dir)
+	if right_to_left:
+		ProjectSettings.set_setting("react_native/i18n/force_rtl", true)
 	root = ReactNativeRootView.new()
 	root.application_key = application
-	root.size = Vector2(480, 360)
+	if right_to_left:
+		root.layout_direction = Control.LAYOUT_DIRECTION_RTL
 	add_child(root)
+	root.size = Vector2(480, 360)
+	root.position = Vector2.ZERO
 	_run.call_deferred()
 
 func _run() -> void:

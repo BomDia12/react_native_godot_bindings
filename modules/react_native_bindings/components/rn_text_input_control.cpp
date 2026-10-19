@@ -168,7 +168,13 @@ String RNTextInputControl::_submit_behavior() const {
 	}
 	return config.multiline ? "newline" : "blurAndSubmit";
 }
+void RNTextInputControl::set_right_to_left(bool p_rtl) {
+	right_to_left = p_rtl;
+	editor->set_layout_direction(right_to_left ? LAYOUT_DIRECTION_RTL : LAYOUT_DIRECTION_LTR);
+}
+
 void RNTextInputControl::_configure_editor(Control *p_editor) {
+	p_editor->set_layout_direction(right_to_left ? LAYOUT_DIRECTION_RTL : LAYOUT_DIRECTION_LTR);
 	p_editor->set_mouse_filter(get_mouse_filter() == MOUSE_FILTER_IGNORE ? MOUSE_FILTER_IGNORE : MOUSE_FILTER_STOP);
 	if (config.font.is_valid()) {
 		p_editor->add_theme_font_override("font", config.font);

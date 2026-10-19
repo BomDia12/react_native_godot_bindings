@@ -34,6 +34,7 @@ void RNImageComponentView::update_props(const Props::Shared &p_old, const Props:
 	const auto &image_props = static_cast<const ImageProps &>(*p_new);
 	image->set_stretch_mode(stretch_mode(image_props.resizeMode));
 	image->set_self_modulate(rn_godot_color(image_props.tintColor, ::Color(1, 1, 1)));
+	_apply_corners();
 	if (image_props.sources.empty() || image_props.sources[0].uri.empty()) {
 		image->load(nullptr, service);
 		return;
@@ -57,6 +58,18 @@ void RNImageComponentView::update_props(const Props::Shared &p_old, const Props:
 		return;
 	}
 	image->load(&normalized, service);
+}
+
+void RNImageComponentView::update_layout(const LayoutMetrics &p_metrics) {
+	RNComponentView::update_layout(p_metrics);
+	_apply_corners();
+}
+
+void RNImageComponentView::_apply_corners() {
+	if (props) {
+		const Rect2 rect(Point2(), Size2(layout_metrics.frame.size.width, layout_metrics.frame.size.height));
+		image->set_corners(rn_rounded_rect(rect, props->resolveBorderMetrics(layout_metrics).borderRadii));
+	}
 }
 
 void RNImageComponentView::update_event_emitter(const EventEmitter::Shared &p_emitter) {

@@ -31,6 +31,7 @@ class ReactNativeRootView : public Control {
 	void _connect_control(Control *p_control);
 	void _route_unclaimed_motion(const Ref<InputEvent> &p_event, uint64_t p_serial, ObjectID p_viewport_id);
 	void _route(const Ref<InputEvent> &p_event, RNComponentView *p_view, Viewport *p_viewport);
+	RNComponentView *_view_inside_clips(RNComponentView *p_view, const Point2 &p_canvas_point) const;
 	void _cancel_mouse_taken_by_popup(ObjectID p_viewport_id);
 	Control *_focusable_at(Control *p_pressed, const Point2 &p_viewport_position) const;
 	void _disconnect_scene_target();
