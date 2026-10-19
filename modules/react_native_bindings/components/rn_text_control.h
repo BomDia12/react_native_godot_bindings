@@ -3,10 +3,11 @@
 #include "rn_paragraph_layout.h"
 
 #include "scene/gui/control.h"
+#include "scene/resources/style_box.h"
 
 #include <functional>
 
-using RNTextShapeFunction = std::function<void(float p_width, RNParagraphLayout &r_layout)>;
+using RNTextShapeFunction = std::function<void(const Size2 &p_size, RNParagraphLayout &r_layout)>;
 
 class RNTextControl : public Control {
 	GDCLASS(RNTextControl, Control);
@@ -18,11 +19,14 @@ class RNTextControl : public Control {
 	bool has_selection_color = false;
 	HorizontalAlignment accessibility_alignment = HORIZONTAL_ALIGNMENT_LEFT;
 	RNParagraphLayout layout;
+	Ref<StyleBox> box;
 	int selection_from = -1;
 	int selection_to = -1;
 	int selection_anchor = -1;
 	bool selecting = false;
+	uint64_t last_double_click_msec = 0;
 	void _shape();
+	void _select_word(int p_character);
 
 protected:
 	static void _bind_methods();
@@ -38,6 +42,8 @@ public:
 	Color get_text_color() const;
 	void set_content(const String &p_text, RNTextShapeFunction p_shape_function, bool p_selectable);
 	void set_selection_color(const Color &p_color);
+	// The Text view's own background, borders and outline, drawn under the text.
+	void set_box(const Ref<StyleBox> &p_box);
 	void set_accessibility_alignment(HorizontalAlignment p_alignment) { accessibility_alignment = p_alignment; }
 	const RNParagraphLayout &get_layout() const { return layout; }
 	bool is_selectable() const;

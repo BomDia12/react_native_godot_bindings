@@ -184,7 +184,7 @@ TEST_CASE("[ReactNativeBindings][Images] credentialed sources bypass cache and d
 TEST_CASE("[ReactNativeBindings][Text][SceneTree] text sized before insertion shapes at its final width") {
 	auto *text = memnew(RNTextControl);
 	float shaped_width = -1;
-	text->set_content("centered", [&shaped_width](float p_width, RNParagraphLayout &) { shaped_width = p_width; }, false);
+	text->set_content("centered", [&shaped_width](const Size2 &p_size, RNParagraphLayout &) { shaped_width = p_size.x; }, false);
 	text->set_size(Size2(380, 40));
 	CHECK(shaped_width == 0);
 	SceneTree::get_singleton()->get_root()->add_child(text);

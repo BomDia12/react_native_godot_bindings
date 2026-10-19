@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../components/rn_paragraph_layout.h"
+#include "support/rn_test_fonts.h"
 
 #include "core/os/thread.h"
 #include "scene/theme/theme_db.h"
@@ -116,6 +117,126 @@ TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] shaping on a worker
 	thread.wait_to_finish();
 	CHECK(work.size == main_layout.get_size());
 	CHECK(work.lines == main_layout.get_lines().size());
+}
+
+// Hebrew and Arabic runs come from the fixture fonts, as fallbacks of the theme font.
+Vector<RNParagraphLayout::Fragment> scripts(const Vector<String> &p_texts) {
+	Ref<FontVariation> font;
+	font.instantiate();
+	font->set_base_font(ThemeDB::get_singleton()->get_fallback_font());
+	font->set_fallbacks({ rn_test_font("NotoSansHebrew.ttf"), rn_test_font("NotoSansArabic.ttf") });
+	Vector<RNParagraphLayout::Fragment> result = fragments(p_texts);
+	for (RNParagraphLayout::Fragment &fragment : result) {
+		fragment.font = font;
+	}
+	return result;
+}
+
+// Shapes on a worker thread, as Fabric measures text.
+void shape_off_main_thread(RNParagraphLayout &r_layout, const Vector<RNParagraphLayout::Fragment> &p_fragments, const RNParagraphLayout::Attributes &p_attributes) {
+	struct Work {
+		RNParagraphLayout *layout;
+		const Vector<RNParagraphLayout::Fragment> *fragments;
+		const RNParagraphLayout::Attributes *attributes;
+	} work{ &r_layout, &p_fragments, &p_attributes };
+	Thread thread;
+	thread.start([](void *p_work) {
+		Work *data = static_cast<Work *>(p_work);
+		data->layout->shape(*data->fragments, *data->attributes);
+	},
+			&work);
+	thread.wait_to_finish();
+}
+
+TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] right-to-left paragraphs keep the requested alignment and hit-test by logical index") {
+	REQUIRE(rn_test_font("NotoSansHebrew.ttf").is_valid());
+	const String hebrew = String::utf8("שלום עולם");
+	RNParagraphLayout layout;
+	shape_off_main_thread(layout, scripts({ hebrew }), width(400));
+	REQUIRE(layout.get_lines().size() == 1);
+	const RNParagraphLayout::Line &line = layout.get_lines()[0];
+	CHECK(line.bounds.position.x == 0);
+	// The first character of a right-to-left run sits at its right edge.
+	CHECK(layout.hit_test(Point2(line.bounds.size.x - 1, line.baseline)) == 0);
+	CHECK(layout.hit_test(Point2(1, line.baseline)) == hebrew.length());
+
+	RNParagraphLayout::Attributes right = width(400);
+	right.alignment = HORIZONTAL_ALIGNMENT_RIGHT;
+	shape_off_main_thread(layout, scripts({ hebrew }), right);
+	CHECK(layout.get_lines()[0].bounds.get_end().x == doctest::Approx(400));
+}
+
+TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] selection across a direction change splits into visual runs") {
+	const String mixed = String::utf8("abc שלום def");
+	RNParagraphLayout layout;
+	RNParagraphLayout::Attributes attributes = width(-1);
+	attributes.direction = TextServer::DIRECTION_LTR;
+	shape_off_main_thread(layout, scripts({ mixed }), attributes);
+	const Vector<Rect2> whole = layout.get_range_rects(0, mixed.length());
+	const Vector<Rect2> crossing = layout.get_range_rects(2, 6);
+	CHECK(whole.size() >= 1);
+	CHECK(crossing.size() >= 2);
+	const RNParagraphLayout::Line &line = layout.get_lines()[0];
+	CHECK(layout.hit_test(Point2(-5, line.baseline)) == 0);
+	CHECK(layout.hit_test(Point2(line.bounds.size.x + 5, line.baseline)) == mixed.length());
+}
+
+TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] Arabic tail ellipsis stays within the width") {
+	REQUIRE(rn_test_font("NotoSansArabic.ttf").is_valid());
+	const String arabic = String::utf8("مرحبا بالعالم من محرك جودو");
+	RNParagraphLayout unbounded;
+	unbounded.shape(scripts({ arabic }), width(-1));
+	RNParagraphLayout limited;
+	shape_off_main_thread(limited, scripts({ arabic }), width(unbounded.get_size().x / 2, 1));
+	REQUIRE(limited.get_lines().size() == 1);
+	CHECK(limited.is_truncated());
+	// Glyph advances round, so the trimmed line may pass the width by under a pixel.
+	CHECK(limited.get_size().x <= unbounded.get_size().x / 2 + 1);
+}
+
+TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] head and middle ellipses keep the ends and map indices back") {
+	const String text = "abcdefghijklmnopqrstuvwxyz0123456789";
+	RNParagraphLayout unbounded;
+	unbounded.shape(fragments({ text }), width(-1));
+	const float half = unbounded.get_size().x / 2;
+
+	RNParagraphLayout::Attributes head = width(half, 1);
+	head.ellipsis = RNParagraphLayout::ELLIPSIS_HEAD;
+	RNParagraphLayout layout;
+	layout.shape(fragments({ text }), head);
+	REQUIRE(layout.get_lines().size() == 1);
+	CHECK(layout.get_size().x <= half);
+	CHECK(layout.get_elided_range().x == 0);
+	CHECK(layout.get_elided_range().y > 0);
+	CHECK(layout.get_fragments()[0].text == String::chr(0x2026));
+	const RNParagraphLayout::Line &line = layout.get_lines()[0];
+	CHECK(layout.hit_test(Point2(line.bounds.size.x + 5, line.baseline)) == text.length());
+
+	RNParagraphLayout::Attributes middle = width(half, 1);
+	middle.ellipsis = RNParagraphLayout::ELLIPSIS_MIDDLE;
+	layout.shape(fragments({ text }), middle);
+	const Vector2i elided = layout.get_elided_range();
+	CHECK(elided.x > 0);
+	CHECK(elided.y < text.length());
+	CHECK(layout.get_size().x <= half);
+	CHECK(layout.hit_test(Point2(-5, layout.get_lines()[0].baseline)) == 0);
+	// A range inside the hidden text highlights the ellipsis.
+	CHECK(layout.get_range_rects(elided.x, elided.x + 1).size() == 1);
+
+	RNParagraphLayout::Attributes multiline = width(half, 2);
+	multiline.ellipsis = RNParagraphLayout::ELLIPSIS_HEAD;
+	layout.shape(fragments({ text }), multiline);
+	CHECK(layout.get_elided_range() == Vector2i(-1, -1));
+}
+
+TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] a trailing newline starts an empty last line") {
+	RNParagraphLayout layout;
+	layout.shape(fragments({ "one\n" }), width(-1));
+	REQUIRE(layout.get_lines().size() == 2);
+	const RNParagraphLayout::Line &empty = layout.get_lines()[1];
+	CHECK(empty.range == Vector2i(4, 4));
+	CHECK(empty.bounds.size.y == doctest::Approx(layout.get_lines()[0].bounds.size.y));
+	CHECK(layout.hit_test(Point2(0, empty.bounds.get_center().y)) == 4);
 }
 
 } // namespace TestRNParagraphLayout

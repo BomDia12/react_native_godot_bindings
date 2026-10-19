@@ -1,6 +1,7 @@
 #include "rn_text_control.h"
 
 #include "core/object/class_db.h"
+#include "core/os/os.h"
 #include "servers/display/accessibility_server.h"
 #include "servers/display/display_server.h"
 
@@ -35,6 +36,9 @@ void RNTextControl::_notification(int p_what) {
 			_shape();
 		} break;
 		case NOTIFICATION_DRAW: {
+			if (box.is_valid()) {
+				box->draw(get_canvas_item(), Rect2(Point2(), get_size()));
+			}
 			if (selection_to > selection_from) {
 				const Color color = has_selection_color ? selection_color : get_theme_color(SNAME("selection_color"), SNAME("RichTextLabel"));
 				for (const Rect2 &rect : layout.get_range_rects(selection_from, selection_to)) {
@@ -42,6 +46,9 @@ void RNTextControl::_notification(int p_what) {
 				}
 			}
 			layout.draw(get_canvas_item(), Point2());
+		} break;
+		case NOTIFICATION_FOCUS_EXIT: {
+			set_selection_range(-1, -1);
 		} break;
 		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
 			const RID element = get_accessibility_element();
@@ -59,9 +66,21 @@ void RNTextControl::gui_input(const Ref<InputEvent> &p_event) {
 	}
 	Ref<InputEventMouseButton> button = p_event;
 	if (button.is_valid() && button->get_button_index() == MouseButton::LEFT) {
-		selecting = button->is_pressed();
-		if (selecting) {
-			selection_anchor = layout.hit_test(button->get_position());
+		selecting = button->is_pressed() && !button->is_double_click();
+		if (!button->is_pressed()) {
+			return;
+		}
+		const int position = layout.hit_test(button->get_position());
+		const uint64_t now = OS::get_singleton()->get_ticks_msec();
+		if (button->is_double_click()) {
+			last_double_click_msec = now;
+			_select_word(position);
+		} else if (now - last_double_click_msec < 400) {
+			set_selection_range(0, text.length());
+		} else if (button->is_shift_pressed() && selection_anchor >= 0) {
+			set_selection_range(MIN(selection_anchor, position), MAX(selection_anchor, position));
+		} else {
+			selection_anchor = position;
 			set_selection_range(-1, -1);
 		}
 		return;
@@ -72,15 +91,31 @@ void RNTextControl::gui_input(const Ref<InputEvent> &p_event) {
 		set_selection_range(MIN(selection_anchor, position), MAX(selection_anchor, position));
 		return;
 	}
+	if (p_event->is_action_pressed(SNAME("ui_text_select_all"), false, true)) {
+		set_selection_range(0, text.length());
+		accept_event();
+		return;
+	}
 	if (p_event->is_action_pressed(SNAME("ui_copy"), false, true) && selection_to > selection_from) {
 		DisplayServer::get_singleton()->clipboard_set(text.substr(selection_from, selection_to - selection_from));
 		accept_event();
 	}
 }
 
+void RNTextControl::_select_word(int p_character) {
+	const PackedInt32Array words = TS->string_get_word_breaks(text);
+	for (int i = 0; i + 1 < words.size(); i += 2) {
+		if (p_character >= words[i] && p_character < words[i + 1]) {
+			selection_anchor = words[i];
+			set_selection_range(words[i], words[i + 1]);
+			return;
+		}
+	}
+}
+
 void RNTextControl::_shape() {
 	if (shape_function) {
-		shape_function(get_size().x, layout);
+		shape_function(get_size(), layout);
 	}
 	queue_redraw();
 	queue_accessibility_update();
@@ -112,6 +147,11 @@ void RNTextControl::set_content(const String &p_text, RNTextShapeFunction p_shap
 	selectable = p_selectable;
 	set_focus_mode(selectable ? FOCUS_ALL : FOCUS_ACCESSIBILITY);
 	_shape();
+}
+
+void RNTextControl::set_box(const Ref<StyleBox> &p_box) {
+	box = p_box;
+	queue_redraw();
 }
 
 void RNTextControl::set_selection_color(const Color &p_color) {

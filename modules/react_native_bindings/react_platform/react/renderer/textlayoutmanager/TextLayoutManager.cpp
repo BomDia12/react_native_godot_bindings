@@ -8,8 +8,8 @@ namespace facebook::react {
 
 namespace {
 
-float layout_width(const LayoutConstraints &constraints) {
-	return std::isfinite(constraints.maximumSize.width) ? constraints.maximumSize.width : -1;
+Size2 available_size(const Size &p_size) {
+	return Size2(p_size.width, p_size.height);
 }
 
 } // namespace
@@ -24,7 +24,7 @@ TextMeasurement TextLayoutManager::measure(const AttributedStringBox &attributed
 	const AttributedString &attributedString = attributedStringBox.getValue();
 	return textMeasureCache_.get({ attributedString, paragraphAttributes, layoutConstraints }, [&]() {
 		RNParagraphLayout layout;
-		shaper_->shape(attributedString, paragraphAttributes, layout_width(layoutConstraints), layout);
+		shaper_->shape(attributedString, paragraphAttributes, available_size(layoutConstraints.maximumSize), layout);
 		TextMeasurement::Attachments attachments;
 		for (const auto &fragment : attributedString.getFragments()) {
 			if (fragment.isAttachment()) {
@@ -38,14 +38,15 @@ TextMeasurement TextLayoutManager::measure(const AttributedStringBox &attributed
 
 LinesMeasurements TextLayoutManager::measureLines(const AttributedStringBox &attributedStringBox, const ParagraphAttributes &paragraphAttributes, const Size &size) const {
 	RNParagraphLayout layout;
-	shaper_->shape(attributedStringBox.getValue(), paragraphAttributes, size.width, layout);
+	shaper_->shape(attributedStringBox.getValue(), paragraphAttributes, available_size(size), layout);
 	const String text = String::utf8(attributedStringBox.getValue().getString().c_str());
 	LinesMeasurements lines;
 	for (const RNParagraphLayout::Line &line : layout.get_lines()) {
 		const Rect2 bounds = line.bounds;
 		const Float ascender = line.baseline - bounds.position.y;
-		const Ref<Font> font = layout.get_fragments().is_empty() ? Ref<Font>() : layout.get_fragments()[0].font;
-		const int font_size = layout.get_fragments().is_empty() ? 16 : layout.get_fragments()[0].font_size;
+		const int fragment = layout.fragment_at(line.range.x);
+		const Ref<Font> font = fragment < 0 ? Ref<Font>() : layout.get_fragments()[fragment].font;
+		const int font_size = fragment < 0 ? 16 : layout.get_fragments()[fragment].font_size;
 		const Float x_height = font.is_valid() ? font->get_char_size('x', font_size).y : 0;
 		const Float cap_height = font.is_valid() ? font->get_char_size('H', font_size).y : 0;
 		lines.emplace_back(
