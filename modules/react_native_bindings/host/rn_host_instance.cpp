@@ -371,6 +371,7 @@ void RNHostInstance::_run_animation_frame() {
 }
 
 void RNHostInstance::process_frame() {
+	mounting->tick_layout_animations();
 	main_thread->drain();
 	_run_animation_frame();
 	application->poll();

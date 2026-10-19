@@ -1,5 +1,6 @@
 #include "../host/rn_host_teardown.h"
 #include "../host/rn_main_thread_queue.h"
+#include "../mounting/rn_mounting_manager.h"
 #include "../native_modules/rn_blob_service.h"
 #include "../turbomodules/rn_godot_turbo_module_provider.h"
 #include "support/rn_upstream_test_macros.h"
@@ -72,6 +73,33 @@ TEST_CASE("[ReactNativeBindings][ReactHost] upstream ReactHost evaluates a scrip
 	REQUIRE(result.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
 	CHECK(result.get() == 42);
 	CHECK(mounting->transactions == 0);
+}
+
+TEST_CASE("[ReactNativeBindings][ReactHost] each runtime generation installs its own LayoutAnimation driver") {
+	const String script_path = "user://rn_layout_animation_test.js";
+	write_script(script_path, "globalThis.__answer = 1;");
+	auto main_thread = std::make_shared<RNMainThreadQueue>();
+	auto registry_factory = [](const react::EventDispatcher::Weak &p_dispatcher, const std::shared_ptr<const react::ContextContainer> &p_context) {
+		return react::ComponentDescriptorProviderRegistry().createComponentDescriptorRegistry({ p_dispatcher, p_context, nullptr });
+	};
+	std::shared_ptr<RNMountingManager> previous;
+	for (int generation = 0; generation < 2; ++generation) {
+		auto context = std::make_shared<react::ContextContainer>();
+		context->insert(react::HttpClientFactoryKey, react::HttpClientFactory([] { return std::unique_ptr<react::IHttpClient>(); }));
+		context->insert(react::WebSocketClientFactoryKey, react::WebSocketClientFactory([] { return std::unique_ptr<react::IWebSocketClient>(); }));
+		auto mounting = std::make_shared<RNMountingManager>(main_thread, std::make_shared<RNComponentViewFactories>(), registry_factory, nullptr);
+		react::ReactInstanceConfig config;
+		config.enableDevMode = false;
+		config.enableInspector = false;
+		{
+			react::ReactHost host(config, mounting, std::make_shared<react::RunLoopObserverManager>(), context, [](jsi::Runtime &, const react::JsErrorHandler::ProcessedError &) {}, nullptr);
+			REQUIRE(host.loadScript(script_path.utf8().get_data(), ""));
+			CHECK(mounting->has_layout_animations());
+			mounting->tick_layout_animations();
+		}
+		CHECK(mounting != previous);
+		previous = mounting;
+	}
 }
 
 std::future<double> read_answer(react::ReactHost &p_host, const std::string &p_global) {

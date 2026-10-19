@@ -291,6 +291,16 @@ path calls. Announcements go through the root window's `accessibility_announceme
 `setAccessibilityFocus` focuses the view's focus control. Tab and screen-reader order are
 Godot node order, which follows React order.
 
+## Animation
+
+`LayoutAnimation` runs upstream's `LayoutAnimationDriver`. The mounting manager keeps the
+component registry the Scheduler builds through it, installs the driver as the UIManager's
+animation delegate in `setUIManager`, and makes it the mounting override delegate of every
+surface that starts. `RNHostInstance::process_frame` ticks it before draining the main-thread
+queue, so interpolated mutations mount in the frame they are computed. Native `Animated`
+keeps its own per-frame callback. JS-driven animations follow upstream's C++
+`requestAnimationFrame`, which is `setTimeout(0)`.
+
 ## Application services
 
 Dimensions/PixelRatio describe the application Window and screen, independently of
