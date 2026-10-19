@@ -55,7 +55,9 @@ The `Libraries/` files are of three kinds:
 - `assetScale`, the startup screen scale or `1` in headless mode.
 
 `isTV` and `isVision` are false. These constants are startup values, not live viewport
-metrics. Godot-specific TypeScript declarations are in `packages/react-native-godot/godot.d.ts`.
+metrics. TypeScript declarations ship with the package: `godot.d.ts` holds the shared Godot
+types and the `react-native` prop augmentations, and `types/` declares each subpath export.
+`npm test` type-checks them from a consumer fixture.
 
 ## Threads and surfaces
 

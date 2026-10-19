@@ -7,13 +7,31 @@
     "./metro": "./metro.cjs",
     "./resolver": "./resolver.cjs",
     "./assets": "./assets.cjs",
-    "./app-registry": "./src/app-registry.js",
-    "./scene": "./src/scene.js",
-    "./GodotWindow": "./src/GodotWindow.js",
-    "./fonts": "./src/fonts.js",
-    "./values": "./src/values.js",
+    "./app-registry": {
+      "types": "./types/app-registry.d.ts",
+      "default": "./src/app-registry.js"
+    },
+    "./scene": {
+      "types": "./types/scene.d.ts",
+      "default": "./src/scene.js"
+    },
+    "./GodotWindow": {
+      "types": "./types/GodotWindow.d.ts",
+      "default": "./src/GodotWindow.js"
+    },
+    "./fonts": {
+      "types": "./types/fonts.d.ts",
+      "default": "./src/fonts.js"
+    },
+    "./values": {
+      "types": "./types/values.d.ts",
+      "default": "./src/values.js"
+    },
     "./package.json": "./package.json",
-    "./setup": "./src/setup.js",
+    "./setup": {
+      "types": "./types/setup.d.ts",
+      "default": "./src/setup.js"
+    },
     "./specs/*": "./specs/*.js"
   },
   "types": "./godot.d.ts",
@@ -34,9 +52,11 @@
     "@react-native/babel-preset": "0.87.1",
     "@react-native/codegen": "0.87.1",
     "@react-native/metro-config": "0.87.1",
+    "@types/react": "^19.2.0",
     "metro": "0.87.0",
     "react": "19.2.3",
-    "react-native": "0.87.1"
+    "react-native": "0.87.1",
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=22.13.0"
