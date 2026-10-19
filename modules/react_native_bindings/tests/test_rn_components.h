@@ -4,6 +4,7 @@
 #include "../components/rn_presentation_control.h"
 #include "../components/rn_scroll_control.h"
 #include "../components/rn_small_controls.h"
+#include "../components/rn_text_control.h"
 #include "../components/rn_text_input_control.h"
 #include "../native_modules/rn_image_probe.h"
 #include "support/rn_test_display_server.h"
@@ -179,6 +180,16 @@ TEST_CASE("[ReactNativeBindings][Images] credentialed sources bypass cache and d
 	transport->finish(5, false);
 	CHECK_FALSE(bool(service->cached(stateless)));
 	CHECK(service->used_bytes() == 0);
+}
+TEST_CASE("[ReactNativeBindings][Text][SceneTree] text sized before insertion shapes at its final width") {
+	auto *text = memnew(RNTextControl);
+	float shaped_width = -1;
+	text->set_content("centered", [&shaped_width](float p_width, RNParagraphLayout &) { shaped_width = p_width; }, false);
+	text->set_size(Size2(380, 40));
+	CHECK(shaped_width == 0);
+	SceneTree::get_singleton()->get_root()->add_child(text);
+	CHECK(shaped_width == 380);
+	memdelete(text);
 }
 TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] stale deferred editor signals for JS-applied values are ignored") {
 	auto *control = memnew(RNTextInputControl);
