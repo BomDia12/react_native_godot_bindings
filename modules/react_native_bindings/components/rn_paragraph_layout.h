@@ -85,13 +85,17 @@ public:
 	void shape(const Vector<Fragment> &p_fragments, const Attributes &p_attributes);
 	Size2 get_size() const { return size; }
 	const Vector<Line> &get_lines() const { return lines; }
+	RID get_line_rid(int p_line) const { return line_rids[p_line]; }
 	const Vector<Fragment> &get_fragments() const { return fragments; }
 	// The fragment drawn at a character of the shaped text.
 	int fragment_at(int p_character) const;
 	// More lines than max_lines, or a line wider than the width.
 	bool is_truncated() const { return truncated; }
 	Vector2i get_elided_range() const { return elided; }
+	// The caret position nearest to a point.
 	int hit_test(const Point2 &p_point) const;
+	// The character drawn under a point, or -1 when there is none.
+	int character_at(const Point2 &p_point) const;
 	Vector<Rect2> get_range_rects(int p_from, int p_to) const;
 	void draw(RID p_canvas_item, const Point2 &p_offset) const;
 };

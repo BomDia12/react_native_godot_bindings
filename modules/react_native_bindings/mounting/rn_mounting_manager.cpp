@@ -63,6 +63,15 @@ RNComponentView *RNMountingManager::_find(Tag p_tag, SurfaceId &r_surface) const
 	return nullptr;
 }
 
+void RNMountingManager::focus_view(Tag p_tag) {
+	SurfaceId surface;
+	RNComponentView *view = _find(p_tag, surface);
+	Control *focus = view ? view->get_focus_control() : nullptr;
+	if (focus && focus->is_inside_tree() && focus->get_focus_mode_with_override() != Control::FOCUS_NONE) {
+		focus->grab_focus();
+	}
+}
+
 void RNMountingManager::dispatchCommand(const ShadowView &p_view, const std::string &p_command, const folly::dynamic &p_args) {
 	main_thread->post([this, surface = p_view.surfaceId, tag = p_view.tag, p_command, p_args] {
 		auto mounted = surfaces.find(surface);

@@ -93,6 +93,9 @@ TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] hit testing and ran
 	CHECK(second[0].get_end().x > line.bounds.size.x - 1);
 	CHECK(layout.hit_test(second[0].get_center()) >= 6);
 	CHECK(layout.get_range_rects(3, 3).is_empty());
+	// The character under a point, unlike the nearest caret, stays inside the last glyph.
+	CHECK(layout.character_at(Point2(line.bounds.size.x - 1, line.baseline)) == 11);
+	CHECK(layout.character_at(Point2(line.bounds.size.x + 10, line.baseline)) == -1);
 }
 
 TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] shaping on a worker thread matches the main thread") {

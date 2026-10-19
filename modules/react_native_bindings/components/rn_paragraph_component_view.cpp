@@ -5,6 +5,7 @@
 
 #include <react/renderer/components/text/ParagraphProps.h>
 #include <react/renderer/components/text/ParagraphState.h>
+#include <react/renderer/components/view/accessibilityPropsConversions.h>
 #include <react/renderer/core/ConcreteState.h>
 
 using namespace facebook::react;
@@ -32,6 +33,14 @@ void RNParagraphComponentView::update_props(const Props::Shared &p_old, const Pr
 	const auto &paragraph = static_cast<const ParagraphProps &>(*p_new);
 	text->set_mouse_filter(paragraph.pointerEvents == PointerEventsMode::None || paragraph.pointerEvents == PointerEventsMode::BoxNone ? Control::MOUSE_FILTER_IGNORE : Control::MOUSE_FILTER_PASS);
 	_apply_box();
+	const std::string role = paragraph.role != Role::None ? toString(paragraph.role) : paragraph.accessibilityRole;
+	if (role == "link") {
+		text->set_accessibility_role(AccessibilityServerEnums::ROLE_LINK);
+	} else if (role == "header" || role == "heading") {
+		text->set_accessibility_role(AccessibilityServerEnums::ROLE_STATIC_TEXT, "heading");
+	} else {
+		text->set_accessibility_role(AccessibilityServerEnums::ROLE_STATIC_TEXT);
+	}
 }
 
 void RNParagraphComponentView::update_state(const State::Shared &p_state) {
@@ -44,7 +53,10 @@ void RNParagraphComponentView::update_state(const State::Shared &p_state) {
 }
 
 RNTouchTarget RNParagraphComponentView::touch_target_at(const Point2 &p_local) const {
-	const int character = text->get_layout().hit_test(p_local);
+	const int character = text->get_layout().character_at(p_local);
+	if (character < 0) {
+		return RNComponentView::touch_target_at(p_local);
+	}
 	int offset = 0;
 	for (const AttributedString::Fragment &fragment : attributed.getFragments()) {
 		if (fragment.isAttachment()) {

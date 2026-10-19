@@ -152,6 +152,12 @@ void RNComponentView::apply_view_props(const ViewProps &p_props) {
 	control->set_mouse_filter(branch_enabled ? Control::MOUSE_FILTER_PASS : Control::MOUSE_FILTER_IGNORE);
 	control->set_mouse_behavior_recursive(branch_enabled ? Control::MOUSE_BEHAVIOR_INHERITED : Control::MOUSE_BEHAVIOR_DISABLED);
 	control->set_meta("react_native_test_id", String::utf8(p_props.testId.c_str()));
+	if (Control *focus = get_focus_control()) {
+		focus->set_accessibility_name(String::utf8(p_props.accessibilityLabel.c_str()));
+		focus->set_accessibility_description(String::utf8(p_props.accessibilityHint.c_str()));
+		focus->set_accessibility_live(p_props.accessibilityLiveRegion == AccessibilityLiveRegion::Assertive ? AccessibilityServerEnums::LIVE_ASSERTIVE : p_props.accessibilityLiveRegion == AccessibilityLiveRegion::Polite ? AccessibilityServerEnums::LIVE_POLITE
+																																																							: AccessibilityServerEnums::LIVE_OFF);
+	}
 	const std::optional<Control::CursorShape> cursor = p_props.cursor == Cursor::Auto ? std::nullopt : cursor_shape(p_props.cursor);
 	if (p_props.cursor != Cursor::Auto && !cursor && !control->has_meta("_react_native_cursor_reported")) {
 		control->set_meta("_react_native_cursor_reported", true);

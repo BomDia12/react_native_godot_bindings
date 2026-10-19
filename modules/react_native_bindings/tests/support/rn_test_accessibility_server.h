@@ -24,6 +24,9 @@ public:
 		HashMap<int, String> custom_actions;
 		Vector<RID> children;
 		RID parent;
+		RID selection_start, selection_end;
+		int selection_start_char = -1;
+		int selection_end_char = -1;
 	};
 
 private:
@@ -52,6 +55,15 @@ public:
 	}
 
 	const Element *element(const RID &p_id) const { return elements.getptr(p_id); }
+	// The first element with this name, such as a window announcement.
+	const Element *find(const String &p_name) const {
+		for (const KeyValue<RID, Element> &entry : elements) {
+			if (entry.value.name == p_name) {
+				return &entry.value;
+			}
+		}
+		return nullptr;
+	}
 	bool has_flag(const RID &p_id, Flag p_flag) const {
 		const Element *found = element(p_id);
 		return found && found->flags.has(p_flag);
@@ -232,7 +244,14 @@ public:
 	void update_set_scroll_y_range(const RID &, double, double) override {}
 	void update_set_text_decorations(const RID &, bool, bool, bool, const Color &) override {}
 	void update_set_text_align(const RID &, HorizontalAlignment) override {}
-	void update_set_text_selection(const RID &, const RID &, int, const RID &, int) override {}
+	void update_set_text_selection(const RID &p_id, const RID &p_start, int p_start_char, const RID &p_end, int p_end_char) override {
+		if (Element *found = _get(p_id)) {
+			found->selection_start = p_start;
+			found->selection_start_char = p_start_char;
+			found->selection_end = p_end;
+			found->selection_end_char = p_end_char;
+		}
+	}
 	void update_set_classname(const RID &, const String &) override {}
 	void update_set_placeholder(const RID &, const String &) override {}
 	void update_set_language(const RID &, const String &) override {}

@@ -50,12 +50,43 @@ void RNTextControl::_notification(int p_what) {
 		case NOTIFICATION_FOCUS_EXIT: {
 			set_selection_range(-1, -1);
 		} break;
+		case NOTIFICATION_EXIT_TREE:
+		case NOTIFICATION_ACCESSIBILITY_INVALIDATE: {
+			accessibility_runs.clear();
+		} break;
 		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
 			const RID element = get_accessibility_element();
 			ERR_FAIL_COND(element.is_null());
-			AccessibilityServer::get_singleton()->update_set_role(element, AccessibilityServerEnums::AccessibilityRole::ROLE_STATIC_TEXT);
-			AccessibilityServer::get_singleton()->update_set_value(element, text);
-			AccessibilityServer::get_singleton()->update_set_text_align(element, accessibility_alignment);
+			AccessibilityServer *server = AccessibilityServer::get_singleton();
+			server->update_set_role(element, accessibility_role);
+			if (!accessibility_role_description.is_empty()) {
+				server->update_set_role_description(element, accessibility_role_description);
+			}
+			server->update_set_value(element, text);
+			server->update_set_text_align(element, accessibility_alignment);
+			const Vector<RNParagraphLayout::Line> &lines = layout.get_lines();
+			if (accessibility_runs.is_empty()) {
+				for (int i = 0; i < lines.size(); ++i) {
+					accessibility_runs.push_back(server->create_sub_text_edit_elements(element, layout.get_line_rid(i), lines[i].bounds.size.y, -1, i == lines.size() - 1));
+				}
+			}
+			for (int i = 0; i < accessibility_runs.size(); ++i) {
+				server->update_set_transform(accessibility_runs[i], Transform2D(0, lines[i].bounds.position));
+			}
+			if (selection_to > selection_from && !accessibility_runs.is_empty()) {
+				auto locate = [&lines](int p_index, int &r_line) {
+					r_line = 0;
+					while (r_line + 1 < lines.size() && p_index >= lines[r_line].range.y) {
+						++r_line;
+					}
+					return p_index - lines[r_line].range.x;
+				};
+				int from_line;
+				int to_line;
+				const int from = locate(selection_from, from_line);
+				const int to = locate(selection_to, to_line);
+				server->update_set_text_selection(element, accessibility_runs[from_line], from, accessibility_runs[to_line], to);
+			}
 		} break;
 	}
 }
@@ -113,7 +144,21 @@ void RNTextControl::_select_word(int p_character) {
 	}
 }
 
+void RNTextControl::_free_accessibility_runs() {
+	for (const RID &run : accessibility_runs) {
+		AccessibilityServer::get_singleton()->free_element(run);
+	}
+	accessibility_runs.clear();
+}
+
+void RNTextControl::set_accessibility_role(AccessibilityServerEnums::AccessibilityRole p_role, const String &p_description) {
+	accessibility_role = p_role;
+	accessibility_role_description = p_description;
+	queue_accessibility_update();
+}
+
 void RNTextControl::_shape() {
+	_free_accessibility_runs();
 	if (shape_function) {
 		shape_function(get_size(), layout);
 	}
@@ -136,6 +181,7 @@ void RNTextControl::set_selection_range(int p_from, int p_to) {
 	selection_from = from;
 	selection_to = to;
 	queue_redraw();
+	queue_accessibility_update();
 }
 
 void RNTextControl::set_content(const String &p_text, RNTextShapeFunction p_shape_function, bool p_selectable) {

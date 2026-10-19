@@ -100,17 +100,17 @@ std::shared_ptr<RNComponentViewFactories> component_view_factories(const std::sh
 	return factories;
 }
 
-void layout_for(ReactNativeRootView *p_root, bool p_swap_left_and_right, LayoutConstraints &r_constraints, LayoutContext &r_context) {
+void layout_for(ReactNativeRootView *p_root, const RNGodotApplication &p_application, LayoutConstraints &r_constraints, LayoutContext &r_context) {
 	const Size2 size = p_root->get_size();
 	r_constraints.minimumSize = { .width = size.x, .height = size.y };
 	r_constraints.maximumSize = r_constraints.minimumSize;
-	r_constraints.layoutDirection = p_root->is_layout_rtl() ? LayoutDirection::RightToLeft : LayoutDirection::LeftToRight;
+	r_constraints.layoutDirection = p_root->is_layout_rtl() || p_application.forces_rtl() ? LayoutDirection::RightToLeft : LayoutDirection::LeftToRight;
 	const Window *window = p_root->get_window();
 	r_context.pointScaleFactor = window ? window->get_content_scale_factor() : 1;
 	r_context.fontSizeMultiplier = double(GLOBAL_GET("react_native/text/font_scale"));
 	const Point2 offset = p_root->get_global_position();
 	r_context.viewportOffset = { .x = offset.x, .y = offset.y };
-	r_context.swapLeftAndRightInRTL = p_swap_left_and_right;
+	r_context.swapLeftAndRightInRTL = p_application.get_snapshot().swap_left_and_right;
 }
 
 String processed_error(const JsErrorHandler::ProcessedError &p_error) {
@@ -175,7 +175,10 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	context->insert(GodotSwitchComponentDescriptor::THEME_KEY, std::shared_ptr<const RNThemeMetricsStore>(p_setup.theme));
 
 	RNTurboModuleContext modules;
-	modules.host = { main_thread, [find_root = p_setup.find_root](int p_root_tag) -> Object * { return find_root(p_root_tag); }, p_setup.reload, [this] { open_debugger(); } };
+	modules.host = { main_thread, [find_root = p_setup.find_root](int p_root_tag) -> Object * { return find_root(p_root_tag); }, p_setup.reload, [this] { open_debugger(); }, [weak = std::weak_ptr<RNMountingManager>(mounting)](int p_tag) {
+						if (auto alive = weak.lock()) {
+							alive->focus_view(p_tag);
+						} } };
 	modules.source_url = dev_server ? dev_server->bundle_url() : "";
 	modules.application = { application, main_thread };
 	modules.network = { blobs, http, websockets, main_thread };
@@ -281,7 +284,7 @@ void RNHostInstance::start_surface(ReactNativeRootView *p_root, SurfaceId p_surf
 	mounting->register_surface(p_surface, p_root->_attach_surface(p_surface, mounting->get_factories()));
 	LayoutConstraints constraints;
 	LayoutContext context;
-	layout_for(p_root, application->get_snapshot().swap_left_and_right, constraints, context);
+	layout_for(p_root, *application, constraints, context);
 	_on_js_thread([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), constraints, context] {
 		host->startSurface(p_surface, key, folly::dynamic::object(), constraints, context);
 	});
@@ -309,7 +312,7 @@ void RNHostInstance::stop_surface(ReactNativeRootView *p_root, bool p_stop_react
 void RNHostInstance::update_layout(ReactNativeRootView *p_root) {
 	LayoutConstraints constraints;
 	LayoutContext context;
-	layout_for(p_root, application->get_snapshot().swap_left_and_right, constraints, context);
+	layout_for(p_root, *application, constraints, context);
 	_on_js_thread([host = runtime.react_host.get(), surface = p_root->get_root_tag(), constraints, context] {
 		host->setSurfaceConstraints(surface, constraints, context);
 	});

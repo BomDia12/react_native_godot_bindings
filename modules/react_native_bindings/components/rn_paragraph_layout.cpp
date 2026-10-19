@@ -268,6 +268,17 @@ int RNParagraphLayout::hit_test(const Point2 &p_point) const {
 	return _to_original(TS->shaped_text_hit_test_position(line_rids[index], p_point.x - line.bounds.position.x));
 }
 
+int RNParagraphLayout::character_at(const Point2 &p_point) const {
+	for (int i = 0; i < lines.size(); ++i) {
+		const Line &line = lines[i];
+		if (line.bounds.has_point(p_point) && line.range.x < line.range.y) {
+			const int glyph = TS->shaped_text_hit_test_grapheme(line_rids[i], p_point.x - line.bounds.position.x);
+			return glyph < 0 ? -1 : _to_original(TS->shaped_text_get_glyphs(line_rids[i])[glyph].start);
+		}
+	}
+	return -1;
+}
+
 Vector<Rect2> RNParagraphLayout::get_range_rects(int p_from, int p_to) const {
 	const int from = _to_layout(p_from);
 	const int to = elided.x >= 0 && p_to > elided.x && p_to <= elided.y ? elided.x + 1 : _to_layout(p_to);

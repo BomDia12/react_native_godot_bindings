@@ -3,9 +3,56 @@
 #include "../interop/rn_dynamic.h"
 
 #include <react/renderer/components/view/ViewEventEmitter.h>
+#include <react/renderer/components/view/accessibilityPropsConversions.h>
 
 RNViewComponentView::RNViewComponentView(facebook::react::Tag p_tag) :
 		RNComponentView(p_tag, memnew(RNViewControl)), view(Object::cast_to<RNViewControl>(get_control())) {
+}
+
+RNAccessibility rn_view_accessibility(const facebook::react::ViewProps &p_props) {
+	using namespace facebook::react;
+	RNAccessibility result;
+	const std::string role = p_props.role != Role::None ? toString(p_props.role) : p_props.accessibilityRole;
+	if (!role.empty()) {
+		String description;
+		result.role = rn_accessibility_role(String::utf8(role.c_str()), description);
+		result.role_description = description;
+	}
+	if (const std::optional<AccessibilityState> &state = p_props.accessibilityState) {
+		result.disabled = state->disabled;
+		result.busy = state->busy;
+		result.selected = state->selected;
+		result.expanded = state->expanded;
+		if (state->checked == AccessibilityState::Checked || state->checked == AccessibilityState::Unchecked) {
+			result.checked = state->checked == AccessibilityState::Checked;
+		}
+		result.mixed = state->checked == AccessibilityState::Mixed;
+	}
+	const AccessibilityValue &value = p_props.accessibilityValue;
+	if (value.min && value.max && value.now) {
+		result.range = Vector3(*value.min, *value.max, *value.now);
+	}
+	if (value.text) {
+		result.value_text = String::utf8(value.text->c_str());
+	}
+	result.hidden = p_props.accessibilityElementsHidden || p_props.importantForAccessibility == ImportantForAccessibility::NoHideDescendants;
+	result.modal = p_props.accessibilityViewIsModal;
+	result.grouped = p_props.accessible;
+	result.clickable = p_props.accessible || !role.empty();
+	for (const AccessibilityAction &action : p_props.accessibilityActions) {
+		bool *handled = action.name == "activate" ? &result.activate : action.name == "increment" ? &result.increment
+				: action.name == "decrement"													  ? &result.decrement
+				: action.name == "expand"														  ? &result.expand
+				: action.name == "collapse"														  ? &result.collapse
+																								  : nullptr;
+		if (handled) {
+			*handled = true;
+			continue;
+		}
+		result.custom_names.push_back(String::utf8(action.name.c_str()));
+		result.custom_labels.push_back(String::utf8(action.label.value_or(action.name).c_str()));
+	}
+	return result;
 }
 
 RNStyleBox::Paint rn_view_paint(const facebook::react::ViewProps &p_props, const facebook::react::LayoutMetrics &p_layout) {
@@ -120,12 +167,7 @@ void RNViewComponentView::update_props(const facebook::react::Props::Shared &p_o
 	const bool self_targetable = props->pointerEvents != PointerEventsMode::None && props->pointerEvents != PointerEventsMode::BoxNone;
 	view->set_focus_mode(self_targetable && props->focusable ? Control::FOCUS_ALL : Control::FOCUS_NONE);
 	view->set_menu_entries(self_targetable ? Array(rn_variant_from_dynamic(props->godotContextMenu)) : Array());
-	Dictionary accessibility;
-	accessibility["accessible"] = props->accessible;
-	accessibility["accessibilityLabel"] = String::utf8(props->accessibilityLabel.c_str());
-	accessibility["accessibilityHint"] = String::utf8(props->accessibilityHint.c_str());
-	accessibility["accessibilityElementsHidden"] = props->accessibilityElementsHidden;
-	view->set_meta("react_native_accessibility", accessibility);
+	view->set_accessibility(rn_view_accessibility(*props));
 	_apply_style();
 }
 
@@ -142,8 +184,10 @@ void RNViewComponentView::update_event_emitter(const facebook::react::EventEmitt
 	if (!emitter) {
 		view->set_menu_callbacks(nullptr, nullptr);
 		view->set_focus_callback(nullptr);
+		view->set_accessibility_callbacks(nullptr, nullptr);
 		return;
 	}
+	view->set_accessibility_callbacks([emitter]() { emitter->onKeyboardClick(); }, [emitter](const String &p_name) { emitter->onAccessibilityAction(p_name.utf8().get_data()); });
 	view->set_menu_callbacks([emitter](const String &p_id) { emitter->onGodotContextMenuAction(p_id.utf8().get_data()); }, nullptr);
 	view->set_focus_callback([emitter](bool p_focused) {
 		if (p_focused) {

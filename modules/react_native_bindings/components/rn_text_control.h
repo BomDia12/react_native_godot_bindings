@@ -4,6 +4,7 @@
 
 #include "scene/gui/control.h"
 #include "scene/resources/style_box.h"
+#include "servers/display/accessibility_server_enums.h"
 
 #include <functional>
 
@@ -20,6 +21,11 @@ class RNTextControl : public Control {
 	HorizontalAlignment accessibility_alignment = HORIZONTAL_ALIGNMENT_LEFT;
 	RNParagraphLayout layout;
 	Ref<StyleBox> box;
+	AccessibilityServerEnums::AccessibilityRole accessibility_role = AccessibilityServerEnums::ROLE_STATIC_TEXT;
+	String accessibility_role_description;
+	// One text run per shaped line, for screen-reader selection.
+	Vector<RID> accessibility_runs;
+	void _free_accessibility_runs();
 	int selection_from = -1;
 	int selection_to = -1;
 	int selection_anchor = -1;
@@ -44,6 +50,7 @@ public:
 	void set_selection_color(const Color &p_color);
 	// The Text view's own background, borders and outline, drawn under the text.
 	void set_box(const Ref<StyleBox> &p_box);
+	void set_accessibility_role(AccessibilityServerEnums::AccessibilityRole p_role, const String &p_description = String());
 	void set_accessibility_alignment(HorizontalAlignment p_alignment) { accessibility_alignment = p_alignment; }
 	const RNParagraphLayout &get_layout() const { return layout; }
 	bool is_selectable() const;

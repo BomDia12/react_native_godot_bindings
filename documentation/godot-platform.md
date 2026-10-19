@@ -269,6 +269,28 @@ mirror again; TextInput editors fill their host and take the layout direction. A
 View's `cursor` sets its Godot cursor shape and its React Native descendants inherit
 it where theirs is `auto`.
 
+## Accessibility
+
+Godot's AccessKit integration carries React Native accessibility. `accessibilityLabel`,
+`accessibilityHint` and `accessibilityLiveRegion` (and their `aria-*` forms) set the
+focus control's own `accessibility_name`, `accessibility_description` and
+`accessibility_live`. A View adds its role, states, value and actions in
+`NOTIFICATION_ACCESSIBILITY_UPDATE`: React Native roles map to Godot roles, roles without
+an equivalent publish a container with the React Native role as its description, and
+`mixed` sends unchecked with the state description `mixed`, because Godot's checked state
+is boolean. Hidden subtrees and modal views set `FLAG_HIDDEN` and `FLAG_MODAL`. An
+`accessible` View with no label is named by the text inside it. The screen reader's click
+sends the same `onKeyboardClick` a keyboard press does, or the `activate` action when one is
+listed; `increment`, `decrement`, `expand` and `collapse` use Godot's own actions, and other
+actions become custom actions. Text publishes `link` and `heading` roles and one text run
+per line for selection. Switch, TextInput, ScrollView and Godot windows keep their native
+roles, and Modal publishes a modal dialog.
+
+`AccessibilityInfo` uses the `AccessibilityManager` module that upstream's non-Android
+path calls. Announcements go through the root window's `accessibility_announcement`, and
+`setAccessibilityFocus` focuses the view's focus control. Tab and screen-reader order are
+Godot node order, which follows React order.
+
 ## Application services
 
 Dimensions/PixelRatio describe the application Window and screen, independently of
