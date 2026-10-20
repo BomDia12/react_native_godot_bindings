@@ -12,7 +12,11 @@ RNViewComponentView::RNViewComponentView(facebook::react::Tag p_tag) :
 RNAccessibility rn_view_accessibility(const facebook::react::ViewProps &p_props) {
 	using namespace facebook::react;
 	RNAccessibility result;
-	const std::string role = p_props.role != Role::None ? toString(p_props.role) : p_props.accessibilityRole;
+	std::string role = p_props.role != Role::None ? toString(p_props.role) : p_props.accessibilityRole;
+	// Both mean "no role" in React Native.
+	if (role == "none" || role == "presentation") {
+		role.clear();
+	}
 	if (!role.empty()) {
 		String description;
 		result.role = rn_accessibility_role(String::utf8(role.c_str()), description);
@@ -40,17 +44,17 @@ RNAccessibility rn_view_accessibility(const facebook::react::ViewProps &p_props)
 	result.grouped = p_props.accessible;
 	result.clickable = p_props.accessible || !role.empty();
 	for (const AccessibilityAction &action : p_props.accessibilityActions) {
-		bool *handled = action.name == "activate" ? &result.activate : action.name == "increment" ? &result.increment
-				: action.name == "decrement"													  ? &result.decrement
-				: action.name == "expand"														  ? &result.expand
-				: action.name == "collapse"														  ? &result.collapse
-																								  : nullptr;
-		if (handled) {
-			*handled = true;
-			continue;
+		bool named = false;
+		for (const RNNamedAccessibilityAction &known : RN_NAMED_ACCESSIBILITY_ACTIONS) {
+			if (action.name == known.name) {
+				result.*known.listed = true;
+				named = true;
+			}
 		}
-		result.custom_names.push_back(String::utf8(action.name.c_str()));
-		result.custom_labels.push_back(String::utf8(action.label.value_or(action.name).c_str()));
+		if (!named) {
+			result.custom_names.push_back(String::utf8(action.name.c_str()));
+			result.custom_labels.push_back(String::utf8(action.label.value_or(action.name).c_str()));
+		}
 	}
 	return result;
 }

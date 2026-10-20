@@ -11,6 +11,8 @@ var root: ReactNativeRootView
 var output_dir := ""
 
 func _ready() -> void:
+	# I18nManager.forceRTL from an interrupted smoke run persists in user data.
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://react_native_direction.cfg"))
 	ReactNativeFileSingleton.set_monitored_file("res://dist/fidelity.bundle.js")
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--visual-output="):

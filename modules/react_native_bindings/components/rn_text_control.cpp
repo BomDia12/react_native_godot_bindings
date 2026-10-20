@@ -1,5 +1,7 @@
 #include "rn_text_control.h"
 
+#include "rn_view_control.h"
+
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "servers/display/accessibility_server.h"
@@ -71,21 +73,26 @@ void RNTextControl::_notification(int p_what) {
 				}
 			}
 			for (int i = 0; i < accessibility_runs.size(); ++i) {
-				server->update_set_transform(accessibility_runs[i], Transform2D(0, lines[i].bounds.position));
+				server->update_set_transform(accessibility_runs[i], Transform2D(0, lines[i].bounds.position + content_origin));
 			}
 			if (selection_to > selection_from && !accessibility_runs.is_empty()) {
-				auto locate = [&lines](int p_index, int &r_line) {
-					r_line = 0;
-					while (r_line + 1 < lines.size() && p_index >= lines[r_line].range.y) {
-						++r_line;
+				// Lines are substrings of the paragraph's shaped text, so their runs
+				// take indices into the whole shaped text.
+				auto run_at = [&lines, this](int p_index) {
+					int line = 0;
+					for (int i = 0; i < lines.size(); ++i) {
+						if (lines[i].range.x < lines[i].range.y && lines[i].range.x <= p_index && p_index <= lines[i].range.y) {
+							line = i;
+							if (p_index < lines[i].range.y) {
+								break;
+							}
+						}
 					}
-					return p_index - lines[r_line].range.x;
+					return accessibility_runs[line];
 				};
-				int from_line;
-				int to_line;
-				const int from = locate(selection_from, from_line);
-				const int to = locate(selection_to, to_line);
-				server->update_set_text_selection(element, accessibility_runs[from_line], from, accessibility_runs[to_line], to);
+				const int from = layout.to_layout_index(selection_from);
+				const int to = layout.to_layout_index(selection_to);
+				server->update_set_text_selection(element, run_at(from), from, run_at(to), to);
 			}
 		} break;
 	}
@@ -180,6 +187,12 @@ void RNTextControl::set_content_insets(real_t p_left, real_t p_top, real_t p_rig
 
 void RNTextControl::_shape() {
 	_free_accessibility_runs();
+	// Accessible groups are named by the text inside them.
+	for (Node *node = get_parent(); node; node = node->get_parent()) {
+		if (RNViewControl *view = Object::cast_to<RNViewControl>(node); view && view->is_accessibility_grouped()) {
+			view->queue_accessibility_update();
+		}
+	}
 	if (shape_function) {
 		shape_function((get_size() - content_inset).maxf(0), layout);
 	}

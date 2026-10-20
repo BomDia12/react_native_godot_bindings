@@ -63,7 +63,12 @@ func game_ready() -> bool:
 	var state := await fixture()
 	return state.get("enemies", {}).size() == 3 and state.get("inventory") is Dictionary and target("inventory-editor") != null
 
+# I18nManager.forceRTL persists in user data, so a run that ends early must not
+# start the next one right to left.
+const DIRECTION_PREFERENCES := "user://react_native_direction.cfg"
+
 func _ready() -> void:
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(DIRECTION_PREFERENCES))
 	super._ready()
 	_start.call_deferred()
 

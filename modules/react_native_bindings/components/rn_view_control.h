@@ -46,6 +46,10 @@ public:
 	void set_paint(const RNStyleBox::Paint &p_paint, bool p_visible = true);
 	Ref<RNStyleBox> get_style() const { return style; }
 	void set_accessibility(const RNAccessibility &p_accessibility);
+	bool is_accessibility_grouped() const { return accessibility.grouped; }
+	// An accessible view is one element, as on iOS and Android: its
+	// descendants don't join the accessibility tree.
+	bool accessibility_override_tree_hierarchy() const override { return accessibility.grouped; }
 	// p_click runs for the default activation, p_action for named React Native actions.
 	void set_accessibility_callbacks(std::function<void()> p_click, std::function<void(const String &)> p_action);
 };

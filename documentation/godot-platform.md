@@ -173,8 +173,7 @@ the bundle.
 ## Pending APIs
 
 Imports of pending adapters are safe, but attempted operations report `E_UNSUPPORTED`.
-`BackHandler.exitApp`, legacy accessibility
-dispatch, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid (upstream's
+`BackHandler.exitApp`, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid (upstream's
 non-Android fallbacks) are not claimed as
 supported services or components. Godot reports no hardware back presses, so, as on iOS,
 `BackHandler` listeners return a subscription and never fire.

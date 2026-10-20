@@ -78,6 +78,17 @@ std::optional<Control::CursorShape> cursor_shape(Cursor p_cursor) {
 	}
 }
 
+AccessibilityServerEnums::AccessibilityLiveMode live_mode(AccessibilityLiveRegion p_region) {
+	switch (p_region) {
+		case AccessibilityLiveRegion::Assertive:
+			return AccessibilityServerEnums::LIVE_ASSERTIVE;
+		case AccessibilityLiveRegion::Polite:
+			return AccessibilityServerEnums::LIVE_POLITE;
+		default:
+			return AccessibilityServerEnums::LIVE_OFF;
+	}
+}
+
 void refresh_cursors(Node *p_node, Control::CursorShape p_inherited) {
 	Control::CursorShape shape = p_inherited;
 	if (Control *control = Object::cast_to<Control>(p_node); control && control->has_meta(CURSOR_META)) {
@@ -155,8 +166,7 @@ void RNComponentView::apply_view_props(const ViewProps &p_props) {
 	if (Control *focus = get_focus_control()) {
 		focus->set_accessibility_name(String::utf8(p_props.accessibilityLabel.c_str()));
 		focus->set_accessibility_description(String::utf8(p_props.accessibilityHint.c_str()));
-		focus->set_accessibility_live(p_props.accessibilityLiveRegion == AccessibilityLiveRegion::Assertive ? AccessibilityServerEnums::LIVE_ASSERTIVE : p_props.accessibilityLiveRegion == AccessibilityLiveRegion::Polite ? AccessibilityServerEnums::LIVE_POLITE
-																																																							: AccessibilityServerEnums::LIVE_OFF);
+		focus->set_accessibility_live(live_mode(p_props.accessibilityLiveRegion));
 	}
 	const std::optional<Control::CursorShape> cursor = p_props.cursor == Cursor::Auto ? std::nullopt : cursor_shape(p_props.cursor);
 	if (p_props.cursor != Cursor::Auto && !cursor && !control->has_meta("_react_native_cursor_reported")) {

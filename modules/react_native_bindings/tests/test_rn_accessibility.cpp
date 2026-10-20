@@ -1,3 +1,5 @@
+#include "../components/rn_image_control.h"
+#include "../components/rn_presentation_control.h"
 #include "../components/rn_small_controls.h"
 #include "../components/rn_text_control.h"
 #include "../components/rn_text_input_control.h"
@@ -10,6 +12,10 @@
 #include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
 #include "scene/theme/theme_db.h"
+
+#include <react/renderer/components/view/ViewEventEmitter.h>
+#include <react/renderer/core/EventDispatcher.h>
+#include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 
 namespace TestRNAccessibility {
 
@@ -61,6 +67,26 @@ struct MountedView {
 		SceneTree::get_singleton()->get_root()->add_child(view.get_control());
 	}
 	RNViewControl *control() const { return Object::cast_to<RNViewControl>(view.get_control()); }
+};
+
+// A real event emitter whose dispatcher records each event type and stops it
+// before it would need a JavaScript runtime.
+struct RecordedEvents {
+	facebook::react::RuntimeScheduler scheduler{ [](std::function<void(facebook::jsi::Runtime &)> &&) {} };
+	std::shared_ptr<EventDispatcher> dispatcher;
+	std::shared_ptr<const EventListener> listener;
+	std::vector<std::string> types;
+
+	RecordedEvents() {
+		EventQueueProcessor processor([](facebook::jsi::Runtime &, EventTarget *, const std::string &, ReactEventPriority, const EventPayload &, HighResTimeStamp) {}, [](facebook::jsi::Runtime &) {}, [](const StateUpdate &) {}, {});
+		dispatcher = std::make_shared<EventDispatcher>(processor, std::make_unique<EventBeat>(std::make_shared<EventBeat::OwnerBox>(), scheduler), [](const StateUpdate &) {}, std::weak_ptr<EventLogger>());
+		listener = std::make_shared<const EventListener>([this](const RawEvent &p_event) {
+			types.push_back(p_event.type);
+			return true;
+		});
+		dispatcher->addListener(listener);
+	}
+	EventEmitter::Shared emitter() const { return std::make_shared<ViewEventEmitter>(nullptr, dispatcher); }
 };
 
 TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] the recording server receives what a Panel publishes") {
@@ -206,6 +232,85 @@ TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] screen-reader actions
 	CHECK(reader.perform(activating.control(), AccessibilityServerEnums::ACTION_CLICK));
 	CHECK(clicks == 1);
 	CHECK(actions[actions.size() - 1] == "activate");
+}
+
+TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] the view's event emitter receives clicks and actions") {
+	ScreenReader reader;
+	RecordedEvents events;
+	MountedView mounted([](ViewProps &p_props) {
+		p_props.role = facebook::react::Role::Button;
+		p_props.accessibilityActions = { AccessibilityAction{ .name = "increment" } };
+	});
+	mounted.view.update_event_emitter(events.emitter());
+	reader.flush();
+	CHECK(reader.perform(mounted.control(), AccessibilityServerEnums::ACTION_CLICK));
+	CHECK(reader.perform(mounted.control(), AccessibilityServerEnums::ACTION_INCREMENT));
+	REQUIRE(events.types.size() == 2);
+	CHECK(events.types[0] == "topClick");
+	CHECK(events.types[1] == "topAccessibilityAction");
+}
+
+TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] none and presentation roles keep the view's own role") {
+	ScreenReader reader;
+	MountedView none([](ViewProps &p_props) { p_props.accessibilityRole = "none"; });
+	MountedView presentation([](ViewProps &p_props) { p_props.role = facebook::react::Role::Presentation; });
+	reader.flush();
+	for (const MountedView *view : { &none, &presentation }) {
+		const RNTestAccessibilityServer::Element &element = reader.element(view->control());
+		CHECK(element.role == Role::ROLE_PANEL);
+		CHECK(element.role_description.is_empty());
+		CHECK_FALSE(element.actions.has(AccessibilityServerEnums::ACTION_CLICK));
+	}
+}
+
+TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] accessible groups are one element that follows its text") {
+	ScreenReader reader;
+	MountedView group([](ViewProps &p_props) { p_props.accessible = true; });
+	RNTextControl *text = memnew(RNTextControl);
+	text->set_content("80%", nullptr, false);
+	group.control()->add_child(text);
+	reader.flush();
+	CHECK(reader.element(group.control()).name == "80%");
+	CHECK(reader.element(group.control()).children.is_empty());
+	text->set_content("75%", nullptr, false);
+	reader.flush();
+	CHECK(reader.element(group.control()).name == "75%");
+}
+
+TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] images and modal overlays publish their roles") {
+	ScreenReader reader;
+	RNImageControl *image = memnew(RNImageControl);
+	image->set_accessibility_name("Potion");
+	RNModalOverlay *overlay = memnew(RNModalOverlay);
+	SceneTree::get_singleton()->get_root()->add_child(image);
+	SceneTree::get_singleton()->get_root()->add_child(overlay);
+	reader.flush();
+	CHECK(reader.element(image).role == Role::ROLE_IMAGE);
+	CHECK(reader.element(image).name == "Potion");
+	CHECK(reader.element(overlay).role == Role::ROLE_DIALOG);
+	CHECK(reader.has_flag(overlay, AccessibilityServerEnums::FLAG_MODAL));
+	memdelete(image);
+	memdelete(overlay);
+}
+
+TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] text selection uses indices into the whole shaped text") {
+	ScreenReader reader;
+	RNTextControl *text = memnew(RNTextControl);
+	SceneTree::get_singleton()->get_root()->add_child(text);
+	text->set_size(Size2(400, 60));
+	text->set_content("first line\nsecond line", [](const Size2 &, RNParagraphLayout &r_layout) {
+		RNParagraphLayout::Fragment fragment;
+		fragment.text = "first line\nsecond line";
+		fragment.font = ThemeDB::get_singleton()->get_fallback_font();
+		r_layout.shape({ fragment }, RNParagraphLayout::Attributes()); }, true);
+	text->set_selection_range(13, 17);
+	reader.flush();
+	const RNTestAccessibilityServer::Element &element = reader.element(text);
+	REQUIRE(element.sub_elements.size() == 2);
+	CHECK(element.selection_start == element.sub_elements[1]);
+	CHECK(element.selection_start_char == 13);
+	CHECK(element.selection_end_char == 17);
+	memdelete(text);
 }
 
 TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] text publishes its role and selection") {

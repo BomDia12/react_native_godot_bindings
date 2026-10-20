@@ -39,6 +39,21 @@ struct RNAccessibility {
 	Vector<String> custom_labels;
 };
 
+// React Native actions that the screen reader's own actions perform.
+struct RNNamedAccessibilityAction {
+	const char *name;
+	AccessibilityServerEnums::AccessibilityAction action;
+	bool RNAccessibility::*listed;
+};
+
+inline constexpr RNNamedAccessibilityAction RN_NAMED_ACCESSIBILITY_ACTIONS[] = {
+	{ "activate", AccessibilityServerEnums::ACTION_CLICK, &RNAccessibility::activate },
+	{ "increment", AccessibilityServerEnums::ACTION_INCREMENT, &RNAccessibility::increment },
+	{ "decrement", AccessibilityServerEnums::ACTION_DECREMENT, &RNAccessibility::decrement },
+	{ "expand", AccessibilityServerEnums::ACTION_EXPAND, &RNAccessibility::expand },
+	{ "collapse", AccessibilityServerEnums::ACTION_COLLAPSE, &RNAccessibility::collapse },
+};
+
 // The Godot role for a React Native role name. Roles without a Godot
 // equivalent map to a container described by the React Native name.
 AccessibilityServerEnums::AccessibilityRole rn_accessibility_role(const String &p_name, String &r_description);
