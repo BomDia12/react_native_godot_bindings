@@ -14,7 +14,7 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 | folly, glog, fmt, double-conversion, fast_float, nlohmann/json | React Native 0.87.1 pins | Git submodules, provenance validation |
 | Boost | `1.83.0` headers | `bootstrap.sh` SHA-256 check |
 | AccessKit C SDK | `0.22.3`, selected by the pinned Godot commit | `bootstrap.sh` through Godot's `install_accesskit.py` |
-| Mesa | CI Ubuntu 24.04 `libgl1-mesa-dri`, llvmpipe under Xvfb | Visual regression goldens |
+| Mesa | CI Ubuntu 24.04 `libgl1-mesa-dri`, llvmpipe under Xvfb, for the visual gate. The committed goldens were rendered with Mesa 26.2.5 llvmpipe; CI compares them within tolerance | Visual regression goldens |
 | Node.js | CI `22.13.0`; local `>=22.13.0` | `.nvmrc`, package engines |
 | Python | CI `3.12` | Workflow |
 | SCons | CI `4.8.1` | `requirements-ci.txt` |

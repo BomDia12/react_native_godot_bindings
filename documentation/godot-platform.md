@@ -252,11 +252,11 @@ host clips with Godot's rectangle clipping. A rounded host carries a clip materi
 its descendants inherit through `use_parent_material`; the shader multiplies coverage
 by every rounded clip above it, so clips nest and compose with filters, blend modes and
 rounded images, which put the same stack into their own shaders. Up to eight rounded
-clips apply. Hit testing ignores points outside a rounded clip.
+clips apply. Square clips use Godot's rectangle clipping, narrowed to the same padding box. Hit testing ignores points outside a rounded clip.
 
 `filter`, `mixBlendMode` and `isolation: 'isolate'` render the View's subtree through an
 internal effect host, a SubViewportContainer whose SubViewport holds the painted box and
-its children. Filters run as a canvas group shader there; blend modes run in the
+its children. Filters run as a canvas group shader there, over a nested viewport that holds the subtree, because Godot copies no backdrop for blending while a canvas group is open; blend modes run in the
 container's shader against a copy of the viewport drawn so far. Godot maps input
 through the container, and focus moves into the subtree and out of it in Tab order.
 Godot reports only the window viewport's focus owner to screen readers, so focus inside

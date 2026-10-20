@@ -155,40 +155,73 @@ bool rn_filter_blurs(const ::Vector<RNFilterStage> &p_stages) {
 	return false;
 }
 
-// Stages run in a single pass over the canvas group. A blur samples the group
-// again and re-applies the color stages before it, and a drop shadow does the
-// same for its alpha.
+namespace {
+
+// One sample of the canvas group in the composited result: the content
+// itself, or a shadow of an earlier layer. Later stages apply to every layer.
+struct FilterLayer {
+	::Vector<int> shifts;
+	::Vector<int> radii;
+	// Color matrix stages, or drop-shadow stages that tint the layer, in order.
+	::Vector<int> operations;
+};
+
+} // namespace
+
+// Stages run in a single pass over the canvas group, so each layer is a
+// separate sample: a blur widens every layer's sample, a color stage applies to
+// every layer, and a drop shadow adds a tinted, shifted copy of every layer
+// behind them, as filtering the previous stage's whole output does.
 String rn_filter_shader(const ::Vector<RNFilterStage> &p_stages) {
 	String uniforms;
-	String body;
-	String radius = "0.0";
-	::Vector<int> matrices;
-	auto reapply = [&matrices](const String &p_variable) {
-		String code;
-		for (int index : matrices) {
-			code += vformat("\t%s = color_matrix(%s, stage_matrix_%d, stage_offset_%d);\n", p_variable, p_variable, index, index);
-		}
-		return code;
-	};
+	::Vector<FilterLayer> layers = { FilterLayer() };
 	for (int i = 0; i < p_stages.size(); ++i) {
 		switch (p_stages[i].kind) {
 			case RNFilterStage::COLOR_MATRIX: {
 				uniforms += vformat("uniform mat4 stage_matrix_%d;\nuniform vec4 stage_offset_%d;\n", i, i);
-				body += vformat("\tc = color_matrix(c, stage_matrix_%d, stage_offset_%d);\n", i, i);
-				matrices.push_back(i);
+				for (FilterLayer &layer : layers) {
+					layer.operations.push_back(i);
+				}
 			} break;
 			case RNFilterStage::BLUR: {
 				uniforms += vformat("uniform float stage_radius_%d;\n", i);
-				radius = vformat("length(vec2(%s, stage_radius_%d))", radius, i);
-				body += vformat("\tc = blurred(SCREEN_UV, %s, SCREEN_PIXEL_SIZE);\n", radius) + reapply("c");
+				for (FilterLayer &layer : layers) {
+					layer.radii.push_back(i);
+				}
 			} break;
 			case RNFilterStage::DROP_SHADOW: {
 				uniforms += vformat("uniform float stage_radius_%d;\nuniform vec2 stage_shift_%d;\nuniform vec4 stage_color_%d;\n", i, i, i);
-				body += vformat("\tvec4 shadow_%d = blurred(SCREEN_UV - stage_shift_%d * SCREEN_PIXEL_SIZE, length(vec2(%s, stage_radius_%d)), SCREEN_PIXEL_SIZE);\n", i, i, radius, i);
-				body += reapply(vformat("shadow_%d", i));
-				body += vformat("\tc = over(c, vec4(stage_color_%d.rgb, stage_color_%d.a * shadow_%d.a));\n", i, i, i);
+				const int count = layers.size();
+				for (int j = 0; j < count; ++j) {
+					FilterLayer shadow = layers[j];
+					shadow.shifts.push_back(i);
+					shadow.radii.push_back(i);
+					shadow.operations.push_back(i);
+					layers.push_back(shadow);
+				}
 			} break;
 		}
+	}
+	String body;
+	for (int j = 0; j < layers.size(); ++j) {
+		const FilterLayer &layer = layers[j];
+		String shift = "vec2(0.0)";
+		for (int stage : layer.shifts) {
+			shift += vformat(" + stage_shift_%d", stage);
+		}
+		String radius = "0.0";
+		for (int stage : layer.radii) {
+			radius += vformat(" + stage_radius_%d * stage_radius_%d", stage, stage);
+		}
+		body += vformat("\tvec4 layer_%d = blurred(SCREEN_UV - (%s) * SCREEN_PIXEL_SIZE, sqrt(%s), SCREEN_PIXEL_SIZE);\n", j, shift, radius);
+		for (int stage : layer.operations) {
+			if (p_stages[stage].kind == RNFilterStage::COLOR_MATRIX) {
+				body += vformat("\tlayer_%d = color_matrix(layer_%d, stage_matrix_%d, stage_offset_%d);\n", j, j, stage, stage);
+			} else {
+				body += vformat("\tlayer_%d = vec4(stage_color_%d.rgb, stage_color_%d.a * layer_%d.a);\n", j, stage, stage, j);
+			}
+		}
+		body += j == 0 ? "\tvec4 c = layer_0;\n" : vformat("\tc = over(c, layer_%d);\n", j);
 	}
 	return vformat(R"(
 shader_type canvas_item;
@@ -226,7 +259,6 @@ vec4 over(vec4 top, vec4 bottom) {
 }
 
 void fragment() {
-	vec4 c = straight(texture(group, SCREEN_UV));
 %s	COLOR = c;
 }
 )",

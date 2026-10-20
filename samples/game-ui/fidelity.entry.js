@@ -80,6 +80,11 @@ function EffectsGallery() {
         <View style={{...photo, width: 72, height: 72}} />
       </View>
     </View>
+    <View style={{...photo, opacity: 0.5, filter: [{hueRotate: '180deg'}]}} />
+    <View style={{width: 56, height: 56, backgroundColor: '#30638e', filter: [{saturate: 2}]}}>
+      <View style={{margin: 8, width: 40, height: 40, backgroundColor: '#edae49', mixBlendMode: 'difference'}} />
+    </View>
+    <View style={{width: 40, height: 40, backgroundColor: '#00798c', filter: [{dropShadow: '4px 4px 0px #d1495b'}, {blur: 2}]}} />
   </Screen>;
 }
 
