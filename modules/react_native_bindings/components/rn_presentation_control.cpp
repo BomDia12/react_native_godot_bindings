@@ -148,8 +148,6 @@ void RNModalControl::_apply_request() {
 		present(requested_visible, requested_backdrop, get_presentation_size());
 	}
 }
-// Presenting reparents the overlay, which the parent forbids while it is
-// still adding this modal.
 void RNModalOverlay::_notification(int p_what) {
 	if (p_what == NOTIFICATION_ACCESSIBILITY_UPDATE) {
 		const RID element = get_accessibility_element();
@@ -159,6 +157,8 @@ void RNModalOverlay::_notification(int p_what) {
 	}
 }
 
+// Presenting reparents the overlay, which the parent forbids while it is
+// still adding this modal.
 void RNModalControl::_notification(int p_what) {
 	if (p_what == NOTIFICATION_ENTER_TREE && requested_visible) {
 		callable_mp(this, &RNModalControl::_apply_request).call_deferred();

@@ -130,16 +130,10 @@ void RNViewControl::_notification(int p_what) {
 			if (accessibility.clickable) {
 				server->update_add_action(element, AccessibilityServerEnums::ACTION_CLICK, callable_mp(this, &RNViewControl::_accessibility_activate));
 			}
-			const std::pair<bool, AccessibilityServerEnums::AccessibilityAction> named[] = {
-				{ accessibility.increment, AccessibilityServerEnums::ACTION_INCREMENT },
-				{ accessibility.decrement, AccessibilityServerEnums::ACTION_DECREMENT },
-				{ accessibility.expand, AccessibilityServerEnums::ACTION_EXPAND },
-				{ accessibility.collapse, AccessibilityServerEnums::ACTION_COLLAPSE },
-			};
-			const char *names[] = { "increment", "decrement", "expand", "collapse" };
-			for (int i = 0; i < 4; ++i) {
-				if (named[i].first) {
-					server->update_add_action(element, named[i].second, callable_mp(this, &RNViewControl::_accessibility_named).bind(String(names[i])));
+			for (const RNNamedAccessibilityAction &known : RN_NAMED_ACCESSIBILITY_ACTIONS) {
+				// Activation goes through the click action above.
+				if (known.action != AccessibilityServerEnums::ACTION_CLICK && accessibility.*known.listed) {
+					server->update_add_action(element, known.action, callable_mp(this, &RNViewControl::_accessibility_named).bind(String(known.name)));
 				}
 			}
 			for (int i = 0; i < accessibility.custom_names.size(); ++i) {

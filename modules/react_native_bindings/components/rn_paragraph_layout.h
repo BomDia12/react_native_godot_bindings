@@ -92,6 +92,9 @@ public:
 	// More lines than max_lines, or a line wider than the width.
 	bool is_truncated() const { return truncated; }
 	Vector2i get_elided_range() const { return elided; }
+	// An index into the attributed text as an index into the shaped text,
+	// which differs after a head or middle ellipsis.
+	int to_layout_index(int p_index) const { return _to_layout(p_index); }
 	// The caret position nearest to a point.
 	int hit_test(const Point2 &p_point) const;
 	// The character drawn under a point, or -1 when there is none.

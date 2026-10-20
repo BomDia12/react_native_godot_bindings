@@ -17,6 +17,13 @@ shader_type canvas_item;
 %s
 uniform sampler2D backdrop : hint_screen_texture, repeat_disable, filter_nearest;
 uniform int mode = 0;
+varying vec4 rn_modulate;
+
+// Transparent viewports, including the backdrop inside another host, hold
+// premultiplied color.
+vec4 straight(vec4 c) {
+	return c.a > 0.0001 ? vec4(c.rgb / c.a, c.a) : vec4(0.0);
+}
 
 float lum(vec3 c) {
 	return dot(c, vec3(0.3, 0.59, 0.11));
@@ -78,27 +85,33 @@ vec3 blend(vec3 b, vec3 s) {
 }
 
 void vertex() {
+	rn_modulate = COLOR;
 	%s
 }
 
 void fragment() {
-	vec4 source = COLOR.a > 0.0001 ? vec4(COLOR.rgb / COLOR.a, COLOR.a) : vec4(0.0);
-	vec4 below = texture(backdrop, SCREEN_UV);
+	vec4 source = straight(texture(TEXTURE, UV)) * rn_modulate;
+	vec4 below = straight(texture(backdrop, SCREEN_UV));
 	vec3 mixed = (1.0 - below.a) * source.rgb + below.a * clamp(blend(below.rgb, source.rgb), 0.0, 1.0);
 	COLOR = vec4(mixed, source.a * rn_clip_coverage());
 }
 )";
 
-// The viewport texture holds premultiplied color.
+// The viewport texture holds premultiplied color. The inherited modulate, such
+// as the view's opacity, applies to the straight color.
 constexpr const char *COMPOSITE_SHADER = R"(
 shader_type canvas_item;
 render_mode %s;
 %s
+varying vec4 rn_modulate;
 void vertex() {
+	rn_modulate = COLOR;
 	%s
 }
 void fragment() {
-	COLOR = vec4(COLOR.a > 0.0001 ? COLOR.rgb / COLOR.a : vec3(0.0), COLOR.a * rn_clip_coverage());
+	vec4 texel = texture(TEXTURE, UV);
+	COLOR = vec4(texel.a > 0.0001 ? texel.rgb / texel.a : vec3(0.0), texel.a) * rn_modulate;
+	COLOR.a *= rn_clip_coverage();
 }
 )";
 
@@ -118,6 +131,8 @@ RNEffectHost::RNEffectHost() {
 	viewport->add_child(content);
 	painter = memnew(RNViewControl);
 	content->add_child(painter);
+	filtered_material.instantiate();
+	filtered_material->set_shader(rn_cached_shader(vformat(COMPOSITE_SHADER, "blend_mix", rn_clip_shader_code(), RN_CLIP_VERTEX)));
 	filter_material.instantiate();
 	blend_material.instantiate();
 	_update_blend();
@@ -130,9 +145,15 @@ void RNEffectHost::configure(const Size2 &p_size, real_t p_margin, const ::Vecto
 	set_size(p_size + Vector2(margin, margin) * 2);
 	content->set_position(Vector2(margin, margin));
 	content->set_size(p_size);
+	stages = p_stages;
+	_use_filtered_viewport(!stages.is_empty());
+	if (filtered) {
+		filtered->set_position(-Vector2(margin, margin));
+		filtered->set_size(p_size + Vector2(margin, margin) * 2);
+		painter->set_position(Vector2(margin, margin));
+	}
 	painter->set_size(p_size);
 
-	stages = p_stages;
 	const RID group = content->get_canvas_item();
 	if (stages.is_empty()) {
 		RS::get_singleton()->canvas_item_set_canvas_group_mode(group, RSE::CANVAS_GROUP_MODE_DISABLED);
@@ -152,6 +173,32 @@ void RNEffectHost::configure(const Size2 &p_size, real_t p_margin, const ::Vecto
 		_update_blend();
 	}
 	_update_clip();
+}
+
+void RNEffectHost::_use_filtered_viewport(bool p_filtered) {
+	if (p_filtered == (filtered != nullptr)) {
+		return;
+	}
+	painter->get_parent()->remove_child(painter);
+	if (p_filtered) {
+		filtered = memnew(SubViewportContainer);
+		filtered->set_stretch(true);
+		filtered->set_mouse_filter(MOUSE_FILTER_PASS);
+		filtered->set_material(filtered_material);
+		filtered_viewport = memnew(SubViewport);
+		filtered_viewport->set_transparent_background(true);
+		filtered_viewport->set_disable_3d(true);
+		filtered->add_child(filtered_viewport);
+		filtered_viewport->add_child(painter);
+		content->add_child(filtered);
+	} else {
+		content->remove_child(filtered);
+		memdelete(filtered);
+		filtered = nullptr;
+		filtered_viewport = nullptr;
+		painter->set_position(Point2());
+		content->add_child(painter);
+	}
 }
 
 void RNEffectHost::_update_blend() {
@@ -204,8 +251,13 @@ void RNEffectHost::_enter_focus() {
 		}
 		return;
 	}
+	_restore_focus_paths();
 	Control *first = _focusable(false);
 	Control *last = _focusable(true);
+	focus_first = first->get_instance_id();
+	focus_last = last->get_instance_id();
+	saved_previous = first->get_focus_previous();
+	saved_next = last->get_focus_next();
 	if (Control *previous = find_prev_valid_focus(); previous && previous != this) {
 		first->set_focus_previous(first->get_path_to(previous));
 	}
@@ -215,10 +267,26 @@ void RNEffectHost::_enter_focus() {
 	target->grab_focus();
 }
 
+// Children change between entries, so the paths last set out of the host are
+// put back before new ones are chosen.
+void RNEffectHost::_restore_focus_paths() {
+	if (Control *first = Object::cast_to<Control>(ObjectDB::get_instance(focus_first))) {
+		first->set_focus_previous(saved_previous);
+	}
+	if (Control *last = Object::cast_to<Control>(ObjectDB::get_instance(focus_last))) {
+		last->set_focus_next(saved_next);
+	}
+	focus_first = ObjectID();
+	focus_last = ObjectID();
+}
+
 void RNEffectHost::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_FOCUS_ENTER: {
 			_enter_focus();
+		} break;
+		case NOTIFICATION_PREDELETE: {
+			_restore_focus_paths();
 		} break;
 		case NOTIFICATION_ENTER_TREE:
 		case NOTIFICATION_TRANSFORM_CHANGED:

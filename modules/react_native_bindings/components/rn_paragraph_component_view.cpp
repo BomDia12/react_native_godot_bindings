@@ -24,6 +24,8 @@ void RNParagraphComponentView::_apply_box() {
 }
 
 void RNParagraphComponentView::update_layout(const LayoutMetrics &p_metrics) {
+	const EdgeInsets &insets = p_metrics.contentInsets;
+	text->set_content_insets(insets.left, insets.top, insets.right, insets.bottom);
 	RNComponentView::update_layout(p_metrics);
 	_apply_box();
 }
@@ -53,7 +55,7 @@ void RNParagraphComponentView::update_state(const State::Shared &p_state) {
 }
 
 RNTouchTarget RNParagraphComponentView::touch_target_at(const Point2 &p_local) const {
-	const int character = text->get_layout().character_at(p_local);
+	const int character = text->get_layout().character_at(text->to_content(p_local));
 	if (character < 0) {
 		return RNComponentView::touch_target_at(p_local);
 	}

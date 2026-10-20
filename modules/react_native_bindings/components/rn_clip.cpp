@@ -4,6 +4,7 @@
 #include "rn_shader_cache.h"
 
 #include "scene/main/viewport.h"
+#include "servers/rendering/rendering_server.h"
 
 namespace {
 
@@ -155,6 +156,7 @@ void RNClipControl::set_shape(const RNRoundedRect &p_shape) {
 	set_material(shape.has_radius() ? Ref<Material>(clip_material) : Ref<Material>());
 	rn_inherit_clip(this);
 	_update_uniforms();
+	queue_redraw();
 	propagate_notification(RN_NOTIFICATION_CLIP_CHANGED);
 }
 
@@ -170,6 +172,14 @@ void RNClipControl::_update_uniforms() {
 
 void RNClipControl::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_DRAW: {
+			// Rectangle clipping uses the canvas item's rectangle, which Control
+			// sets to the whole host as it draws, so square clips narrow it to
+			// the padding box that rounded clips use.
+			if (!shape.has_radius()) {
+				RS::get_singleton()->canvas_item_set_custom_rect(get_canvas_item(), true, shape.rect);
+			}
+		} break;
 		case NOTIFICATION_ENTER_TREE:
 		case NOTIFICATION_TRANSFORM_CHANGED:
 		case RN_NOTIFICATION_CLIP_CHANGED: {

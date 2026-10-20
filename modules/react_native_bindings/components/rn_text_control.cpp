@@ -1,5 +1,7 @@
 #include "rn_text_control.h"
 
+#include "rn_view_control.h"
+
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "servers/display/accessibility_server.h"
@@ -42,10 +44,10 @@ void RNTextControl::_notification(int p_what) {
 			if (selection_to > selection_from) {
 				const Color color = has_selection_color ? selection_color : get_theme_color(SNAME("selection_color"), SNAME("RichTextLabel"));
 				for (const Rect2 &rect : layout.get_range_rects(selection_from, selection_to)) {
-					draw_rect(rect, color);
+					draw_rect(Rect2(rect.position + content_origin, rect.size), color);
 				}
 			}
-			layout.draw(get_canvas_item(), Point2());
+			layout.draw(get_canvas_item(), content_origin);
 		} break;
 		case NOTIFICATION_FOCUS_EXIT: {
 			set_selection_range(-1, -1);
@@ -71,21 +73,26 @@ void RNTextControl::_notification(int p_what) {
 				}
 			}
 			for (int i = 0; i < accessibility_runs.size(); ++i) {
-				server->update_set_transform(accessibility_runs[i], Transform2D(0, lines[i].bounds.position));
+				server->update_set_transform(accessibility_runs[i], Transform2D(0, lines[i].bounds.position + content_origin));
 			}
 			if (selection_to > selection_from && !accessibility_runs.is_empty()) {
-				auto locate = [&lines](int p_index, int &r_line) {
-					r_line = 0;
-					while (r_line + 1 < lines.size() && p_index >= lines[r_line].range.y) {
-						++r_line;
+				// Lines are substrings of the paragraph's shaped text, so their runs
+				// take indices into the whole shaped text.
+				auto run_at = [&lines, this](int p_index) {
+					int line = 0;
+					for (int i = 0; i < lines.size(); ++i) {
+						if (lines[i].range.x < lines[i].range.y && lines[i].range.x <= p_index && p_index <= lines[i].range.y) {
+							line = i;
+							if (p_index < lines[i].range.y) {
+								break;
+							}
+						}
 					}
-					return p_index - lines[r_line].range.x;
+					return accessibility_runs[line];
 				};
-				int from_line;
-				int to_line;
-				const int from = locate(selection_from, from_line);
-				const int to = locate(selection_to, to_line);
-				server->update_set_text_selection(element, accessibility_runs[from_line], from, accessibility_runs[to_line], to);
+				const int from = layout.to_layout_index(selection_from);
+				const int to = layout.to_layout_index(selection_to);
+				server->update_set_text_selection(element, run_at(from), from, run_at(to), to);
 			}
 		} break;
 	}
@@ -101,13 +108,15 @@ void RNTextControl::gui_input(const Ref<InputEvent> &p_event) {
 		if (!button->is_pressed()) {
 			return;
 		}
-		const int position = layout.hit_test(button->get_position());
+		const int position = layout.hit_test(to_content(button->get_position()));
 		const uint64_t now = OS::get_singleton()->get_ticks_msec();
 		if (button->is_double_click()) {
 			last_double_click_msec = now;
 			_select_word(position);
 		} else if (now - last_double_click_msec < 400) {
-			set_selection_range(0, text.length());
+			last_double_click_msec = 0;
+			selecting = false;
+			_select_paragraph(position);
 		} else if (button->is_shift_pressed() && selection_anchor >= 0) {
 			set_selection_range(MIN(selection_anchor, position), MAX(selection_anchor, position));
 		} else {
@@ -118,7 +127,7 @@ void RNTextControl::gui_input(const Ref<InputEvent> &p_event) {
 	}
 	Ref<InputEventMouseMotion> motion = p_event;
 	if (motion.is_valid() && selecting) {
-		const int position = layout.hit_test(motion->get_position());
+		const int position = layout.hit_test(to_content(motion->get_position()));
 		set_selection_range(MIN(selection_anchor, position), MAX(selection_anchor, position));
 		return;
 	}
@@ -157,10 +166,35 @@ void RNTextControl::set_accessibility_role(AccessibilityServerEnums::Accessibili
 	queue_accessibility_update();
 }
 
+// The text between the line breaks around a character.
+void RNTextControl::_select_paragraph(int p_character) {
+	const int start = p_character > 0 ? text.rfind("\n", p_character - 1) + 1 : 0;
+	const int end = text.find("\n", p_character);
+	selection_anchor = start;
+	set_selection_range(start, end < 0 ? text.length() : end);
+}
+
+void RNTextControl::set_content_insets(real_t p_left, real_t p_top, real_t p_right, real_t p_bottom) {
+	const Point2 origin(p_left, p_top);
+	const Size2 inset(p_left + p_right, p_top + p_bottom);
+	if (origin == content_origin && inset == content_inset) {
+		return;
+	}
+	content_origin = origin;
+	content_inset = inset;
+	_shape();
+}
+
 void RNTextControl::_shape() {
 	_free_accessibility_runs();
+	// Accessible groups are named by the text inside them.
+	for (Node *node = get_parent(); node; node = node->get_parent()) {
+		if (RNViewControl *view = Object::cast_to<RNViewControl>(node); view && view->is_accessibility_grouped()) {
+			view->queue_accessibility_update();
+		}
+	}
 	if (shape_function) {
-		shape_function(get_size(), layout);
+		shape_function((get_size() - content_inset).maxf(0), layout);
 	}
 	queue_redraw();
 	queue_accessibility_update();
