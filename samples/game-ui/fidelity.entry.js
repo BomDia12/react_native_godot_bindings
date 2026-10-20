@@ -80,6 +80,11 @@ function EffectsGallery() {
         <View style={{...photo, width: 72, height: 72}} />
       </View>
     </View>
+    <View style={{...photo, opacity: 0.5, filter: [{hueRotate: '180deg'}]}} />
+    <View style={{width: 56, height: 56, backgroundColor: '#30638e', filter: [{saturate: 2}]}}>
+      <View style={{margin: 8, width: 40, height: 40, backgroundColor: '#edae49', mixBlendMode: 'difference'}} />
+    </View>
+    <View style={{width: 40, height: 40, backgroundColor: '#00798c', filter: [{dropShadow: '4px 4px 0px #d1495b'}, {blur: 2}]}} />
   </Screen>;
 }
 
@@ -95,7 +100,7 @@ function RTLGallery() {
       <View style={{position: 'absolute', left: 120, top: 8, width: 56, height: 56, backgroundColor: '#30638e'}} />
     </View>
     <Text style={{width: 456, color: ink, fontSize: 14}}>Natural alignment follows the layout</Text>
-    <Text style={{width: 456, color: ink, fontSize: 14, textAlign: 'left'}}>Left stays left</Text>
+    <Text style={{width: 456, color: ink, fontSize: 14, textAlign: 'left'}}>Left swaps to the right</Text>
     <Text style={{width: 456, color: ink, fontSize: 14, fontFamily: hebrew}}>שלום עולם</Text>
     <Text style={{width: 456, color: ink, fontSize: 14, fontFamily: arabic}}>مرحبا بالعالم</Text>
   </Screen>;
@@ -115,6 +120,7 @@ function TextGallery() {
       <Text style={line}><Text style={{textTransform: 'uppercase'}}>upper</Text> <Text style={{textTransform: 'capitalize'}}>capital letters</Text> <Text style={{textTransform: 'lowercase'}}>LOWER</Text></Text>
       <Text style={{...line, fontVariant: ['tabular-nums']}}>1111 | 8888</Text>
       <Text style={{...line, lineHeight: 28, backgroundColor: '#ffffff'}}>Line height 28{'\n'}second line</Text>
+      <Text style={{...line, borderWidth: 2, borderColor: '#d1495b', padding: 4}}>Bordered and padded</Text>
       <Text style={line}>Mixed <Text style={{fontFamily: hebrew}}>שלום עולם</Text> and <Text style={{fontFamily: arabic}}>مرحبا</Text></Text>
     </View>
     <View style={{width: 220, gap: 6}}>

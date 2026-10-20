@@ -38,7 +38,7 @@ AttributedString attributed(const std::string &p_text, const std::function<void(
 
 const Size2 UNBOUNDED(std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
 
-TEST_CASE("[ReactNativeBindings][Text][SceneTree] natural, start and end alignment follow the layout direction") {
+TEST_CASE("[ReactNativeBindings][Text][SceneTree] natural, start, end, left and right alignment follow the layout direction") {
 	Shaper shaper;
 	RNParagraphLayout layout;
 	shaper.shaper.shape(attributed("aligned", [](TextAttributes &p_attributes) { p_attributes.layoutDirection = LayoutDirection::RightToLeft; }), ParagraphAttributes(), Size2(300, 100), layout);
@@ -52,7 +52,8 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] natural, start and end alignme
 		p_attributes.alignment = TextAlignment::Left;
 	}),
 			ParagraphAttributes(), Size2(300, 100), layout);
-	CHECK(layout.get_lines()[0].bounds.position.x == 0);
+	// Left and right swap in right-to-left layouts, as upstream does.
+	CHECK(layout.get_lines()[0].bounds.get_end().x == doctest::Approx(300));
 }
 
 TEST_CASE("[ReactNativeBindings][Text][SceneTree] text transforms keep character indices") {
@@ -130,10 +131,15 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] weight, style and features app
 	REQUIRE(styled->get_fallbacks().size() == 1);
 	const Ref<FontVariation> fallback = styled->get_fallbacks()[0];
 	REQUIRE(fallback.is_valid());
-	CHECK(int(Dictionary(fallback->get_variation_opentype())["wght"]) == 700);
+	CHECK(int(Dictionary(fallback->get_variation_opentype())[TS->name_to_tag("wght")]) == 700);
 	CHECK(fallback->get_variation_transform() != Transform2D());
 	CHECK(fallback->get_opentype_features().has(TS->name_to_tag("tnum")));
 	CHECK(rn_font_variation(base, RNFontStyle()) == base);
+	// A variable font is pinned to the regular weight even with the default style.
+	const Ref<Font> variable = rn_test_font("NotoSansHebrew.ttf");
+	const Ref<FontVariation> regular = rn_font_variation(variable, RNFontStyle());
+	REQUIRE(regular.is_valid());
+	CHECK(int(Dictionary(regular->get_variation_opentype())[TS->name_to_tag("wght")]) == 400);
 }
 
 } // namespace TestRNText

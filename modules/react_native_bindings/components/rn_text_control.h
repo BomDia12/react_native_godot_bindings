@@ -26,6 +26,9 @@ class RNTextControl : public Control {
 	// One text run per shaped line, for screen-reader selection.
 	Vector<RID> accessibility_runs;
 	void _free_accessibility_runs();
+	// Padding and border; the paragraph lays out in the content box inside them.
+	Point2 content_origin;
+	Size2 content_inset;
 	int selection_from = -1;
 	int selection_to = -1;
 	int selection_anchor = -1;
@@ -33,6 +36,7 @@ class RNTextControl : public Control {
 	uint64_t last_double_click_msec = 0;
 	void _shape();
 	void _select_word(int p_character);
+	void _select_paragraph(int p_character);
 
 protected:
 	static void _bind_methods();
@@ -51,6 +55,9 @@ public:
 	// The Text view's own background, borders and outline, drawn under the text.
 	void set_box(const Ref<StyleBox> &p_box);
 	void set_accessibility_role(AccessibilityServerEnums::AccessibilityRole p_role, const String &p_description = String());
+	void set_content_insets(real_t p_left, real_t p_top, real_t p_right, real_t p_bottom);
+	// A point in this control's coordinates, in the paragraph's.
+	Point2 to_content(const Point2 &p_local) const { return p_local - content_origin; }
 	void set_accessibility_alignment(HorizontalAlignment p_alignment) { accessibility_alignment = p_alignment; }
 	const RNParagraphLayout &get_layout() const { return layout; }
 	bool is_selectable() const;

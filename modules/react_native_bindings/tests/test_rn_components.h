@@ -13,6 +13,7 @@
 #include "core/input/input.h"
 #include "core/object/message_queue.h"
 #include "scene/main/scene_tree.h"
+#include "scene/theme/theme_db.h"
 #include "tests/test_macros.h"
 
 namespace TestRNComponents {
@@ -189,6 +190,45 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] text sized before insertion sh
 	CHECK(shaped_width == 0);
 	SceneTree::get_singleton()->get_root()->add_child(text);
 	CHECK(shaped_width == 380);
+	memdelete(text);
+}
+TEST_CASE("[ReactNativeBindings][Text][SceneTree] text lays out in its content box") {
+	auto *text = memnew(RNTextControl);
+	Size2 shaped;
+	text->set_content("padded", [&shaped](const Size2 &p_size, RNParagraphLayout &) { shaped = p_size; }, false);
+	SceneTree::get_singleton()->get_root()->add_child(text);
+	text->set_size(Size2(100, 40));
+	text->set_content_insets(4, 6, 8, 10);
+	CHECK(shaped == Size2(88, 24));
+	CHECK(text->to_content(Point2(4, 6)) == Point2());
+	memdelete(text);
+}
+TEST_CASE("[ReactNativeBindings][Text][SceneTree] a triple click selects the paragraph under the pointer") {
+	auto *text = memnew(RNTextControl);
+	text->set_content("first line\nsecond line", [](const Size2 &, RNParagraphLayout &r_layout) {
+		RNParagraphLayout::Fragment fragment;
+		fragment.text = "first line\nsecond line";
+		fragment.font = ThemeDB::get_singleton()->get_fallback_font();
+		r_layout.shape({ fragment }, RNParagraphLayout::Attributes()); }, true);
+	SceneTree::get_singleton()->get_root()->add_child(text);
+	text->set_size(Size2(400, 60));
+	const Point2 second(4, text->get_layout().get_lines()[1].baseline);
+	for (bool double_click : { false, true, false }) {
+		Ref<InputEventMouseButton> press;
+		press.instantiate();
+		press->set_button_index(MouseButton::LEFT);
+		press->set_pressed(true);
+		press->set_double_click(double_click);
+		press->set_position(second);
+		static_cast<Control *>(text)->gui_input(press);
+	}
+	CHECK(text->get_selection_from() == 11);
+	CHECK(text->get_selection_to() == 22);
+	Ref<InputEventMouseMotion> motion;
+	motion.instantiate();
+	motion->set_position(Point2(0, 0));
+	static_cast<Control *>(text)->gui_input(motion);
+	CHECK(text->get_selection_from() == 11);
 	memdelete(text);
 }
 TEST_CASE("[ReactNativeBindings][TextInput][SceneTree] stale deferred editor signals for JS-applied values are ignored") {

@@ -144,6 +144,17 @@ TEST_CASE("[ReactNativeBindings][Style] filter color functions fold into one mat
 	CHECK(rn_filter_shader(stages) != rn_filter_shader(rn_filter_stages({ blur })));
 }
 
+TEST_CASE("[ReactNativeBindings][Style] stages after a drop shadow filter the shadow too") {
+	FilterFunction shadow{ .type = FilterType::DropShadow, .parameters = DropShadowParams{ .offsetX = 2, .offsetY = 2, .standardDeviation = 1, .color = colorFromComponents({ .red = 0, .green = 0, .blue = 0, .alpha = 1 }) } };
+	FilterFunction blur{ .type = FilterType::Blur, .parameters = Float(3) };
+	const String twice = rn_filter_shader(rn_filter_stages({ shadow, blur }));
+	// The shadow is a second layer, and the later blur widens both layers.
+	CHECK(twice.contains("vec4 layer_1 = blurred(SCREEN_UV - (vec2(0.0) + stage_shift_0) * SCREEN_PIXEL_SIZE, sqrt(0.0 + stage_radius_0 * stage_radius_0 + stage_radius_1 * stage_radius_1)"));
+	CHECK(twice.contains("vec4 layer_0 = blurred(SCREEN_UV - (vec2(0.0)) * SCREEN_PIXEL_SIZE, sqrt(0.0 + stage_radius_1 * stage_radius_1)"));
+	// A second drop shadow also shadows the first one.
+	CHECK(rn_filter_shader(rn_filter_stages({ shadow, shadow })).contains("layer_3"));
+}
+
 TEST_CASE("[ReactNativeBindings][Style][SceneTree] rounded clip hosts stack and square ones clip by rectangle") {
 	Control *parent = memnew(Control);
 	SceneTree::get_singleton()->get_root()->add_child(parent);
