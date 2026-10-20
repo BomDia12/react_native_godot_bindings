@@ -1,4 +1,3 @@
-#include "../host/rn_feature_flags.h"
 #include "../host/rn_host_teardown.h"
 #include "../host/rn_main_thread_queue.h"
 #include "../native_modules/rn_blob_service.h"
@@ -51,9 +50,6 @@ public:
 };
 
 TEST_CASE("[ReactNativeBindings][ReactHost] upstream ReactHost evaluates a script on its JS thread") {
-	// Without the bridgeless flag upstream picks a runtime scheduler that only
-	// accepts tasks from the JavaScript thread.
-	rn_install_feature_flags();
 	const String script_path = "user://rn_react_host_test.js";
 	write_script(script_path, "globalThis.__answer = 6 * 7;");
 
@@ -102,7 +98,6 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 			"nativeModuleProxy.DevSettings.openDebugger();"
 			"globalThis.__sourceMatches = nativeModuleProxy.SourceCode.getConstants().scriptURL === 'http://localhost:8081/index.bundle?platform=godot' ? 1 : 0;"
 			"globalThis.__reloadRequested = 1;");
-	rn_install_feature_flags();
 	write_script(script_path, source);
 
 	auto main_thread = std::make_shared<RNMainThreadQueue>();
@@ -152,7 +147,6 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 }
 
 void start_runtime(RNHostRuntime &r_runtime, const String &p_script_path, const String &p_source) {
-	rn_install_feature_flags();
 	write_script(p_script_path, p_source);
 
 	auto context = std::make_shared<react::ContextContainer>();
