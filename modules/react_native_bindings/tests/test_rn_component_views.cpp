@@ -287,6 +287,7 @@ TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] effect hosts render 
 	CHECK(Object::cast_to<RNViewControl>(component->get_control())->get_style()->get_paint().background.a == 0);
 	CHECK(host->get_painter()->get_style()->get_paint().background.is_equal_approx(::Color(1, 0, 0)));
 
+	child_control->set_focus_next(NodePath("authored"));
 	host->grab_focus();
 	CHECK(host->get_effect_viewport()->gui_get_focus_owner() == child_control);
 	CHECK_FALSE(host->has_focus());
@@ -295,6 +296,8 @@ TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] effect hosts render 
 	surface.registry->apply({ ShadowViewMutation::UpdateMutation(parent, with_props(parent, [](ViewProps &p_props) { p_props.filter = {}; }), 0) });
 	CHECK_FALSE(component->get_effect_host());
 	CHECK(child_control->get_parent() == component->get_control());
+	// Tearing the host down gives back the focus path it replaced.
+	CHECK(child_control->get_focus_next() == NodePath("authored"));
 }
 
 TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] cursors inherit from the nearest React ancestor") {

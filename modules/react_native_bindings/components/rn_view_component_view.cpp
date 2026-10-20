@@ -104,7 +104,8 @@ void RNViewComponentView::_apply_style() {
 	view->set_paint(paint, !effect);
 	const Size2 size = paint.border_box.rect.size;
 	if (effect) {
-		effect->configure(size, MAX(paint.extent(), rn_filter_extent(stages)), stages, props->mixBlendMode);
+		// Filters spread the painted box, shadows and outline included, so their reaches add up.
+		effect->configure(size, paint.extent() + rn_filter_extent(stages), stages, props->mixBlendMode);
 		effect->get_painter()->set_paint(paint);
 	}
 	if (clip) {
