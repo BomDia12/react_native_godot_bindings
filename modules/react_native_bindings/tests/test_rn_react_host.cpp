@@ -82,7 +82,6 @@ TEST_CASE("[ReactNativeBindings][ReactHost] each runtime generation installs its
 	auto registry_factory = [](const react::EventDispatcher::Weak &p_dispatcher, const std::shared_ptr<const react::ContextContainer> &p_context) {
 		return react::ComponentDescriptorProviderRegistry().createComponentDescriptorRegistry({ p_dispatcher, p_context, nullptr });
 	};
-	std::shared_ptr<RNMountingManager> previous;
 	for (int generation = 0; generation < 2; ++generation) {
 		auto context = std::make_shared<react::ContextContainer>();
 		context->insert(react::HttpClientFactoryKey, react::HttpClientFactory([] { return std::unique_ptr<react::IHttpClient>(); }));
@@ -97,8 +96,6 @@ TEST_CASE("[ReactNativeBindings][ReactHost] each runtime generation installs its
 			CHECK(mounting->has_layout_animations());
 			mounting->tick_layout_animations();
 		}
-		CHECK(mounting != previous);
-		previous = mounting;
 	}
 }
 

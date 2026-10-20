@@ -169,6 +169,7 @@ function AnimationProbe() {
   const scroll = useRef(new Animated.Value(0)).current;
   const decaying = useRef(new Animated.Value(0)).current;
   const probe = global.__animation ??= {layout: [], results: {}, scrolled: 0};
+  probe.scrollValue = () => scroll.__getValue();
   const run = (name, animation) => new Promise(resolve => animation.start(result => {
     probe.results[name] = {finished: result.finished};
     resolve();
@@ -242,9 +243,10 @@ function AnimationProbe() {
       {boxes.map(box => <View key={box} testID={'layout-' + box} style={{width: wide ? 120 : 40, height: 40, margin: 4, backgroundColor: '#edae49'}} />)}
     </View>
     <Animated.View testID="js-driven" style={[animatedStyle(jsValue), {backgroundColor: jsValue.interpolate({inputRange: [0, 1], outputRange: ['#ff0000', '#0000ff']})}]} />
-    <Animated.View testID="native-driven" style={[animatedStyle(nativeValue), {backgroundColor: '#00ff00'}]} />
+    <Animated.View testID="native-driven" style={[animatedStyle(nativeValue), {backgroundColor: nativeValue.interpolate({inputRange: [0, 1], outputRange: ['#ff0000', '#0000ff']})}]} />
     <Animated.View testID="native-decay" style={{width: 20, height: 20, backgroundColor: '#d1495b', transform: [{translateX: decaying}]}} />
     <Animated.Text testID="js-text" style={{color: jsValue.interpolate({inputRange: [0, 1], outputRange: ['#ff0000', '#0000ff']})}}>Animated text</Animated.Text>
+    <Animated.Text testID="native-text" style={{color: nativeValue.interpolate({inputRange: [0, 1], outputRange: ['#ff0000', '#0000ff']})}}>Native text</Animated.Text>
     <Animated.ScrollView testID="animated-scroll" style={{height: 60}} scrollEventThrottle={16}
       onScroll={Animated.event([{nativeEvent: {contentOffset: {y: scroll}}}], {useNativeDriver: false, listener: event => { probe.scrolled = event.nativeEvent.contentOffset.y; }})}>
       <View style={{height: 400, backgroundColor: '#30638e'}} />

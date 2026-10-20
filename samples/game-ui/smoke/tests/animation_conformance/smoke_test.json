@@ -33,6 +33,7 @@
     "samples/game-ui/smoke/tests/animation_conformance/SmokeMain.tscn",
     "samples/game-ui/game/network.js",
     "samples/game-ui/assets/NotoSansArabic.ttf",
-    "samples/game-ui/assets/LICENSE.NotoSansArabic.txt"
+    "samples/game-ui/assets/LICENSE.NotoSansArabic.txt",
+    "samples/game-ui/smoke/animation_probe.gd"
   ]
 }

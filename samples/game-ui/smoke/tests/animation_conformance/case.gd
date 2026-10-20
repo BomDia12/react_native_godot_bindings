@@ -31,6 +31,7 @@ func run() -> void:
 	var native := target("native-driven", probe)
 	var driven := target("js-driven", probe)
 	var text := target("js-text", probe) as RNTextControl
+	var native_text := target("native-text", probe) as RNTextControl
 	var samples: Array[Vector2] = []
 	var start := Time.get_ticks_msec()
 	await js("__animation.drivers()")
@@ -42,6 +43,7 @@ func run() -> void:
 	# Linear timing changes opacity by 0.5 over 400 ms; frames between the first and last
 	# change must fit that slope within a frame either side.
 	var moving := samples.filter(func(sample): return sample.y < 0.999 and sample.y > 0.501)
+	check(moving.size() >= 2, "Too few frames caught the native driver moving: %s" % [samples])
 	if moving.size() >= 2:
 		var slope: float = (moving[0].y - moving[-1].y) / maxf(1.0, moving[-1].x - moving[0].x)
 		check(absf(slope - 0.5 / 400.0) < 0.5 / 400.0 * 0.5, "The native driver moved at %s per ms instead of %s" % [slope, 0.5 / 400.0])
@@ -52,8 +54,10 @@ func run() -> void:
 	check(is_equal_approx(driven.modulate.a, 0.5) and is_equal_approx(translation(driven), 30), "The JS driver ended at %s, %s" % [driven.modulate.a, translation(driven)])
 	check(background(driven).is_equal_approx(Color(0, 0, 1)), "The JS driver's background ended at %s" % background(driven))
 	check(text.get_text_color().is_equal_approx(Color(0, 0, 1)), "Animated Text color ended at %s" % text.get_text_color())
+	check(background(native).is_equal_approx(Color(0, 0, 1)), "The native driver's background ended at %s" % background(native))
+	check(native_text.get_text_color().is_equal_approx(Color(0, 0, 1)), "Native-driven Text color ended at %s" % native_text.get_text_color())
 
 	var scroll := target("animated-scroll", probe) as ScrollContainer
 	scroll.scroll_vertical = 80
-	if not await wait_until(func(): return await js("__animation.scrolled") > 0, "Animated.event to receive the scroll offset"):
+	if not await wait_until(func(): return await js("__animation.scrollValue()") == scroll.scroll_vertical, "Animated.event to map the scroll offset into its value"):
 		return
