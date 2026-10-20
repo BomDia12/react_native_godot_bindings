@@ -39,7 +39,12 @@ TextMeasurement TextLayoutManager::measure(const AttributedStringBox &attributed
 LinesMeasurements TextLayoutManager::measureLines(const AttributedStringBox &attributedStringBox, const ParagraphAttributes &paragraphAttributes, const Size &size) const {
 	RNParagraphLayout layout;
 	shaper_->shape(attributedStringBox.getValue(), paragraphAttributes, available_size(size), layout);
-	const String text = String::utf8(attributedStringBox.getValue().getString().c_str());
+	// Line ranges index the shaped text, which differs from the attributed
+	// string where a head or middle ellipsis hides part of it.
+	String text;
+	for (const RNParagraphLayout::Fragment &fragment : layout.get_fragments()) {
+		text += fragment.text;
+	}
 	LinesMeasurements lines;
 	for (const RNParagraphLayout::Line &line : layout.get_lines()) {
 		const Rect2 bounds = line.bounds;

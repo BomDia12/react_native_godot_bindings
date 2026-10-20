@@ -196,11 +196,12 @@ menu, hands the release to the popup, so the root cancels that mouse pointer
 Text inherits the root's Godot RichTextLabel theme font, size and color. The Text host
 shapes, wraps and draws through TextServer itself, with per-span colors, decorations in
 their own color and style, shadows and line heights, over the Text view's own painted
-box. The tallest span line height sets each line box. `numberOfLines` trims the last
+box, inside the Text view's padding and borders. The tallest span line height sets each line box. `numberOfLines` trims the last
 visible line with a tail ellipsis; a single line can also take a head or middle ellipsis,
 cut at grapheme boundaries, and hit testing maps back across the hidden text.
 `adjustsFontSizeToFit` searches hundredths of the font scale down to `minimumFontScale`.
-Natural, start and end alignment follow the layout direction, and the base direction is
+Natural, start and end alignment follow the layout direction, `left` and `right` swap in
+right-to-left layouts as upstream does, and the base direction is
 `writingDirection` or content-derived. A font's weight, style, spacing and `fontVariant`
 features apply to its fallback fonts too. Register
 Font resources or res:// font paths under `react_native/text/font_aliases`; an alias

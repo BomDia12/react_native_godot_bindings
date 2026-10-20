@@ -36,15 +36,16 @@ float font_multiplier(const TextAttributes &p_attributes, float p_size) {
 }
 
 // Natural, start and end follow the layout direction, as I18nManager RTL
-// applications expect.
+// applications expect. Left and right swap in right-to-left layouts too, as
+// iOS's RCTResolveTextAlignment and Android's text layout do.
 HorizontalAlignment horizontal_alignment(std::optional<TextAlignment> p_alignment, bool p_rtl_layout) {
 	switch (p_alignment.value_or(TextAlignment::Natural)) {
 		case TextAlignment::Center:
 			return HORIZONTAL_ALIGNMENT_CENTER;
 		case TextAlignment::Left:
-			return HORIZONTAL_ALIGNMENT_LEFT;
+			return p_rtl_layout ? HORIZONTAL_ALIGNMENT_RIGHT : HORIZONTAL_ALIGNMENT_LEFT;
 		case TextAlignment::Right:
-			return HORIZONTAL_ALIGNMENT_RIGHT;
+			return p_rtl_layout ? HORIZONTAL_ALIGNMENT_LEFT : HORIZONTAL_ALIGNMENT_RIGHT;
 		case TextAlignment::Justified:
 			return HORIZONTAL_ALIGNMENT_FILL;
 		case TextAlignment::End:

@@ -237,6 +237,8 @@ TEST_CASE("[ReactNativeBindings][ParagraphLayout][SceneTree] a trailing newline 
 	CHECK(empty.range == Vector2i(4, 4));
 	CHECK(empty.bounds.size.y == doctest::Approx(layout.get_lines()[0].bounds.size.y));
 	CHECK(layout.hit_test(Point2(0, empty.bounds.get_center().y)) == 4);
+	layout.shape(fragments({ "one\n" }), width(-1, 1));
+	CHECK(layout.get_lines().size() == 1);
 }
 
 } // namespace TestRNParagraphLayout

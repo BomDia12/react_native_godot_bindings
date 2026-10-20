@@ -238,7 +238,8 @@ void RNParagraphLayout::_shape(const Vector<Fragment> &p_fragments, const Attrib
 
 	// A trailing newline starts an empty last line, as in an editor.
 	const Fragment &last_fragment = fragments[fragments.size() - 1];
-	if (!limited && !lines.is_empty() && lines[lines.size() - 1].range.x < offset && last_fragment.text.ends_with("\n") && last_fragment.font.is_valid()) {
+	const bool room = p_attributes.max_lines <= 0 || lines.size() < p_attributes.max_lines;
+	if (!limited && room && !lines.is_empty() && lines[lines.size() - 1].range.x < offset && last_fragment.text.ends_with("\n") && last_fragment.font.is_valid()) {
 		add_line(Vector2i(offset, offset), TS->create_shaped_text(), last_fragment.line_height, last_fragment.font->get_ascent(last_fragment.font_size), last_fragment.font->get_descent(last_fragment.font_size));
 	}
 
