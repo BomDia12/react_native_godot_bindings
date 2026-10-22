@@ -108,6 +108,11 @@ void RNScrollControl::_notification(int p_what) {
 	if (p_what == NOTIFICATION_SORT_CHILDREN) {
 		get_h_scroll_bar()->set_page(usable_viewport().size.x);
 		get_v_scroll_bar()->set_page(usable_viewport().size.y);
+		// ScrollContainer sorts internal children too, so the indicators are
+		// placed back over the viewport after it has moved them with the content.
+		if (indicators) {
+			indicators->follow_scroll();
+		}
 		if (callbacks.geometry_changed) {
 			callbacks.geometry_changed();
 		}

@@ -140,6 +140,24 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] weight, style and features app
 	const Ref<FontVariation> regular = rn_font_variation(variable, RNFontStyle());
 	REQUIRE(regular.is_valid());
 	CHECK(int(Dictionary(regular->get_variation_opentype())[TS->name_to_tag("wght")]) == 400);
+
+	// An authored FontVariation keeps its own settings, and the style adds to them.
+	Ref<FontVariation> authored;
+	authored.instantiate();
+	authored->set_base_font(variable);
+	Dictionary semibold;
+	semibold[TS->name_to_tag("wght")] = 600;
+	authored->set_variation_opentype(semibold);
+	authored->set_variation_embolden(0.5);
+	CHECK(rn_font_variation(authored, RNFontStyle()) == authored);
+	RNFontStyle italic;
+	italic.italic = true;
+	const Ref<FontVariation> slanted = rn_font_variation(authored, italic);
+	REQUIRE(slanted.is_valid());
+	CHECK(int(Dictionary(slanted->get_variation_opentype())[TS->name_to_tag("wght")]) == 600);
+	CHECK(slanted->get_variation_embolden() == doctest::Approx(0.5));
+	CHECK(slanted->get_variation_transform() != Transform2D());
+	CHECK(int(Dictionary(Ref<FontVariation>(rn_font_variation(authored, style))->get_variation_opentype())[TS->name_to_tag("wght")]) == 700);
 }
 
 } // namespace TestRNText

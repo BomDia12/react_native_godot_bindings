@@ -31,6 +31,10 @@ struct RNFilterStage {
 	void then(const float p_next[4][5]);
 };
 
+// Each drop shadow doubles the layers the filter shader samples.
+constexpr int RN_MAX_DROP_SHADOWS = 3;
+
+// Drop shadows past RN_MAX_DROP_SHADOWS are left out.
 Vector<RNFilterStage> rn_filter_stages(const std::vector<facebook::react::FilterFunction> &p_filter);
 // How far filtered pixels reach outside the unfiltered ones.
 real_t rn_filter_extent(const Vector<RNFilterStage> &p_stages);
