@@ -5,6 +5,9 @@
 Ref<Font> rn_load_font_family(const String &p_family, Dictionary &r_variation);
 struct RNFontStyle {
 	int weight = 400;
+	// Text or its alias asked for a weight, which then replaces the one an
+	// authored FontVariation chose, even when it is regular.
+	bool weight_requested = false;
 	bool italic = false;
 	float letter_spacing = 0;
 	// OpenType feature tags, such as "smcp" or "tnum", turned on.

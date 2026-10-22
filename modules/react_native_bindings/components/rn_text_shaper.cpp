@@ -134,7 +134,8 @@ RNTextShaper::RNTextShaper(std::shared_ptr<const RNThemeMetricsStore> p_theme, s
 }
 
 Ref<Font> RNTextShaper::_font(const TextAttributes &p_attributes, const RNThemeMetrics &p_metrics) const {
-	const int weight = p_attributes.fontWeight ? int(*p_attributes.fontWeight) : 400;
+	// Zero keys text that asks for no weight apart from text that asks for regular.
+	const int weight = p_attributes.fontWeight ? int(*p_attributes.fontWeight) : 0;
 	const bool italic = p_attributes.fontStyle.value_or(FontStyle::Normal) != FontStyle::Normal;
 	const float spacing = std::isnan(p_attributes.letterSpacing) ? 0 : p_attributes.letterSpacing;
 	const int variant = int(p_attributes.fontVariant.value_or(FontVariant::Default));
@@ -163,6 +164,7 @@ Ref<Font> RNTextShaper::_font(const TextAttributes &p_attributes, const RNThemeM
 		const bool alias_italic = String(variation.get("style", "normal")) == "italic";
 		RNFontStyle style;
 		style.weight = p_attributes.fontWeight ? weight : alias_weight;
+		style.weight_requested = p_attributes.fontWeight.has_value() || variation.has("weight");
 		style.italic = p_attributes.fontStyle ? italic : alias_italic;
 		style.letter_spacing = spacing;
 		style.features = font_features(p_attributes.fontVariant);
