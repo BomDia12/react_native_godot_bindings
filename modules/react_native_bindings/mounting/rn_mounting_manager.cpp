@@ -2,12 +2,54 @@
 
 #include "../host/rn_main_thread_queue.h"
 
+#include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 #include <react/renderer/scheduler/Scheduler.h>
+#include <react/renderer/uimanager/UIManager.h>
 
 using namespace facebook::react;
 
 RNMountingManager::RNMountingManager(std::shared_ptr<RNMainThreadQueue> p_main_thread, std::shared_ptr<const RNComponentViewFactories> p_factories, ComponentRegistryFactory p_registry_factory, std::shared_ptr<IImageLoader> p_image_loader) :
-		main_thread(std::move(p_main_thread)), factories(std::move(p_factories)), registry_factory(std::move(p_registry_factory)), image_loader(std::move(p_image_loader)) {
+		main_thread(std::move(p_main_thread)), factories(std::move(p_factories)), image_loader(std::move(p_image_loader)) {
+	registry_factory = [this, inner = std::move(p_registry_factory)](const EventDispatcher::Weak &p_dispatcher, const std::shared_ptr<const ContextContainer> &p_context) {
+		component_registry = inner(p_dispatcher, p_context);
+		context_container = p_context;
+		return component_registry;
+	};
+}
+
+RNMountingManager::~RNMountingManager() {
+	if (auto manager = ui_manager.lock()) {
+		manager->setAnimationDelegate(nullptr);
+	}
+}
+
+void RNMountingManager::setUIManager(std::weak_ptr<UIManager> p_ui_manager) noexcept {
+	auto manager = p_ui_manager.lock();
+	if (!manager || !context_container) {
+		return;
+	}
+	auto runtime_scheduler = context_container->at<std::weak_ptr<RuntimeScheduler>>(RuntimeSchedulerKey);
+	RuntimeExecutor runtime_executor = [runtime_scheduler](RawCallback &&p_callback) {
+		if (auto scheduler = runtime_scheduler.lock()) {
+			scheduler->scheduleWork(std::move(p_callback));
+		}
+	};
+	layout_animations = std::make_shared<LayoutAnimationDriver>(runtime_executor, context_container, nullptr);
+	layout_animations->setComponentDescriptorRegistry(component_registry);
+	manager->setAnimationDelegate(layout_animations.get());
+	manager->addOnSurfaceStartCallback([weak = std::weak_ptr<const MountingOverrideDelegate>(layout_animations)](const ShadowTree &p_tree) {
+		p_tree.getMountingCoordinator()->setMountingOverrideDelegate(weak);
+	});
+	ui_manager = manager;
+}
+
+// The layout-animation half of UIManager::animationTick; native Animated runs
+// from its own frame callback.
+void RNMountingManager::tick_layout_animations() {
+	auto manager = ui_manager.lock();
+	if (manager && layout_animations && layout_animations->shouldAnimateFrame()) {
+		manager->getShadowTreeRegistry().enumerate([](const ShadowTree &p_tree, bool &) { p_tree.notifyDelegatesOfUpdates(); });
+	}
 }
 
 void RNMountingManager::register_surface(SurfaceId p_surface, const RNMountedSurface &p_mounted) {

@@ -1,5 +1,5 @@
 import React, {useState, useRef, useEffect} from 'react';
-import {AccessibilityInfo, Alert, AppRegistry, I18nManager, findNodeHandle, View, Text, Image, FlatList, SectionList, ScrollView, TextInput, Button, Pressable, Switch, ActivityIndicator, Modal, Appearance, useWindowDimensions} from 'react-native';
+import {AccessibilityInfo, Alert, Animated, AppRegistry, Easing, LayoutAnimation, I18nManager, findNodeHandle, View, Text, Image, FlatList, SectionList, ScrollView, TextInput, Button, Pressable, Switch, ActivityIndicator, Modal, Appearance, useWindowDimensions} from 'react-native';
 import {GodotAppRegistry, useGodotAlert} from 'react-native-godot/app-registry';
 import {useGodotScene, call, callAsync} from 'react-native-godot/scene';
 import GodotWindow from 'react-native-godot/GodotWindow';
@@ -159,6 +159,101 @@ function SceneProbe({rootTag}) {
   global.__probe = binding ? {ready: true, value: binding.value} : {ready: false};
   return <Text>{binding?.value.label ?? 'Waiting'}</Text>;
 }
+// Drives LayoutAnimation and Animated from the smoke tests, which read the
+// mounted Godot controls and the values recorded in global.__animation.
+function AnimationProbe() {
+  const [boxes, setBoxes] = useState(['first', 'second']);
+  const [wide, setWide] = useState(false);
+  const jsValue = useRef(new Animated.Value(0)).current;
+  const nativeValue = useRef(new Animated.Value(0)).current;
+  const scroll = useRef(new Animated.Value(0)).current;
+  const decaying = useRef(new Animated.Value(0)).current;
+  const probe = global.__animation ??= {layout: [], results: {}, scrolled: 0};
+  probe.scrollValue = () => scroll.__getValue();
+  const run = (name, animation) => new Promise(resolve => animation.start(result => {
+    probe.results[name] = {finished: result.finished};
+    resolve();
+  }));
+  const value = (start = 0) => new Animated.Value(start);
+  const read = animated => animated.__getValue();
+  useEffect(() => {
+    probe.layout = [];
+    probe.layoutStep = step => {
+      LayoutAnimation.configureNext({...LayoutAnimation.Presets.easeInEaseOut, duration: 600}, () => probe.layout.push(step));
+      if (step === 'update') { setWide(true); }
+      if (step === 'create') { setBoxes(current => [...current, 'third']); }
+      if (step === 'delete') { setBoxes(current => current.filter(box => box !== 'first')); }
+    };
+    probe.conformance = async () => {
+      const curves = {linear: Easing.linear, quad: Easing.quad, cubic: Easing.cubic, sin: Easing.sin, circle: Easing.circle, exp: Easing.exp, bounce: Easing.bounce, back: Easing.back(1.5), elastic: Easing.elastic(1), bezier: Easing.bezier(0.25, 0.1, 0.25, 1), inOut: Easing.inOut(Easing.quad), out: Easing.out(Easing.quad), poly: Easing.poly(3), step0: Easing.step0, step1: Easing.step1};
+      const ends = {};
+      for (const [name, easing] of Object.entries(curves)) {
+        const animated = value();
+        await run('timing-' + name, Animated.timing(animated, {toValue: 1, duration: 50, easing, useNativeDriver: false}));
+        ends['timing-' + name] = read(animated);
+      }
+      const tension = value();
+      await run('spring-tension', Animated.spring(tension, {toValue: 1, tension: 40, friction: 7, useNativeDriver: false}));
+      ends['spring-tension'] = read(tension);
+      const stiffness = value();
+      await run('spring-stiffness', Animated.spring(stiffness, {toValue: 1, stiffness: 200, damping: 20, mass: 1, useNativeDriver: false}));
+      ends['spring-stiffness'] = read(stiffness);
+      // Upstream's C++ requestAnimationFrame is setTimeout(0), so a JS-driven
+      // decay would end on its first frame; the native driver ticks per frame.
+      await run('decay', Animated.decay(decaying, {velocity: 0.5, deceleration: 0.995, useNativeDriver: true}));
+      const a = value(), b = value(), c = value();
+      await run('sequence', Animated.sequence([Animated.timing(a, {toValue: 1, duration: 30, useNativeDriver: false}), Animated.delay(30), Animated.timing(b, {toValue: 2, duration: 30, useNativeDriver: false})]));
+      await run('parallel', Animated.parallel([Animated.timing(c, {toValue: 3, duration: 30, useNativeDriver: false}), Animated.timing(a, {toValue: 4, duration: 30, useNativeDriver: false})]));
+      const staggered = [value(), value(), value()];
+      await run('stagger', Animated.stagger(20, staggered.map(item => Animated.timing(item, {toValue: 1, duration: 20, useNativeDriver: false}))));
+      const looped = value();
+      await run('loop', Animated.loop(Animated.timing(looped, {toValue: 1, duration: 20, useNativeDriver: false}), {iterations: 3}));
+      Object.assign(ends, {sequence: read(b), parallel: read(c) + read(a), stagger: staggered.reduce((sum, item) => sum + read(item), 0), loop: read(looped)});
+      const stopped = value();
+      const stopping = run('stop', Animated.timing(stopped, {toValue: 1, duration: 1000, useNativeDriver: false}));
+      setTimeout(() => stopped.stopAnimation(), 50);
+      await stopping;
+      ends.stop = read(stopped) < 1 ? 1 : 0;
+      const source = value(2);
+      ends.extend = read(source.interpolate({inputRange: [0, 1], outputRange: [0, 10], extrapolate: 'extend'}));
+      ends.clamp = read(source.interpolate({inputRange: [0, 1], outputRange: [0, 10], extrapolate: 'clamp'}));
+      ends.identity = read(source.interpolate({inputRange: [0, 1], outputRange: [0, 10], extrapolate: 'identity'}));
+      const offset = value();
+      const clamped = Animated.diffClamp(offset, 0, 50);
+      clamped.__attach();
+      offset.setValue(80);
+      read(clamped);
+      offset.setValue(30);
+      ends.diffClamp = read(clamped);
+      probe.ends = ends;
+      return true;
+    };
+    probe.drivers = () => Promise.all([
+      run('js-driver', Animated.timing(jsValue, {toValue: 1, duration: 400, easing: Easing.linear, useNativeDriver: false})),
+      run('native-driver', Animated.timing(nativeValue, {toValue: 1, duration: 400, easing: Easing.linear, useNativeDriver: true})),
+    ]);
+  }, []);
+  const animatedStyle = driven => ({
+    width: 40, height: 40, margin: 4,
+    opacity: driven.interpolate({inputRange: [0, 1], outputRange: [1, 0.5]}),
+    transform: [{translateX: driven.interpolate({inputRange: [0, 1], outputRange: [0, 30]})}],
+  });
+  return <View style={{flex: 1, backgroundColor: '#18202b'}}>
+    <View style={{flexDirection: 'row', height: 48}}>
+      {boxes.map(box => <View key={box} testID={'layout-' + box} style={{width: wide ? 120 : 40, height: 40, margin: 4, backgroundColor: '#edae49'}} />)}
+    </View>
+    <Animated.View testID="js-driven" style={[animatedStyle(jsValue), {backgroundColor: jsValue.interpolate({inputRange: [0, 1], outputRange: ['#ff0000', '#0000ff']})}]} />
+    <Animated.View testID="native-driven" style={[animatedStyle(nativeValue), {backgroundColor: nativeValue.interpolate({inputRange: [0, 1], outputRange: ['#ff0000', '#0000ff']})}]} />
+    <Animated.View testID="native-decay" style={{width: 20, height: 20, backgroundColor: '#d1495b', transform: [{translateX: decaying}]}} />
+    <Animated.Text testID="js-text" style={{color: jsValue.interpolate({inputRange: [0, 1], outputRange: ['#ff0000', '#0000ff']})}}>Animated text</Animated.Text>
+    <Animated.Text testID="native-text" style={{color: nativeValue.interpolate({inputRange: [0, 1], outputRange: ['#ff0000', '#0000ff']})}}>Native text</Animated.Text>
+    <Animated.ScrollView testID="animated-scroll" style={{height: 60}} scrollEventThrottle={16}
+      onScroll={Animated.event([{nativeEvent: {contentOffset: {y: scroll}}}], {useNativeDriver: false, listener: event => { probe.scrolled = event.nativeEvent.contentOffset.y; }})}>
+      <View style={{height: 400, backgroundColor: '#30638e'}} />
+    </Animated.ScrollView>
+  </View>;
+}
+GodotAppRegistry.registerComponent('AnimationProbe', () => AnimationProbe);
 GodotAppRegistry.registerComponent('SceneProbe', () => SceneProbe);
 GodotAppRegistry.registerComponent('EnemyStatus', () => EnemyStatus);
 GodotAppRegistry.registerComponent('GameInventory', () => GameInventory, {alerts: true});
