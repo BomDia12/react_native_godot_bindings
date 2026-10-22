@@ -110,6 +110,7 @@ void RNFilterStage::then(const float p_next[4][5]) {
 
 ::Vector<RNFilterStage> rn_filter_stages(const std::vector<FilterFunction> &p_filter) {
 	::Vector<RNFilterStage> stages;
+	int drop_shadows = 0;
 	for (const FilterFunction &function : p_filter) {
 		if (function.type == FilterType::Blur) {
 			RNFilterStage stage;
@@ -117,6 +118,9 @@ void RNFilterStage::then(const float p_next[4][5]) {
 			stage.radius = MAX(0.0f, std::get<Float>(function.parameters));
 			stages.push_back(stage);
 		} else if (function.type == FilterType::DropShadow) {
+			if (++drop_shadows > RN_MAX_DROP_SHADOWS) {
+				continue;
+			}
 			const DropShadowParams &shadow = std::get<DropShadowParams>(function.parameters);
 			RNFilterStage stage;
 			stage.kind = RNFilterStage::DROP_SHADOW;

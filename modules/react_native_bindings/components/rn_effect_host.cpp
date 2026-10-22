@@ -251,9 +251,19 @@ void RNEffectHost::_enter_focus() {
 		}
 		return;
 	}
+	_set_focus_paths();
+	target->grab_focus();
+}
+
+// Points the first and last inner controls at the host's neighbors, so Tab
+// leaves the effect viewport instead of wrapping inside it.
+void RNEffectHost::_set_focus_paths() {
 	_restore_focus_paths();
 	Control *first = _focusable(false);
 	Control *last = _focusable(true);
+	if (!first) {
+		return;
+	}
 	focus_first = first->get_instance_id();
 	focus_last = last->get_instance_id();
 	saved_previous = first->get_focus_previous();
@@ -264,11 +274,8 @@ void RNEffectHost::_enter_focus() {
 	if (Control *next = find_next_valid_focus(); next && next != this) {
 		last->set_focus_next(last->get_path_to(next));
 	}
-	target->grab_focus();
 }
 
-// Children change between entries, so the paths last set out of the host are
-// put back before new ones are chosen.
 void RNEffectHost::_restore_focus_paths() {
 	if (Control *first = Object::cast_to<Control>(ObjectDB::get_instance(focus_first))) {
 		first->set_focus_previous(saved_previous);
@@ -278,6 +285,15 @@ void RNEffectHost::_restore_focus_paths() {
 	}
 	focus_first = ObjectID();
 	focus_last = ObjectID();
+}
+
+// Children and neighbors change while focus is inside, so the paths out are
+// chosen again right before the viewport moves focus.
+void RNEffectHost::input(const Ref<InputEvent> &p_event) {
+	if ((p_event->is_action_pressed(SNAME("ui_focus_next"), true, true) || p_event->is_action_pressed(SNAME("ui_focus_prev"), true, true)) && get_effect_viewport()->gui_get_focus_owner()) {
+		_set_focus_paths();
+	}
+	SubViewportContainer::input(p_event);
 }
 
 void RNEffectHost::_notification(int p_what) {
