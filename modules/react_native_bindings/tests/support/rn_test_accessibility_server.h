@@ -27,6 +27,9 @@ public:
 		Vector<RID> children;
 		Vector<RID> sub_elements;
 		RID parent;
+		RID selection_start, selection_end;
+		int selection_start_char = -1;
+		int selection_end_char = -1;
 	};
 
 private:
@@ -34,6 +37,8 @@ private:
 	HashMap<RID, Element> elements;
 	HashMap<DisplayServerEnums::WindowID, RID> window_roots;
 	HashSet<RID> updated;
+	RID focus;
+	int unknown_children = 0;
 	// Nodes cache their element RIDs across servers, so ids stay unique per process.
 	static inline uint64_t next_id = 1;
 
@@ -78,6 +83,43 @@ public:
 	}
 
 	const Element *element(const RID &p_id) const { return elements.getptr(p_id); }
+	RID get_focus() const { return focus; }
+	// The first element with this name, such as a window announcement.
+	const Element *find(const String &p_name) const {
+		for (const KeyValue<RID, Element> &entry : elements) {
+			if (entry.value.name == p_name) {
+				return &entry.value;
+			}
+		}
+		return nullptr;
+	}
+	// What AccessKit would reject in the last pass: updated elements or a focus
+	// that no window reaches, and children that are not elements.
+	int count_rejected_updates() const {
+		HashSet<RID> reached;
+		Vector<RID> pending;
+		for (const KeyValue<DisplayServerEnums::WindowID, RID> &root : window_roots) {
+			pending.push_back(root.value);
+		}
+		while (!pending.is_empty()) {
+			const RID id = pending[pending.size() - 1];
+			pending.resize(pending.size() - 1);
+			const Element *found = element(id);
+			if (!found || reached.has(id)) {
+				continue;
+			}
+			reached.insert(id);
+			pending.append_array(found->children);
+			pending.append_array(found->sub_elements);
+		}
+		int count = unknown_children;
+		for (const RID &id : updated) {
+			count += elements.has(id) && !reached.has(id) ? 1 : 0;
+		}
+		// The root window keeps the element an earlier test's server gave it.
+		count += elements.has(focus) && !reached.has(focus) ? 1 : 0;
+		return count;
+	}
 	bool has_flag(const RID &p_id, Flag p_flag) const {
 		const Element *found = element(p_id);
 		return found && found->flags.has(p_flag);
@@ -125,6 +167,7 @@ public:
 
 	void update_if_active(const Callable &p_callable) override {
 		updated.clear();
+		unknown_children = 0;
 		p_callable.call(DisplayServerEnums::MAIN_WINDOW_ID);
 	}
 
@@ -136,7 +179,7 @@ public:
 		RNTestAccessibilityServer *self = const_cast<RNTestAccessibilityServer *>(this);
 		return self->window_roots[p_window_id] = self->_add(AccessibilityServerEnums::ROLE_WINDOW);
 	}
-	void update_set_focus(const RID &) override {}
+	void update_set_focus(const RID &p_id) override { focus = p_id; }
 
 	void set_window_rect(DisplayServerEnums::WindowID, const Rect2 &, const Rect2 &) override {}
 	void set_window_focused(DisplayServerEnums::WindowID, bool) override {}
@@ -226,6 +269,7 @@ public:
 	void update_add_child(const RID &p_id, const RID &p_child_id) override {
 		Element *found = _update(p_id);
 		Element *child = _get(p_child_id);
+		unknown_children += child ? 0 : 1;
 		if (found && child) {
 			found->children.push_back(p_child_id);
 			child->parent = p_id;
@@ -268,7 +312,14 @@ public:
 	void update_set_scroll_y_range(const RID &p_id, double, double) override { _update(p_id); }
 	void update_set_text_decorations(const RID &p_id, bool, bool, bool, const Color &) override { _update(p_id); }
 	void update_set_text_align(const RID &p_id, HorizontalAlignment) override { _update(p_id); }
-	void update_set_text_selection(const RID &p_id, const RID &, int, const RID &, int) override { _update(p_id); }
+	void update_set_text_selection(const RID &p_id, const RID &p_start, int p_start_char, const RID &p_end, int p_end_char) override {
+		if (Element *found = _update(p_id)) {
+			found->selection_start = p_start;
+			found->selection_start_char = p_start_char;
+			found->selection_end = p_end;
+			found->selection_end_char = p_end_char;
+		}
+	}
 	void update_set_classname(const RID &p_id, const String &) override { _update(p_id); }
 	void update_set_placeholder(const RID &p_id, const String &) override { _update(p_id); }
 	void update_set_language(const RID &p_id, const String &) override { _update(p_id); }

@@ -4,6 +4,7 @@
 #include "rn_shader_cache.h"
 
 #include "core/object/callable_mp.h"
+#include "servers/display/accessibility_server.h"
 
 namespace {
 
@@ -61,6 +62,11 @@ void RNImageControl::_update_rounding() {
 
 void RNImageControl::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
+			const RID element = get_accessibility_element();
+			ERR_FAIL_COND(element.is_null());
+			AccessibilityServer::get_singleton()->update_set_role(element, AccessibilityServerEnums::ROLE_IMAGE);
+		} break;
 		case NOTIFICATION_ENTER_TREE:
 		case NOTIFICATION_TRANSFORM_CHANGED:
 		case RN_NOTIFICATION_CLIP_CHANGED: {

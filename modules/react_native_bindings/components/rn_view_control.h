@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rn_accessibility.h"
 #include "rn_box_shadows.h"
 #include "rn_style_box.h"
 
@@ -19,7 +20,17 @@ class RNViewControl : public Panel {
 	std::function<void(bool)> focus_changed;
 	Ref<RNStyleBox> style;
 	RNBoxShadows shadows;
+	RNAccessibility accessibility;
+	// A grouped view's children hang under this hidden element, as TabContainer
+	// hides inactive tabs, because AccessKit rejects elements outside the tree.
+	RID hidden_children;
+	std::function<void()> accessibility_click;
+	std::function<void(const String &)> accessibility_action;
 	void _menu_selected(int p_id);
+	void _accessibility_activate(const Variant &p_data);
+	void _accessibility_named(const Variant &p_data, const String &p_name);
+	void _accessibility_custom(const Variant &p_data);
+	String _descendant_text() const;
 	void _update_shadow_clip();
 
 protected:
@@ -37,4 +48,11 @@ public:
 	// Paints the view box, or nothing when p_visible is false.
 	void set_paint(const RNStyleBox::Paint &p_paint, bool p_visible = true);
 	Ref<RNStyleBox> get_style() const { return style; }
+	void set_accessibility(const RNAccessibility &p_accessibility);
+	bool is_accessibility_grouped() const { return accessibility.grouped; }
+	// An accessible view is one element, as on iOS and Android: its
+	// descendants are hidden from screen readers.
+	bool accessibility_override_tree_hierarchy() const override { return accessibility.grouped; }
+	// p_click runs for the default activation, p_action for named React Native actions.
+	void set_accessibility_callbacks(std::function<void()> p_click, std::function<void(const String &)> p_action);
 };

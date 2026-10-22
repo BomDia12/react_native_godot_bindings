@@ -25,6 +25,7 @@ struct RNApplicationSnapshot {
 	bool swap_left_and_right = true;
 	std::string locale;
 	double keyboard_height = 0;
+	bool screen_reader = false;
 };
 
 // Application-wide state that React Native modules read on the JS thread. The
@@ -49,6 +50,8 @@ public:
 	RNGodotApplication();
 	void set_event_emitter(std::function<void(const std::string &, folly::dynamic)> p_emit) { emit_event = std::move(p_emit); }
 	RNApplicationSnapshot get_snapshot() const;
+	// I18nManager.forceRTL from the previous run, which lays every surface out right to left.
+	bool forces_rtl() const { return force_rtl; }
 	void poll();
 	void set_paused(bool p_paused);
 	void set_color_scheme(const std::string &p_scheme);

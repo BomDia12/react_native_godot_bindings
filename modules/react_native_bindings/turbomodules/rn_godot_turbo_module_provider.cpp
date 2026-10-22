@@ -2,6 +2,7 @@
 
 #include "../host/rn_main_thread_queue.h"
 #include "../interop/rn_dynamic.h"
+#include "rn_accessibility_module.h"
 #include "rn_alert_modules.h"
 #include "rn_dev_settings_module.h"
 #include "rn_godot_alerts.h"
@@ -60,6 +61,7 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 		});
 		return module;
 	});
+	add(RNAccessibilityManagerModule::kModuleName, [host, application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAccessibilityManagerModule>(p_invoker, host, application); });
 	add(RNDevSettingsModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNDevSettingsModule>(p_invoker, host); });
 	if (!context.source_url.empty()) {
 		add(SourceCodeModule::kModuleName, [url = context.source_url](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<SourceCodeModule>(p_invoker, url); });

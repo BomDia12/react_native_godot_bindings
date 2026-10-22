@@ -1,7 +1,10 @@
 'use strict';
 
-import {unsupported} from '../../../src/unsupported';
+import NativeAccessibilityManager from 'react-native/Libraries/Components/AccessibilityInfo/NativeAccessibilityManager';
 
-export default function legacySendAccessibilityEvent() {
-  unsupported('legacySendAccessibilityEvent');
+// Only focus events have a Godot meaning, as on iOS.
+export default function legacySendAccessibilityEvent(reactTag, eventType) {
+  if (eventType === 'focus' && NativeAccessibilityManager) {
+    NativeAccessibilityManager.setAccessibilityFocus(reactTag);
+  }
 }

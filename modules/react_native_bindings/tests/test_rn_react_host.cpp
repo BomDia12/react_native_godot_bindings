@@ -97,6 +97,10 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 			"nativeModuleProxy.DevSettings.reloadWithReason('test');"
 			"nativeModuleProxy.DevSettings.openDebugger();"
 			"globalThis.__sourceMatches = nativeModuleProxy.SourceCode.getConstants().scriptURL === 'http://localhost:8081/index.bundle?platform=godot' ? 1 : 0;"
+			"nativeModuleProxy.AccessibilityManager.getCurrentVoiceOverState(enabled => { globalThis.__screenReader = enabled ? 1 : 0; }, () => {});"
+			"nativeModuleProxy.AccessibilityManager.getCurrentReduceMotionState(enabled => { globalThis.__reduceMotion = enabled ? 1 : 0; }, () => {});"
+			"nativeModuleProxy.AccessibilityManager.setAccessibilityFocus(7);"
+			"nativeModuleProxy.AccessibilityManager.announceForAccessibility('Saved');"
 			"globalThis.__reloadRequested = 1;");
 	write_script(script_path, source);
 
@@ -104,8 +108,9 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 	auto blobs = std::make_shared<RNBlobService>(1024 * 1024);
 	int reloads = 0;
 	int debugger_requests = 0;
+	int focused_tag = 0;
 	react::RNTurboModuleContext modules;
-	modules.host = { main_thread, nullptr, [&reloads] { ++reloads; }, [&debugger_requests] { ++debugger_requests; } };
+	modules.host = { main_thread, nullptr, [&reloads] { ++reloads; }, [&debugger_requests] { ++debugger_requests; }, [&focused_tag](int p_tag) { focused_tag = p_tag; } };
 	modules.source_url = "http://localhost:8081/index.bundle?platform=godot";
 	modules.application = { std::make_shared<RNGodotApplication>(), main_thread };
 	modules.network = { blobs, nullptr, nullptr, main_thread };
@@ -139,11 +144,19 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 	auto source_matches = read_answer(host, "__sourceMatches");
 	REQUIRE(source_matches.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
 	CHECK(source_matches.get() == 1);
+	auto screen_reader = read_answer(host, "__screenReader");
+	REQUIRE(screen_reader.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+	CHECK(screen_reader.get() == 0);
+	auto reduce_motion = read_answer(host, "__reduceMotion");
+	REQUIRE(reduce_motion.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+	CHECK(reduce_motion.get() == 0);
 	CHECK(reloads == 0);
 	CHECK(debugger_requests == 0);
+	CHECK(focused_tag == 0);
 	main_thread->drain();
 	CHECK(reloads == 1);
 	CHECK(debugger_requests == 1);
+	CHECK(focused_tag == 7);
 }
 
 void start_runtime(RNHostRuntime &r_runtime, const String &p_script_path, const String &p_source) {

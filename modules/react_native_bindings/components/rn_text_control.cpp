@@ -1,5 +1,7 @@
 #include "rn_text_control.h"
 
+#include "rn_view_control.h"
+
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "servers/display/accessibility_server.h"
@@ -50,12 +52,51 @@ void RNTextControl::_notification(int p_what) {
 		case NOTIFICATION_FOCUS_EXIT: {
 			set_selection_range(-1, -1);
 		} break;
+		case NOTIFICATION_EXIT_TREE: {
+			_refresh_accessible_groups();
+			accessibility_runs.clear();
+		} break;
+		case NOTIFICATION_ACCESSIBILITY_INVALIDATE: {
+			accessibility_runs.clear();
+		} break;
 		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
 			const RID element = get_accessibility_element();
 			ERR_FAIL_COND(element.is_null());
-			AccessibilityServer::get_singleton()->update_set_role(element, AccessibilityServerEnums::AccessibilityRole::ROLE_STATIC_TEXT);
-			AccessibilityServer::get_singleton()->update_set_value(element, text);
-			AccessibilityServer::get_singleton()->update_set_text_align(element, accessibility_alignment);
+			AccessibilityServer *server = AccessibilityServer::get_singleton();
+			server->update_set_role(element, accessibility_role);
+			if (!accessibility_role_description.is_empty()) {
+				server->update_set_role_description(element, accessibility_role_description);
+			}
+			server->update_set_value(element, text);
+			server->update_set_text_align(element, accessibility_alignment);
+			const Vector<RNParagraphLayout::Line> &lines = layout.get_lines();
+			if (accessibility_runs.is_empty()) {
+				for (int i = 0; i < lines.size(); ++i) {
+					accessibility_runs.push_back(server->create_sub_text_edit_elements(element, layout.get_line_rid(i), lines[i].bounds.size.y, -1, i == lines.size() - 1));
+				}
+			}
+			for (int i = 0; i < accessibility_runs.size(); ++i) {
+				server->update_set_transform(accessibility_runs[i], Transform2D(0, lines[i].bounds.position + content_origin));
+			}
+			if (selection_to > selection_from && !accessibility_runs.is_empty()) {
+				// Lines are substrings of the paragraph's shaped text, so their runs
+				// take indices into the whole shaped text.
+				auto run_at = [&lines, this](int p_index) {
+					int line = 0;
+					for (int i = 0; i < lines.size(); ++i) {
+						if (lines[i].range.x < lines[i].range.y && lines[i].range.x <= p_index && p_index <= lines[i].range.y) {
+							line = i;
+							if (p_index < lines[i].range.y) {
+								break;
+							}
+						}
+					}
+					return accessibility_runs[line];
+				};
+				const int from = layout.to_layout_index(selection_from);
+				const int to = layout.to_layout_index(selection_to);
+				server->update_set_text_selection(element, run_at(from), from, run_at(to), to);
+			}
 		} break;
 	}
 }
@@ -115,6 +156,19 @@ void RNTextControl::_select_word(int p_character) {
 	}
 }
 
+void RNTextControl::_free_accessibility_runs() {
+	for (const RID &run : accessibility_runs) {
+		AccessibilityServer::get_singleton()->free_element(run);
+	}
+	accessibility_runs.clear();
+}
+
+void RNTextControl::set_accessibility_role(AccessibilityServerEnums::AccessibilityRole p_role, const String &p_description) {
+	accessibility_role = p_role;
+	accessibility_role_description = p_description;
+	queue_accessibility_update();
+}
+
 // The text between the line breaks around a character.
 void RNTextControl::_select_paragraph(int p_character) {
 	const int start = p_character > 0 ? text.rfind("\n", p_character - 1) + 1 : 0;
@@ -134,7 +188,18 @@ void RNTextControl::set_content_insets(real_t p_left, real_t p_top, real_t p_rig
 	_shape();
 }
 
+// Accessible groups are named by the text inside them.
+void RNTextControl::_refresh_accessible_groups() {
+	for (Node *node = get_parent(); node; node = node->get_parent()) {
+		if (RNViewControl *view = Object::cast_to<RNViewControl>(node); view && view->is_accessibility_grouped()) {
+			view->queue_accessibility_update();
+		}
+	}
+}
+
 void RNTextControl::_shape() {
+	_free_accessibility_runs();
+	_refresh_accessible_groups();
 	if (shape_function) {
 		shape_function((get_size() - content_inset).maxf(0), layout);
 	}
@@ -157,6 +222,7 @@ void RNTextControl::set_selection_range(int p_from, int p_to) {
 	selection_from = from;
 	selection_to = to;
 	queue_redraw();
+	queue_accessibility_update();
 }
 
 void RNTextControl::set_content(const String &p_text, RNTextShapeFunction p_shape_function, bool p_selectable) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "scene/main/scene_tree.h"
+#include "scene/main/window.h"
 #include "tests/display_server_mock.h"
 
 class RNTestDisplayServer : public DisplayServerMock {
@@ -16,6 +18,10 @@ public:
 		return (p_feature == DisplayServerEnums::FEATURE_ACCESSIBILITY_SCREEN_READER && screen_reader_active >= 0) || DisplayServerMock::has_feature(p_feature);
 	}
 	int accessibility_screen_reader_active() const override { return screen_reader_active; }
+	// The scene tree finds the focused control to report through the window's instance.
+	ObjectID window_get_attached_instance_id(DisplayServerEnums::WindowID p_window) const override {
+		return p_window == DisplayServerEnums::MAIN_WINDOW_ID ? SceneTree::get_singleton()->get_root()->get_instance_id() : ObjectID();
+	}
 
 	void simulate_ime(const String &p_text, const Vector2i &p_selection) {
 		ime_text = p_text;

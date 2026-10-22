@@ -38,6 +38,8 @@ public:
 	RNMountingManager(std::shared_ptr<RNMainThreadQueue> p_main_thread, std::shared_ptr<const RNComponentViewFactories> p_factories, facebook::react::ComponentRegistryFactory p_registry_factory, std::shared_ptr<facebook::react::IImageLoader> p_image_loader);
 
 	void register_surface(facebook::react::SurfaceId p_surface, const RNMountedSurface &p_mounted);
+	// Gives keyboard and screen-reader focus to a focusable mounted view.
+	void focus_view(facebook::react::Tag p_tag);
 	void unregister_surface(facebook::react::SurfaceId p_surface);
 	const std::shared_ptr<const RNComponentViewFactories> &get_factories() const { return factories; }
 	// Mount reports lock the shadow tree, so they run on the JS thread.

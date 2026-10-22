@@ -26,4 +26,5 @@ public:
 	RNClipControl *get_clip_host() const { return clip; }
 };
 
+RNAccessibility rn_view_accessibility(const facebook::react::ViewProps &p_props);
 RNStyleBox::Paint rn_view_paint(const facebook::react::ViewProps &p_props, const facebook::react::LayoutMetrics &p_layout);
