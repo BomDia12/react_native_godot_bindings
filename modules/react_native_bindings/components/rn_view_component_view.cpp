@@ -4,6 +4,8 @@
 
 #include <react/renderer/components/view/ViewEventEmitter.h>
 
+#include <algorithm>
+
 RNViewComponentView::RNViewComponentView(facebook::react::Tag p_tag) :
 		RNComponentView(p_tag, memnew(RNViewControl)), view(Object::cast_to<RNViewControl>(get_control())) {
 }
@@ -118,6 +120,11 @@ void RNViewComponentView::_apply_style() {
 void RNViewComponentView::update_props(const facebook::react::Props::Shared &p_old, const facebook::react::Props::Shared &p_new) {
 	RNComponentView::update_props(p_old, p_new);
 	using facebook::react::PointerEventsMode;
+	auto old_props = std::static_pointer_cast<const facebook::react::ViewProps>(p_old);
+	const auto is_drop_shadow = [](const facebook::react::FilterFunction &p_function) { return p_function.type == facebook::react::FilterType::DropShadow; };
+	if ((!old_props || old_props->filter != props->filter) && std::count_if(props->filter.begin(), props->filter.end(), is_drop_shadow) > RN_MAX_DROP_SHADOWS) {
+		WARN_PRINT(vformat("E_UNSUPPORTED_STYLE: React tag %d has more than %d drop-shadow filters; the later ones are ignored.", get_tag(), RN_MAX_DROP_SHADOWS));
+	}
 	const bool self_targetable = props->pointerEvents != PointerEventsMode::None && props->pointerEvents != PointerEventsMode::BoxNone;
 	view->set_focus_mode(self_targetable && props->focusable ? Control::FOCUS_ALL : Control::FOCUS_NONE);
 	view->set_menu_entries(self_targetable ? Array(rn_variant_from_dynamic(props->godotContextMenu)) : Array());

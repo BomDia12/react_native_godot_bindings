@@ -26,7 +26,7 @@ struct RNScrollCallbacks {
 class RNScrollControl;
 
 // React Native draws scroll indicators over the content instead of reserving
-// layout space, so this top-level child paints them above the ScrollContainer.
+// layout space, so this internal child paints them above the ScrollContainer.
 class RNScrollIndicators : public Control {
 	GDCLASS(RNScrollIndicators, Control);
 	RNScrollControl *scroll = nullptr;

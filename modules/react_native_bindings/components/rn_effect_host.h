@@ -27,7 +27,7 @@ class RNEffectHost : public SubViewportContainer {
 	Ref<ShaderMaterial> filtered_material;
 	RNViewControl *painter = nullptr;
 	// Focus paths this host set on the first and last inner controls, and what
-	// they held before, so the next entry or teardown can restore them.
+	// they held before, so they can be restored before new ones are set.
 	ObjectID focus_first;
 	ObjectID focus_last;
 	NodePath saved_previous;
@@ -42,6 +42,7 @@ class RNEffectHost : public SubViewportContainer {
 	void _update_blend();
 	void _update_clip();
 	void _enter_focus();
+	void _set_focus_paths();
 	void _restore_focus_paths();
 	void _use_filtered_viewport(bool p_filtered);
 	Control *_focusable(bool p_last) const;
@@ -49,6 +50,7 @@ class RNEffectHost : public SubViewportContainer {
 protected:
 	static void _bind_methods() {}
 	void _notification(int p_what);
+	void input(const Ref<InputEvent> &p_event) override;
 
 public:
 	RNEffectHost();
