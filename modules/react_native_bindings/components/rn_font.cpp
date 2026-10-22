@@ -32,25 +32,39 @@ Ref<Font> rn_load_font_family(const String &p_family, Dictionary &r_variation) {
 }
 
 Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style) {
+	if (p_base.is_null()) {
+		return p_base;
+	}
+	const int64_t weight_tag = TS->name_to_tag("wght");
+	const bool variable = p_base->get_supported_variation_list().has(weight_tag);
+	// A FontVariation author's own settings stay, and the style only adds to them.
+	const Ref<FontVariation> authored = p_base;
+	const bool weight_chosen = authored.is_valid() && Dictionary(authored->get_variation_opentype()).has(weight_tag);
 	// A variable font's default instance need not be regular, so one with a
-	// weight axis always gets the requested weight.
-	if (p_base.is_null() || (p_style.is_default() && !p_base->get_supported_variation_list().has(TS->name_to_tag("wght")))) {
+	// weight axis gets the requested weight unless its author picked one.
+	if (p_style.is_default() && (!variable || weight_chosen)) {
 		return p_base;
 	}
 	Ref<FontVariation> variation;
-	variation.instantiate();
-	variation->set_base_font(p_base);
-	Dictionary coordinates;
-	coordinates[TS->name_to_tag("wght")] = p_style.weight;
+	if (authored.is_valid()) {
+		variation = authored->duplicate();
+	} else {
+		variation.instantiate();
+		variation->set_base_font(p_base);
+	}
+	Dictionary coordinates = Dictionary(variation->get_variation_opentype()).duplicate();
+	if (!weight_chosen || p_style.weight != 400) {
+		coordinates[weight_tag] = p_style.weight;
+	}
 	variation->set_variation_opentype(coordinates);
-	if (p_style.weight > 400 && !p_base->get_supported_variation_list().has(TS->name_to_tag("wght"))) {
-		variation->set_variation_embolden((p_style.weight - 400) / 250.0f);
+	if (p_style.weight > 400 && !variable) {
+		variation->set_variation_embolden(variation->get_variation_embolden() + (p_style.weight - 400) / 250.0f);
 	}
 	if (p_style.italic) {
-		variation->set_variation_transform(Transform2D(1, 0.2, 0, 1, 0, 0));
+		variation->set_variation_transform(variation->get_variation_transform() * Transform2D(1, 0.2, 0, 1, 0, 0));
 	}
-	variation->set_spacing(TextServer::SPACING_GLYPH, int(Math::round(p_style.letter_spacing)));
-	Dictionary features = p_base->get_opentype_features();
+	variation->set_spacing(TextServer::SPACING_GLYPH, variation->get_spacing(TextServer::SPACING_GLYPH) + int(Math::round(p_style.letter_spacing)));
+	Dictionary features = Dictionary(p_base->get_opentype_features()).duplicate();
 	for (const String &feature : p_style.features) {
 		features[TS->name_to_tag(feature)] = 1;
 	}
