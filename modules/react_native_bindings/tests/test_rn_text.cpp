@@ -124,6 +124,7 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] weight, style and features app
 	base->set_fallbacks({ rn_test_font("NotoSansArabic.ttf") });
 	RNFontStyle style;
 	style.weight = 700;
+	style.weight_requested = true;
 	style.italic = true;
 	style.features = { "tnum" };
 	const Ref<FontVariation> styled = rn_font_variation(base, style);
@@ -158,6 +159,18 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] weight, style and features app
 	CHECK(slanted->get_variation_embolden() == doctest::Approx(0.5));
 	CHECK(slanted->get_variation_transform() != Transform2D());
 	CHECK(int(Dictionary(Ref<FontVariation>(rn_font_variation(authored, style))->get_variation_opentype())[TS->name_to_tag("wght")]) == 700);
+	// Asking for regular is a request too, unlike asking for nothing.
+	RNFontStyle regular_request;
+	regular_request.weight_requested = true;
+	CHECK(int(Dictionary(Ref<FontVariation>(rn_font_variation(authored, regular_request))->get_variation_opentype())[TS->name_to_tag("wght")]) == 400);
+
+	// A variation with no fallbacks of its own styles its base font's.
+	Ref<FontFile> with_fallbacks = rn_test_font("NotoSansHebrew.ttf");
+	with_fallbacks->set_fallbacks({ rn_test_font("NotoSansArabic.ttf") });
+	authored->set_base_font(with_fallbacks);
+	const Ref<FontVariation> bold = rn_font_variation(authored, style);
+	REQUIRE(bold->get_fallbacks().size() == 1);
+	CHECK(int(Dictionary(Ref<FontVariation>(bold->get_fallbacks()[0])->get_variation_opentype())[TS->name_to_tag("wght")]) == 700);
 }
 
 } // namespace TestRNText

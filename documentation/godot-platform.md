@@ -277,7 +277,7 @@ focus control's own `accessibility_name`, `accessibility_description` and
 `accessibility_live`. A View adds its role, states, value and actions in
 `NOTIFICATION_ACCESSIBILITY_UPDATE`: React Native roles map to Godot roles, roles without
 an equivalent publish a container with the React Native role as its description, `none`
-and `presentation` keep the view's own panel role with no click action, and `mixed` sends
+and `presentation` keep the view's own panel role, and `mixed` sends
 unchecked with the state description `mixed`, because Godot's checked state
 is boolean. Hidden subtrees and modal views set `FLAG_HIDDEN` and `FLAG_MODAL`. An
 `accessible` View is a single element, as on iOS and Android: its descendants sit under a

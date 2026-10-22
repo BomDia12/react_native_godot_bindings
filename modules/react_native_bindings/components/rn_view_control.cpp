@@ -3,6 +3,7 @@
 #include "rn_text_control.h"
 
 #include "core/object/callable_mp.h"
+#include "scene/main/window.h"
 #include "servers/display/accessibility_server.h"
 
 RNViewControl::RNViewControl() {
@@ -138,6 +139,11 @@ void RNViewControl::_notification(int p_what) {
 				}
 				server->update_set_flag(hidden_children, AccessibilityServerEnums::FLAG_HIDDEN, true);
 				for (int i = 0; i < get_child_count(); ++i) {
+					// The windows Node itself leaves out, such as a hidden context menu.
+					const Window *child_window = Object::cast_to<Window>(get_child(i));
+					if (child_window && !(child_window->is_visible() && (child_window->is_embedded() || child_window->is_popup()))) {
+						continue;
+					}
 					server->update_add_child(hidden_children, get_child(i)->get_accessibility_element());
 				}
 			}

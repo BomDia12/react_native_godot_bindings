@@ -41,7 +41,7 @@ public:
 		SceneTree::get_singleton()->get_root()->add_child(trigger);
 		SceneTree::get_singleton()->process(0);
 		memdelete(trigger);
-		CHECK(server->count_unreachable_updates() == 0);
+		CHECK(server->count_rejected_updates() == 0);
 	}
 
 	const RNTestAccessibilityServer::Element &element(const RID &p_id) const {
@@ -53,6 +53,7 @@ public:
 	bool has_flag(const Node *p_node, AccessibilityServerEnums::AccessibilityFlags p_flag) const { return server->has_flag(p_node->get_accessibility_element(), p_flag); }
 	bool perform(const Node *p_node, AccessibilityServerEnums::AccessibilityAction p_action, const Variant &p_data = Variant()) { return server->perform(p_node->get_accessibility_element(), p_action, p_data); }
 	const RNTestAccessibilityServer::Element *find(const String &p_name) const { return server->find(p_name); }
+	RID focus() const { return server->get_focus(); }
 };
 
 // A mounted View with the given accessibility props.
@@ -294,6 +295,21 @@ TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] accessible groups are
 	memdelete(nested);
 	reader.flush();
 	CHECK(reader.element(group.control()).name == "75%");
+
+	// A focused control inside, and a hidden context menu, stay valid in the tree.
+	Dictionary entry;
+	entry["id"] = "inspect";
+	entry["label"] = "Inspect";
+	Array entries;
+	entries.push_back(entry);
+	group.control()->set_menu_entries(entries);
+	Control *focusable = memnew(Control);
+	focusable->set_focus_mode(Control::FOCUS_ALL);
+	row->add_child(focusable);
+	focusable->grab_focus();
+	reader.flush();
+	CHECK(reader.focus() == focusable->get_accessibility_element());
+	memdelete(focusable);
 
 	group.view.update_props(nullptr, std::make_shared<ViewProps>());
 	reader.flush();
