@@ -26,6 +26,7 @@ class RNTextControl : public Control {
 	// One text run per shaped line, for screen-reader selection.
 	Vector<RID> accessibility_runs;
 	void _free_accessibility_runs();
+	void _refresh_accessible_groups();
 	// Padding and border; the paragraph lays out in the content box inside them.
 	Point2 content_origin;
 	Size2 content_inset;
