@@ -57,6 +57,26 @@ changes under its MIT license.
 included as `assets/LICENSE.OpenSans.txt`. This is a deterministic sample font;
 applications inherit their Godot theme by default.
 
+`samples/game-ui/assets/NotoSansArabic.ttf` and `NotoSansHebrew.ttf` copy the variable
+`NotoSansArabic[wdth,wght].ttf` and `NotoSansHebrew[wdth,wght].ttf` from
+`https://github.com/google/fonts` at `8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5`, unchanged.
+Their SIL Open Font License 1.1 files are included as `assets/LICENSE.NotoSansArabic.txt`
+and `assets/LICENSE.NotoSansHebrew.txt`. Right-to-left and bidi tests use them because CI
+has no system fonts for those scripts.
+
+| Font | SHA-256 |
+|---|---|
+| `NotoSansArabic.ttf` | `63111b5b2e074dd48cc67692e0a2726d86ee94c1c37fe8598257b7b4e87e869e` |
+| `NotoSansHebrew.ttf` | `7ef36a2c3593758cdb622e1bdef4f84523e92fbc3ccc667438dd80ff54c2de88` |
+
+## AccessKit
+
+The Godot build links the AccessKit C SDK `0.22.3` that the pinned engine selects in
+`godot/misc/scripts/install_accesskit.py`. `scripts/bootstrap.sh` runs that script, which
+downloads Godot's static build from `https://github.com/godotengine/godot-accesskit-c-static`
+into the ignored `godot/bin/build_deps/accesskit/`. AccessKit is MIT or Apache-2.0
+licensed and is linked unmodified.
+
 React Native files are not vendored or modified in references. The `react-native-godot`
 package contains whole-file derived copies of Alert, TextInput, TextInputState and Modal, each
 guarded by the SHA-256 of its 0.87.1 base file in `overrides.json`. They remain under

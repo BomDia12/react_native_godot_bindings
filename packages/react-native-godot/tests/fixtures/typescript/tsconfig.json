@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "customConditions": ["react-native"],
+    "jsx": "react-native",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "files": ["consumer.tsx"]
+}

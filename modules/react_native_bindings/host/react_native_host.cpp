@@ -3,9 +3,7 @@
 #include "../components/rn_theme_metrics.h"
 #include "../root_view/react_native_root_view.h"
 #include "../singletons/react_native_file_singleton.h"
-#include "rn_feature_flags.h"
 #include "rn_host_instance.h"
-#include "rn_logging.h"
 
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
@@ -88,11 +86,6 @@ bool ReactNativeHost::_start() {
 		ERR_PRINT(get_last_error());
 		return false;
 	}
-	static std::once_flag process_setup;
-	std::call_once(process_setup, [] {
-		rn_install_logging();
-		rn_install_feature_flags();
-	});
 	if (!frame_connected) {
 		tree->connect("process_frame", callable_mp(this, &ReactNativeHost::_process_frame));
 		frame_connected = true;

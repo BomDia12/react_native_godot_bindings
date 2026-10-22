@@ -5,6 +5,7 @@
   "scripts": {
     "build:godot": "node ../../scripts/build_godot_bundle.cjs --project . --entry godot.entry.js --out dist/game.bundle.js",
     "build:gallery": "node ../../scripts/build_godot_bundle.cjs --project . --entry gallery.entry.js --out dist/godot.bundle.js",
+    "build:fidelity": "node ../../scripts/build_godot_bundle.cjs --project . --entry fidelity.entry.js --out dist/fidelity.bundle.js",
     "start:godot": "react-native-godot-start"
   },
   "dependencies": {

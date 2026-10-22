@@ -10,6 +10,8 @@
 #include "examples/rn_example_meter.h"
 #include "examples/rn_example_scene_module.h"
 #include "host/react_native_host.h"
+#include "host/rn_feature_flags.h"
+#include "host/rn_logging.h"
 #include "host/rn_service_settings.h"
 #include "interop/rn_scene_binding.h"
 #include "native_modules/rn_http_service.h"
@@ -39,6 +41,10 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 #ifdef TESTS_ENABLED
 		rn_force_link_tests();
 #endif
+		// Upstream fixes its feature flags at first use, so they are installed
+		// before anything, tests included, can touch React Native.
+		rn_install_logging();
+		rn_install_feature_flags();
 		ClassDB::register_class<ReactNativeFileSingleton>();
 		react_native_file_singleton = memnew(ReactNativeFileSingleton);
 		Engine::get_singleton()->add_singleton(Engine::Singleton("ReactNativeFileSingleton", react_native_file_singleton, "ReactNativeFileSingleton"));

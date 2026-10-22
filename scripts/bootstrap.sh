@@ -71,5 +71,18 @@ if [[ $(git -C "$HERMES_DIR" rev-parse HEAD) != "$HERMES_COMMIT" ]]; then
 	exit 1
 fi
 
+# The pinned engine's installer names the AccessKit version it builds against;
+# a marker records the installed one, so a new pin reinstalls it.
+ACCESSKIT_DIR="$GODOT_SOURCE_DIR/bin/build_deps/accesskit"
+ACCESSKIT_VERSION=$(sed -n 's/^ac_version = "\(.*\)"$/\1/p' "$GODOT_SOURCE_DIR/misc/scripts/install_accesskit.py")
+if [[ -z "$ACCESSKIT_VERSION" ]]; then
+	echo "Could not read the AccessKit version from install_accesskit.py" >&2
+	exit 1
+fi
+if [[ $(cat "$ACCESSKIT_DIR/.installed-version" 2>/dev/null) != "$ACCESSKIT_VERSION" ]]; then
+	(cd "$GODOT_SOURCE_DIR" && python3 misc/scripts/install_accesskit.py)
+	echo "$ACCESSKIT_VERSION" > "$ACCESSKIT_DIR/.installed-version"
+fi
+
 printf 'Godot: %s\nHermes: %s\nNext: scripts/build_hermes.sh && scripts/build_godot.sh && scripts/run_baseline.sh\n' \
 	"$GODOT_SOURCE_DIR" "$HERMES_DIR"

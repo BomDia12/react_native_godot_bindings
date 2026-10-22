@@ -29,6 +29,8 @@ RNTextControl::RNTextControl() {
 
 void RNTextControl::_notification(int p_what) {
 	switch (p_what) {
+		// Fabric sizes new views before inserting them, and Godot only reports resizes inside the tree.
+		case NOTIFICATION_ENTER_TREE:
 		case NOTIFICATION_RESIZED: {
 			_shape();
 		} break;

@@ -50,18 +50,29 @@ npm --prefix packages/react-native-godot test
 npm --prefix samples/view-text ci
 scripts/run_baseline.sh
 scripts/run_component_display.sh
+scripts/run_visual_regression.sh
+scripts/run_staged_game.sh
 ```
 
 `bootstrap.sh` creates or verifies the pinned `godot/` checkout, initializes the pinned
 React Native, folly, glog, fmt, double-conversion, fast_float and nlohmann/json submodules,
-and downloads the Boost headers. `build_hermes.sh` builds the pinned Hermes submodule
+downloads the Boost headers, and installs the AccessKit SDK that the pinned engine's
+`misc/scripts/install_accesskit.py` selects, reinstalling it when that version changes. `build_hermes.sh` builds the pinned Hermes submodule
 against React Native's JSI. `codegen.cjs` regenerates the committed React Native codegen
 output in `modules/react_native_bindings/generated/`. `build_godot.sh` attaches `modules/` through
 Godot's `custom_modules` option. `run_baseline.sh` discovers the restricted manifests at
 `samples/*/smoke/tests/*/smoke_test.json`, creates fresh Metro bundles, and runs every
 declared headless smoke test. Shared manifests with the same package, npm script, and
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the
-default concurrency of two Godot processes.
+default concurrency of two Godot processes. `run_staged_game.sh` stages the game demo
+built by the smoke run into a temporary project outside the repository, imports it, and
+checks that all four of its roots mount without diagnostics.
+`run_visual_regression.sh` builds the fidelity bundle, imports the game sample, and renders
+each `samples/game-ui/smoke/visual/*.tscn` application under Xvfb with software OpenGL,
+comparing it with its golden PNG in `smoke/visual/goldens/`. Failing captures are written
+to `artifacts/visual/`; `RN_VISUAL_UPDATE=1` rewrites the goldens instead. Like
+`run_component_display.sh`, `COMPONENT_DISPLAY_READY=1` runs on the current display
+without Xvfb.
 
 The JavaScript platform is the `react-native-godot` package in `packages/react-native-godot/`.
 Samples depend on it through `file:../../packages/react-native-godot`, and the sample's
