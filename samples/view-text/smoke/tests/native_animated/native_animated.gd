@@ -16,8 +16,8 @@ func translation(view: Control) -> Vector2:
 	return view.get_offset_transform_position() if view.is_offset_transform_enabled() else Vector2()
 
 func background(view: Control) -> Color:
-	var style := view.get_theme_stylebox("panel") as StyleBoxFlat
-	return style.bg_color if style != null else Color(0, 0, 0, 0)
+	var style := view.get_theme_stylebox("panel") as RNStyleBox
+	return style.get_bg_color() if style != null else Color(0, 0, 0, 0)
 
 func validate_smoke():
 	var box := find_view(mount_container(), "native-animated-box")

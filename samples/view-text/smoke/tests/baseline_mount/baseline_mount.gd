@@ -22,8 +22,8 @@ func find_sentinel(node: Node) -> RNTextControl:
 
 func find_styled_panel(node: Node) -> Panel:
 	if node is Panel:
-		var style := node.get_theme_stylebox("panel") as StyleBoxFlat
-		if style != null and style.bg_color.is_equal_approx(EXPECTED_BACKGROUND):
+		var style := node.get_theme_stylebox("panel") as RNStyleBox
+		if style != null and style.get_bg_color().is_equal_approx(EXPECTED_BACKGROUND):
 			return node
 
 	for child in node.get_children():

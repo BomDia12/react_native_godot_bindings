@@ -5,6 +5,7 @@
 #include "core/math/math_funcs.h"
 #include "core/object/callable_mp.h"
 #include "scene/main/scene_tree.h"
+#include "scene/resources/style_box_flat.h"
 
 #include <map>
 

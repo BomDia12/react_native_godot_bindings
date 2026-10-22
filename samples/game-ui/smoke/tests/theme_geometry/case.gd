@@ -68,10 +68,10 @@ func run() -> void:
 	get_window().size = original_window_size
 
 	inventory_root.layout_direction = Control.LAYOUT_DIRECTION_RTL
-	if not await wait_until(func(): return target("scaled-text").is_layout_rtl(), "the authored root direction to reach native text"):
+	if not await wait_until(func(): return target("inventory-editor").get_child(0).is_layout_rtl(), "the authored root direction to reach the native editor"):
 		return
 	inventory_root.layout_direction = Control.LAYOUT_DIRECTION_INHERITED
 	TranslationServer.set_locale("ar")
-	if not await wait_until(func(): return await js("nativeModuleProxy.I18nManager.getConstants().isRTL") == true and target("scaled-text").is_layout_rtl(), "locale RTL to reach React and native text"):
+	if not await wait_until(func(): return await js("nativeModuleProxy.I18nManager.getConstants().isRTL") == true and target("inventory-editor").get_child(0).is_layout_rtl(), "locale RTL to reach React and the native editor"):
 		return
 	TranslationServer.set_locale(original_locale)

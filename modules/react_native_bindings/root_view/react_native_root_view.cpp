@@ -1,5 +1,6 @@
 #include "react_native_root_view.h"
 
+#include "../components/rn_clip.h"
 #include "../host/react_native_host.h"
 #include "../turbomodules/rn_godot_alerts.h"
 
@@ -164,6 +165,9 @@ void ReactNativeRootView::_on_host_gui_input(const Ref<InputEvent> &p_event, Obj
 		return;
 	}
 	RNComponentView *view = views->find_for_control(control);
+	if (Ref<InputEventMouse> mouse = p_event; mouse.is_valid() && view) {
+		view = _view_inside_clips(view, control->get_global_transform().xform(mouse->get_position()));
+	}
 	if (view == root_component.get()) {
 		view = nullptr;
 	}
@@ -172,6 +176,20 @@ void ReactNativeRootView::_on_host_gui_input(const Ref<InputEvent> &p_event, Obj
 	}
 	claimed_input_serial = input_serial;
 	_route(p_event->xformed_by(control->get_global_transform_with_canvas()), view, control->get_viewport());
+}
+
+// Godot picks controls by rectangle; a point outside a rounded clip belongs to
+// the view that owns the clip.
+RNComponentView *ReactNativeRootView::_view_inside_clips(RNComponentView *p_view, const Point2 &p_canvas_point) const {
+	Node *node = p_view->get_control();
+	while (node && node != container && !Object::cast_to<Viewport>(node)) {
+		Control *control = Object::cast_to<Control>(node);
+		if (control && control->has_meta(RNComponentView::TAG_META) && rn_clip_contains(rn_clip_stack(control), p_canvas_point)) {
+			return control == p_view->get_control() ? p_view : views->find_for_control(control);
+		}
+		node = node->get_parent();
+	}
+	return p_view;
 }
 
 void ReactNativeRootView::_route(const Ref<InputEvent> &p_event, RNComponentView *p_view, Viewport *p_viewport) {
