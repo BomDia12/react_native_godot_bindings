@@ -125,6 +125,7 @@ RNEffectHost::RNEffectHost() {
 	viewport = memnew(SubViewport);
 	viewport->set_transparent_background(true);
 	viewport->set_disable_3d(true);
+	viewport->connect("gui_focus_changed", callable_mp(this, &RNEffectHost::_inner_focus_changed));
 	add_child(viewport);
 	content = memnew(Control);
 	content->set_mouse_filter(MOUSE_FILTER_IGNORE);
@@ -188,6 +189,7 @@ void RNEffectHost::_use_filtered_viewport(bool p_filtered) {
 		filtered_viewport = memnew(SubViewport);
 		filtered_viewport->set_transparent_background(true);
 		filtered_viewport->set_disable_3d(true);
+		filtered_viewport->connect("gui_focus_changed", callable_mp(this, &RNEffectHost::_inner_focus_changed));
 		filtered->add_child(filtered_viewport);
 		filtered_viewport->add_child(painter);
 		content->add_child(filtered);
@@ -287,13 +289,30 @@ void RNEffectHost::_restore_focus_paths() {
 	focus_last = ObjectID();
 }
 
-// Children and neighbors change while focus is inside, so the paths out are
-// chosen again right before the viewport moves focus.
+// Focus inside takes it from the host, and an unfocused container only
+// forwards keys after the window's own navigation has used Tab. So while a
+// control inside has focus, keys go to it first, as to a focused container.
+void RNEffectHost::_inner_focus_changed(Control *) {
+	set_process_input(true);
+	set_process_unhandled_input(false);
+}
+
 void RNEffectHost::input(const Ref<InputEvent> &p_event) {
-	if ((p_event->is_action_pressed(SNAME("ui_focus_next"), true, true) || p_event->is_action_pressed(SNAME("ui_focus_prev"), true, true)) && get_effect_viewport()->gui_get_focus_owner()) {
+	SubViewport *effect_viewport = get_effect_viewport();
+	if (!effect_viewport->gui_get_focus_owner()) {
+		set_process_input(false);
+		set_process_unhandled_input(true);
+		return;
+	}
+	if (Object::cast_to<InputEventMouse>(*p_event) || Object::cast_to<InputEventScreenDrag>(*p_event) || Object::cast_to<InputEventScreenTouch>(*p_event) || Object::cast_to<InputEventGesture>(*p_event)) {
+		return;
+	}
+	// Children and neighbors change while focus is inside, so the paths out
+	// are chosen again right before the viewport moves focus.
+	if (p_event->is_action_pressed(SNAME("ui_focus_next"), true, true) || p_event->is_action_pressed(SNAME("ui_focus_prev"), true, true)) {
 		_set_focus_paths();
 	}
-	SubViewportContainer::input(p_event);
+	effect_viewport->push_input(p_event);
 }
 
 void RNEffectHost::_notification(int p_what) {

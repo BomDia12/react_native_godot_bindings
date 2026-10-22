@@ -340,10 +340,14 @@ TEST_CASE("[ReactNativeBindings][ScrollView][SceneTree] content taller than the 
 	scroll->set_content_extent(Size2(240, 1000));
 	scroll->scroll_to(Point2(0, 800), false);
 	CHECK(scroll->get_v_scroll() == 800);
-	// ScrollContainer also sorts the internal indicators with the content.
-	scroll->notification(Container::NOTIFICATION_SORT_CHILDREN);
+	// ScrollContainer also fits the internal indicators to the content, both
+	// when sorting and in a deferred call after theme changes.
 	auto *indicators = Object::cast_to<RNScrollIndicators>(scroll->get_child(scroll->get_child_count(true) - 1, true));
 	REQUIRE(indicators);
+	scroll->notification(Container::NOTIFICATION_SORT_CHILDREN);
+	CHECK(indicators->get_rect() == Rect2(Point2(), scroll->get_size()));
+	scroll->add_theme_constant_override("scrollbar_v_separation", 2);
+	MessageQueue::get_singleton()->flush();
 	CHECK(indicators->get_rect() == Rect2(Point2(), scroll->get_size()));
 	scroll->set_content_extent(Size2(240, 20));
 	scroll->refresh_content();

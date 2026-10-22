@@ -9,6 +9,7 @@ class RNViewComponentView : public RNComponentView {
 	RNViewControl *view;
 	RNEffectHost *effect = nullptr;
 	RNClipControl *clip = nullptr;
+	bool reported_drop_shadows = false;
 	void _apply_style();
 	void _restructure(bool p_effect, bool p_clip);
 
