@@ -12,6 +12,7 @@ PROJECT_DIR="$REPO_ROOT/samples/game-ui"
 OUTPUT_DIR="$REPO_ROOT/artifacts/visual"
 mkdir -p "$REPO_ROOT/artifacts/smoke-logs" "$OUTPUT_DIR"
 (cd "$PROJECT_DIR" && npm run --silent build:fidelity)
+"$GODOT_BINARY" --headless --editor --path "$PROJECT_DIR" --import --quit > "$REPO_ROOT/artifacts/smoke-logs/import-visual.log" 2>&1
 USER_ARGS=(--visual-output="$OUTPUT_DIR")
 if [[ ${RN_VISUAL_UPDATE:-0} == 1 ]]; then
     USER_ARGS+=(--visual-update)
