@@ -33,11 +33,15 @@ func run() -> void:
 	var text := target("js-text", probe) as RNTextControl
 	var native_text := target("native-text", probe) as RNTextControl
 	var samples: Array[Vector2] = []
+	var text_reds: Array[float] = []
 	var start := Time.get_ticks_msec()
 	await js("__animation.drivers()")
 	while Time.get_ticks_msec() - start < 1500:
 		samples.append(Vector2(Time.get_ticks_msec() - start, native.modulate.a))
+		text_reds.append(native_text.get_text_color().r)
 		await get_tree().process_frame
+	# Direct prop updates recolor Text on every frame, not only when the animation ends.
+	check(text_reds.any(func(red): return red > 0.05 and red < 0.95), "Native-driven Text color never passed between red and blue: %s" % [text_reds])
 	for i in range(1, samples.size()):
 		check(samples[i].y <= samples[i - 1].y + 0.001, "The native driver's opacity went back up: %s" % [samples])
 	# Linear timing changes opacity by 0.5 over 400 ms; frames between the first and last

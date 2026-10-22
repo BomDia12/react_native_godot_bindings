@@ -30,9 +30,42 @@ void RNParagraphComponentView::update_layout(const LayoutMetrics &p_metrics) {
 	_apply_box();
 }
 
+void RNParagraphComponentView::_set_content() {
+	const auto &paragraph = static_cast<const ParagraphProps &>(*props);
+	text->set_content(String::utf8(attributed.getString().c_str()), [shaper = shaper, attributed = attributed, attributes = paragraph_attributes](const Size2 &p_size, RNParagraphLayout &r_layout) { shaper->shape(attributed, attributes, p_size, r_layout); }, paragraph.isSelectable);
+}
+
+// The drawn text comes from the state's attributed string, which only a Fabric
+// commit replaces. The native animation driver updates props directly, so the
+// colors fragments inherit from the paragraph follow its props here.
+void RNParagraphComponentView::_follow_text_colors(const TextAttributes &p_before, const TextAttributes &p_after) {
+	SharedColor TextAttributes::*const colors[] = { &TextAttributes::foregroundColor, &TextAttributes::backgroundColor, &TextAttributes::textDecorationColor, &TextAttributes::textShadowColor };
+	bool changed = false;
+	for (SharedColor TextAttributes::*color : colors) {
+		changed = changed || p_before.*color != p_after.*color;
+	}
+	if (!changed || attributed.isEmpty()) {
+		return;
+	}
+	AttributedString recolored;
+	for (AttributedString::Fragment fragment : attributed.getFragments()) {
+		for (SharedColor TextAttributes::*color : colors) {
+			if (fragment.textAttributes.*color == p_before.*color) {
+				fragment.textAttributes.*color = p_after.*color;
+			}
+		}
+		recolored.appendFragment(std::move(fragment));
+	}
+	attributed = recolored;
+	_set_content();
+}
+
 void RNParagraphComponentView::update_props(const Props::Shared &p_old, const Props::Shared &p_new) {
 	RNComponentView::update_props(p_old, p_new);
 	const auto &paragraph = static_cast<const ParagraphProps &>(*p_new);
+	if (p_old) {
+		_follow_text_colors(static_cast<const ParagraphProps &>(*p_old).textAttributes, paragraph.textAttributes);
+	}
 	text->set_mouse_filter(paragraph.pointerEvents == PointerEventsMode::None || paragraph.pointerEvents == PointerEventsMode::BoxNone ? Control::MOUSE_FILTER_IGNORE : Control::MOUSE_FILTER_PASS);
 	_apply_box();
 	const std::string role = paragraph.role != Role::None ? toString(paragraph.role) : paragraph.accessibilityRole;
@@ -48,10 +81,9 @@ void RNParagraphComponentView::update_props(const Props::Shared &p_old, const Pr
 void RNParagraphComponentView::update_state(const State::Shared &p_state) {
 	RNComponentView::update_state(p_state);
 	const auto &data = std::static_pointer_cast<const ConcreteState<ParagraphState>>(p_state)->getData();
-	const auto &paragraph = static_cast<const ParagraphProps &>(*props);
 	attributed = data.attributedString;
-	const ParagraphAttributes attributes = data.paragraphAttributes;
-	text->set_content(String::utf8(attributed.getString().c_str()), [shaper = shaper, attributed = attributed, attributes](const Size2 &p_size, RNParagraphLayout &r_layout) { shaper->shape(attributed, attributes, p_size, r_layout); }, paragraph.isSelectable);
+	paragraph_attributes = data.paragraphAttributes;
+	_set_content();
 }
 
 RNTouchTarget RNParagraphComponentView::touch_target_at(const Point2 &p_local) const {
