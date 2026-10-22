@@ -73,7 +73,7 @@ public:
 	virtual void remove_child(RNComponentView *p_child);
 	void finish_removal();
 	virtual void handle_command(const std::string &p_name, const folly::dynamic &p_args) {}
-	void synchronously_update_props(const facebook::react::ComponentDescriptor &p_descriptor, const facebook::react::PropsParserContext &p_context, const folly::dynamic &p_props);
+	virtual void synchronously_update_props(const facebook::react::ComponentDescriptor &p_descriptor, const facebook::react::PropsParserContext &p_context, const folly::dynamic &p_props);
 
 	// Controls besides get_control() whose gui_input belongs to this view.
 	virtual Vector<Control *> get_input_controls() const { return {}; }
