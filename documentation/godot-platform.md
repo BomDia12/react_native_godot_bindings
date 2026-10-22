@@ -276,10 +276,13 @@ Godot's AccessKit integration carries React Native accessibility. `accessibility
 focus control's own `accessibility_name`, `accessibility_description` and
 `accessibility_live`. A View adds its role, states, value and actions in
 `NOTIFICATION_ACCESSIBILITY_UPDATE`: React Native roles map to Godot roles, roles without
-an equivalent publish a container with the React Native role as its description, and
-`mixed` sends unchecked with the state description `mixed`, because Godot's checked state
+an equivalent publish a container with the React Native role as its description, `none`
+and `presentation` keep the view's own panel role with no click action, and `mixed` sends
+unchecked with the state description `mixed`, because Godot's checked state
 is boolean. Hidden subtrees and modal views set `FLAG_HIDDEN` and `FLAG_MODAL`. An
-`accessible` View with no label is named by the text inside it. The screen reader's click
+`accessible` View is a single element, as on iOS and Android: its descendants sit under a
+hidden sub-element, as TabContainer hides inactive tabs, so screen readers skip them while
+AccessKit keeps them in the tree. With no label, it is named by the text inside it. The screen reader's click
 sends the same `onKeyboardClick` a keyboard press does, or the `activate` action when one is
 listed; `increment`, `decrement`, `expand` and `collapse` use Godot's own actions, and other
 actions become custom actions. Text publishes `link` and `heading` roles and one text run

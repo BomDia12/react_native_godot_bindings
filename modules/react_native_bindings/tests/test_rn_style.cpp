@@ -153,6 +153,8 @@ TEST_CASE("[ReactNativeBindings][Style] stages after a drop shadow filter the sh
 	CHECK(twice.contains("vec4 layer_0 = blurred(SCREEN_UV - (vec2(0.0)) * SCREEN_PIXEL_SIZE, sqrt(0.0 + stage_radius_1 * stage_radius_1)"));
 	// A second drop shadow also shadows the first one.
 	CHECK(rn_filter_shader(rn_filter_stages({ shadow, shadow })).contains("layer_3"));
+	// Each drop shadow doubles the layers, so only the first few are kept.
+	CHECK(rn_filter_stages({ shadow, shadow, shadow, shadow, blur }).size() == RN_MAX_DROP_SHADOWS + 1);
 }
 
 TEST_CASE("[ReactNativeBindings][Style][SceneTree] rounded clip hosts stack and square ones clip by rectangle") {

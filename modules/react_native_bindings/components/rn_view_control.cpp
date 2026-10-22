@@ -19,6 +19,11 @@ void RNViewControl::set_paint(const RNStyleBox::Paint &p_paint, bool p_visible) 
 }
 
 void RNViewControl::set_accessibility(const RNAccessibility &p_accessibility) {
+	// Elements can't be freed during an accessibility update, so this happens here.
+	if (!p_accessibility.grouped && hidden_children.is_valid()) {
+		AccessibilityServer::get_singleton()->free_element(hidden_children);
+		hidden_children = RID();
+	}
 	accessibility = p_accessibility;
 	queue_accessibility_update();
 }
@@ -127,6 +132,15 @@ void RNViewControl::_notification(int p_what) {
 			if (accessibility.grouped && get_accessibility_name().is_empty()) {
 				server->update_set_name(element, _descendant_text());
 			}
+			if (accessibility.grouped) {
+				if (hidden_children.is_null()) {
+					hidden_children = server->create_sub_element(element, AccessibilityServerEnums::ROLE_CONTAINER);
+				}
+				server->update_set_flag(hidden_children, AccessibilityServerEnums::FLAG_HIDDEN, true);
+				for (int i = 0; i < get_child_count(); ++i) {
+					server->update_add_child(hidden_children, get_child(i)->get_accessibility_element());
+				}
+			}
 			if (accessibility.clickable) {
 				server->update_add_action(element, AccessibilityServerEnums::ACTION_CLICK, callable_mp(this, &RNViewControl::_accessibility_activate));
 			}
@@ -142,6 +156,11 @@ void RNViewControl::_notification(int p_what) {
 			if (!accessibility.custom_names.is_empty()) {
 				server->update_add_action(element, AccessibilityServerEnums::ACTION_CUSTOM, callable_mp(this, &RNViewControl::_accessibility_custom));
 			}
+		} break;
+		case NOTIFICATION_EXIT_TREE:
+		case NOTIFICATION_ACCESSIBILITY_INVALIDATE: {
+			// Freed with the view's own element.
+			hidden_children = RID();
 		} break;
 		case NOTIFICATION_ENTER_TREE:
 		case NOTIFICATION_TRANSFORM_CHANGED:

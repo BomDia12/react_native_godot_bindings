@@ -52,7 +52,10 @@ void RNTextControl::_notification(int p_what) {
 		case NOTIFICATION_FOCUS_EXIT: {
 			set_selection_range(-1, -1);
 		} break;
-		case NOTIFICATION_EXIT_TREE:
+		case NOTIFICATION_EXIT_TREE: {
+			_refresh_accessible_groups();
+			accessibility_runs.clear();
+		} break;
 		case NOTIFICATION_ACCESSIBILITY_INVALIDATE: {
 			accessibility_runs.clear();
 		} break;
@@ -185,14 +188,18 @@ void RNTextControl::set_content_insets(real_t p_left, real_t p_top, real_t p_rig
 	_shape();
 }
 
-void RNTextControl::_shape() {
-	_free_accessibility_runs();
-	// Accessible groups are named by the text inside them.
+// Accessible groups are named by the text inside them.
+void RNTextControl::_refresh_accessible_groups() {
 	for (Node *node = get_parent(); node; node = node->get_parent()) {
 		if (RNViewControl *view = Object::cast_to<RNViewControl>(node); view && view->is_accessibility_grouped()) {
 			view->queue_accessibility_update();
 		}
 	}
+}
+
+void RNTextControl::_shape() {
+	_free_accessibility_runs();
+	_refresh_accessible_groups();
 	if (shape_function) {
 		shape_function((get_size() - content_inset).maxf(0), layout);
 	}

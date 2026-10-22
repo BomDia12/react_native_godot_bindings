@@ -21,6 +21,9 @@ class RNViewControl : public Panel {
 	Ref<RNStyleBox> style;
 	RNBoxShadows shadows;
 	RNAccessibility accessibility;
+	// A grouped view's children hang under this hidden element, as TabContainer
+	// hides inactive tabs, because AccessKit rejects elements outside the tree.
+	RID hidden_children;
 	std::function<void()> accessibility_click;
 	std::function<void(const String &)> accessibility_action;
 	void _menu_selected(int p_id);
@@ -48,7 +51,7 @@ public:
 	void set_accessibility(const RNAccessibility &p_accessibility);
 	bool is_accessibility_grouped() const { return accessibility.grouped; }
 	// An accessible view is one element, as on iOS and Android: its
-	// descendants don't join the accessibility tree.
+	// descendants are hidden from screen readers.
 	bool accessibility_override_tree_hierarchy() const override { return accessibility.grouped; }
 	// p_click runs for the default activation, p_action for named React Native actions.
 	void set_accessibility_callbacks(std::function<void()> p_click, std::function<void(const String &)> p_action);

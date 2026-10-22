@@ -90,6 +90,31 @@ public:
 		}
 		return nullptr;
 	}
+	// Elements the last pass updated that no window reaches, which AccessKit
+	// rejects as nodes outside the tree.
+	int count_unreachable_updates() const {
+		HashSet<RID> reached;
+		Vector<RID> pending;
+		for (const KeyValue<DisplayServerEnums::WindowID, RID> &root : window_roots) {
+			pending.push_back(root.value);
+		}
+		while (!pending.is_empty()) {
+			const RID id = pending[pending.size() - 1];
+			pending.resize(pending.size() - 1);
+			const Element *found = element(id);
+			if (!found || reached.has(id)) {
+				continue;
+			}
+			reached.insert(id);
+			pending.append_array(found->children);
+			pending.append_array(found->sub_elements);
+		}
+		int count = 0;
+		for (const RID &id : updated) {
+			count += elements.has(id) && !reached.has(id) ? 1 : 0;
+		}
+		return count;
+	}
 	bool has_flag(const RID &p_id, Flag p_flag) const {
 		const Element *found = element(p_id);
 		return found && found->flags.has(p_flag);

@@ -41,13 +41,15 @@ public:
 		SceneTree::get_singleton()->get_root()->add_child(trigger);
 		SceneTree::get_singleton()->process(0);
 		memdelete(trigger);
+		CHECK(server->count_unreachable_updates() == 0);
 	}
 
-	const RNTestAccessibilityServer::Element &element(const Node *p_node) const {
-		const RNTestAccessibilityServer::Element *found = server->element(p_node->get_accessibility_element());
+	const RNTestAccessibilityServer::Element &element(const RID &p_id) const {
+		const RNTestAccessibilityServer::Element *found = server->element(p_id);
 		REQUIRE(found != nullptr);
 		return *found;
 	}
+	const RNTestAccessibilityServer::Element &element(const Node *p_node) const { return element(p_node->get_accessibility_element()); }
 	bool has_flag(const Node *p_node, AccessibilityServerEnums::AccessibilityFlags p_flag) const { return server->has_flag(p_node->get_accessibility_element(), p_flag); }
 	bool perform(const Node *p_node, AccessibilityServerEnums::AccessibilityAction p_action, const Variant &p_data = Variant()) { return server->perform(p_node->get_accessibility_element(), p_action, p_data); }
 	const RNTestAccessibilityServer::Element *find(const String &p_name) const { return server->find(p_name); }
@@ -271,10 +273,32 @@ TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] accessible groups are
 	group.control()->add_child(text);
 	reader.flush();
 	CHECK(reader.element(group.control()).name == "80%");
+	// The children stay in the tree under one hidden element.
 	CHECK(reader.element(group.control()).children.is_empty());
+	REQUIRE(reader.element(group.control()).sub_elements.size() == 1);
+	const RID hidden = reader.element(group.control()).sub_elements[0];
+	CHECK(reader.element(hidden).flags.has(AccessibilityServerEnums::FLAG_HIDDEN));
+	CHECK(reader.element(hidden).children.has(text->get_accessibility_element()));
 	text->set_content("75%", nullptr, false);
 	reader.flush();
 	CHECK(reader.element(group.control()).name == "75%");
+
+	// Godot only tells the direct parent when a nested Text leaves.
+	Control *row = memnew(Control);
+	group.control()->add_child(row);
+	RNTextControl *nested = memnew(RNTextControl);
+	nested->set_content("ready", nullptr, false);
+	row->add_child(nested);
+	reader.flush();
+	CHECK(reader.element(group.control()).name == "75% ready");
+	memdelete(nested);
+	reader.flush();
+	CHECK(reader.element(group.control()).name == "75%");
+
+	group.view.update_props(nullptr, std::make_shared<ViewProps>());
+	reader.flush();
+	CHECK(reader.element(group.control()).sub_elements.is_empty());
+	CHECK(reader.element(group.control()).children.has(text->get_accessibility_element()));
 }
 
 TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] images and modal overlays publish their roles") {
