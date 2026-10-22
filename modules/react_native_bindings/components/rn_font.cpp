@@ -31,22 +31,50 @@ Ref<Font> rn_load_font_family(const String &p_family, Dictionary &r_variation) {
 	return font;
 }
 
-Ref<Font> rn_font_variation(const Ref<Font> &p_base, int p_weight, bool p_italic, float p_letter_spacing) {
-	if (p_weight == 400 && !p_italic && p_letter_spacing == 0) {
+Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style) {
+	if (p_base.is_null()) {
+		return p_base;
+	}
+	const int64_t weight_tag = TS->name_to_tag("wght");
+	const bool variable = p_base->get_supported_variation_list().has(weight_tag);
+	// A FontVariation author's own settings stay, and the style only adds to them.
+	const Ref<FontVariation> authored = p_base;
+	const bool keeps_authored_weight = authored.is_valid() && Dictionary(authored->get_variation_opentype()).has(weight_tag) && !p_style.weight_requested;
+	// A variable font's default instance need not be regular, so one with a
+	// weight axis gets the requested weight unless its author picked one.
+	if (p_style.is_default() && (!variable || keeps_authored_weight)) {
 		return p_base;
 	}
 	Ref<FontVariation> variation;
-	variation.instantiate();
-	variation->set_base_font(p_base);
-	Dictionary coordinates;
-	coordinates["wght"] = p_weight;
+	if (authored.is_valid()) {
+		variation = authored->duplicate();
+	} else {
+		variation.instantiate();
+		variation->set_base_font(p_base);
+	}
+	Dictionary coordinates = Dictionary(variation->get_variation_opentype()).duplicate();
+	if (!keeps_authored_weight) {
+		coordinates[weight_tag] = p_style.weight;
+	}
 	variation->set_variation_opentype(coordinates);
-	if (p_weight > 400 && !p_base->get_supported_variation_list().has(TS->name_to_tag("wght"))) {
-		variation->set_variation_embolden((p_weight - 400) / 250.0f);
+	if (p_style.weight > 400 && !variable) {
+		variation->set_variation_embolden(variation->get_variation_embolden() + (p_style.weight - 400) / 250.0f);
 	}
-	if (p_italic) {
-		variation->set_variation_transform(Transform2D(1, 0, -0.2, 1, 0, 0));
+	if (p_style.italic) {
+		variation->set_variation_transform(variation->get_variation_transform() * Transform2D(1, 0.2, 0, 1, 0, 0));
 	}
-	variation->set_spacing(TextServer::SPACING_GLYPH, int(Math::round(p_letter_spacing)));
+	variation->set_spacing(TextServer::SPACING_GLYPH, variation->get_spacing(TextServer::SPACING_GLYPH) + int(Math::round(p_style.letter_spacing)));
+	Dictionary features = Dictionary(p_base->get_opentype_features()).duplicate();
+	for (const String &feature : p_style.features) {
+		features[TS->name_to_tag(feature)] = 1;
+	}
+	variation->set_opentype_features(features);
+	// A FontVariation without fallbacks of its own uses its base font's.
+	const bool inherits_fallbacks = authored.is_valid() && authored->get_fallbacks().is_empty() && authored->get_base_font().is_valid();
+	TypedArray<Font> fallbacks;
+	for (const Variant &fallback : inherits_fallbacks ? authored->get_base_font()->get_fallbacks() : p_base->get_fallbacks()) {
+		fallbacks.push_back(rn_font_variation(Ref<Font>(fallback), p_style));
+	}
+	variation->set_fallbacks(fallbacks);
 	return variation;
 }

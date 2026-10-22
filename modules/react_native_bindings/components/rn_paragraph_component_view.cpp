@@ -1,6 +1,7 @@
 #include "rn_paragraph_component_view.h"
 
 #include "rn_text_shaper.h"
+#include "rn_view_component_view.h"
 
 #include <react/renderer/components/text/ParagraphProps.h>
 #include <react/renderer/components/text/ParagraphState.h>
@@ -10,12 +11,29 @@ using namespace facebook::react;
 
 RNParagraphComponentView::RNParagraphComponentView(Tag p_tag, std::shared_ptr<const RNTextShaper> p_shaper) :
 		RNComponentView(p_tag, memnew(RNTextControl)), text(Object::cast_to<RNTextControl>(get_control())), shaper(std::move(p_shaper)) {
+	box.instantiate();
+	text->set_box(box);
+}
+
+void RNParagraphComponentView::_apply_box() {
+	if (props) {
+		box->set_paint(rn_view_paint(*props, layout_metrics));
+		text->queue_redraw();
+	}
+}
+
+void RNParagraphComponentView::update_layout(const LayoutMetrics &p_metrics) {
+	const EdgeInsets &insets = p_metrics.contentInsets;
+	text->set_content_insets(insets.left, insets.top, insets.right, insets.bottom);
+	RNComponentView::update_layout(p_metrics);
+	_apply_box();
 }
 
 void RNParagraphComponentView::update_props(const Props::Shared &p_old, const Props::Shared &p_new) {
 	RNComponentView::update_props(p_old, p_new);
 	const auto &paragraph = static_cast<const ParagraphProps &>(*p_new);
 	text->set_mouse_filter(paragraph.pointerEvents == PointerEventsMode::None || paragraph.pointerEvents == PointerEventsMode::BoxNone ? Control::MOUSE_FILTER_IGNORE : Control::MOUSE_FILTER_PASS);
+	_apply_box();
 }
 
 void RNParagraphComponentView::update_state(const State::Shared &p_state) {
@@ -24,11 +42,11 @@ void RNParagraphComponentView::update_state(const State::Shared &p_state) {
 	const auto &paragraph = static_cast<const ParagraphProps &>(*props);
 	attributed = data.attributedString;
 	const ParagraphAttributes attributes = data.paragraphAttributes;
-	text->set_content(String::utf8(attributed.getString().c_str()), [shaper = shaper, attributed = attributed, attributes](float p_width, RNParagraphLayout &r_layout) { shaper->shape(attributed, attributes, p_width, r_layout); }, paragraph.isSelectable);
+	text->set_content(String::utf8(attributed.getString().c_str()), [shaper = shaper, attributed = attributed, attributes](const Size2 &p_size, RNParagraphLayout &r_layout) { shaper->shape(attributed, attributes, p_size, r_layout); }, paragraph.isSelectable);
 }
 
 RNTouchTarget RNParagraphComponentView::touch_target_at(const Point2 &p_local) const {
-	const int character = text->get_layout().hit_test(p_local);
+	const int character = text->get_layout().hit_test(text->to_content(p_local));
 	int offset = 0;
 	for (const AttributedString::Fragment &fragment : attributed.getFragments()) {
 		if (fragment.isAttachment()) {

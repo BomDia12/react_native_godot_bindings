@@ -1,6 +1,7 @@
 #include "rn_text_control.h"
 
 #include "core/object/class_db.h"
+#include "core/os/os.h"
 #include "servers/display/accessibility_server.h"
 #include "servers/display/display_server.h"
 
@@ -35,13 +36,19 @@ void RNTextControl::_notification(int p_what) {
 			_shape();
 		} break;
 		case NOTIFICATION_DRAW: {
+			if (box.is_valid()) {
+				box->draw(get_canvas_item(), Rect2(Point2(), get_size()));
+			}
 			if (selection_to > selection_from) {
 				const Color color = has_selection_color ? selection_color : get_theme_color(SNAME("selection_color"), SNAME("RichTextLabel"));
 				for (const Rect2 &rect : layout.get_range_rects(selection_from, selection_to)) {
-					draw_rect(rect, color);
+					draw_rect(Rect2(rect.position + content_origin, rect.size), color);
 				}
 			}
-			layout.draw(get_canvas_item(), Point2());
+			layout.draw(get_canvas_item(), content_origin);
+		} break;
+		case NOTIFICATION_FOCUS_EXIT: {
+			set_selection_range(-1, -1);
 		} break;
 		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
 			const RID element = get_accessibility_element();
@@ -59,17 +66,36 @@ void RNTextControl::gui_input(const Ref<InputEvent> &p_event) {
 	}
 	Ref<InputEventMouseButton> button = p_event;
 	if (button.is_valid() && button->get_button_index() == MouseButton::LEFT) {
-		selecting = button->is_pressed();
-		if (selecting) {
-			selection_anchor = layout.hit_test(button->get_position());
+		selecting = button->is_pressed() && !button->is_double_click();
+		if (!button->is_pressed()) {
+			return;
+		}
+		const int position = layout.hit_test(to_content(button->get_position()));
+		const uint64_t now = OS::get_singleton()->get_ticks_msec();
+		if (button->is_double_click()) {
+			last_double_click_msec = now;
+			_select_word(position);
+		} else if (now - last_double_click_msec < 400) {
+			last_double_click_msec = 0;
+			selecting = false;
+			_select_paragraph(position);
+		} else if (button->is_shift_pressed() && selection_anchor >= 0) {
+			set_selection_range(MIN(selection_anchor, position), MAX(selection_anchor, position));
+		} else {
+			selection_anchor = position;
 			set_selection_range(-1, -1);
 		}
 		return;
 	}
 	Ref<InputEventMouseMotion> motion = p_event;
 	if (motion.is_valid() && selecting) {
-		const int position = layout.hit_test(motion->get_position());
+		const int position = layout.hit_test(to_content(motion->get_position()));
 		set_selection_range(MIN(selection_anchor, position), MAX(selection_anchor, position));
+		return;
+	}
+	if (p_event->is_action_pressed(SNAME("ui_text_select_all"), false, true)) {
+		set_selection_range(0, text.length());
+		accept_event();
 		return;
 	}
 	if (p_event->is_action_pressed(SNAME("ui_copy"), false, true) && selection_to > selection_from) {
@@ -78,9 +104,39 @@ void RNTextControl::gui_input(const Ref<InputEvent> &p_event) {
 	}
 }
 
+void RNTextControl::_select_word(int p_character) {
+	const PackedInt32Array words = TS->string_get_word_breaks(text);
+	for (int i = 0; i + 1 < words.size(); i += 2) {
+		if (p_character >= words[i] && p_character < words[i + 1]) {
+			selection_anchor = words[i];
+			set_selection_range(words[i], words[i + 1]);
+			return;
+		}
+	}
+}
+
+// The text between the line breaks around a character.
+void RNTextControl::_select_paragraph(int p_character) {
+	const int start = p_character > 0 ? text.rfind("\n", p_character - 1) + 1 : 0;
+	const int end = text.find("\n", p_character);
+	selection_anchor = start;
+	set_selection_range(start, end < 0 ? text.length() : end);
+}
+
+void RNTextControl::set_content_insets(real_t p_left, real_t p_top, real_t p_right, real_t p_bottom) {
+	const Point2 origin(p_left, p_top);
+	const Size2 inset(p_left + p_right, p_top + p_bottom);
+	if (origin == content_origin && inset == content_inset) {
+		return;
+	}
+	content_origin = origin;
+	content_inset = inset;
+	_shape();
+}
+
 void RNTextControl::_shape() {
 	if (shape_function) {
-		shape_function(get_size().x, layout);
+		shape_function((get_size() - content_inset).maxf(0), layout);
 	}
 	queue_redraw();
 	queue_accessibility_update();
@@ -112,6 +168,11 @@ void RNTextControl::set_content(const String &p_text, RNTextShapeFunction p_shap
 	selectable = p_selectable;
 	set_focus_mode(selectable ? FOCUS_ALL : FOCUS_ACCESSIBILITY);
 	_shape();
+}
+
+void RNTextControl::set_box(const Ref<StyleBox> &p_box) {
+	box = p_box;
+	queue_redraw();
 }
 
 void RNTextControl::set_selection_color(const Color &p_color) {

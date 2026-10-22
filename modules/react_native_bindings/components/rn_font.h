@@ -3,4 +3,19 @@
 #include "scene/resources/font.h"
 
 Ref<Font> rn_load_font_family(const String &p_family, Dictionary &r_variation);
-Ref<Font> rn_font_variation(const Ref<Font> &p_base, int p_weight, bool p_italic, float p_letter_spacing);
+struct RNFontStyle {
+	int weight = 400;
+	// Text or its alias asked for a weight, which then replaces the one an
+	// authored FontVariation chose, even when it is regular.
+	bool weight_requested = false;
+	bool italic = false;
+	float letter_spacing = 0;
+	// OpenType feature tags, such as "smcp" or "tnum", turned on.
+	PackedStringArray features;
+
+	bool is_default() const { return weight == 400 && !italic && letter_spacing == 0 && features.is_empty(); }
+};
+
+// p_base with p_style applied, including to every font in its fallback chain,
+// so fallback glyphs match the requested weight, style and features.
+Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style);
