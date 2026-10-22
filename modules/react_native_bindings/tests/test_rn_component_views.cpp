@@ -292,7 +292,8 @@ TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] effect hosts render 
 	CHECK(host->get_effect_viewport()->gui_get_focus_owner() == child_control);
 	CHECK_FALSE(host->has_focus());
 
-	// A control added while focus is inside becomes the way out on the next Tab.
+	// A control added while focus is inside becomes the way out on the next Tab,
+	// even when focus reached it without passing through the host.
 	const ShadowView added = with_props(view(4, { .size = { .width = 10, .height = 10 } }), [](ViewProps &p_props) { p_props.focusable = true; });
 	const ShadowView outside = with_props(view(5, { .size = { .width = 10, .height = 10 } }), [](ViewProps &p_props) { p_props.focusable = true; });
 	surface.registry->apply({ ShadowViewMutation::CreateMutation(added), ShadowViewMutation::CreateMutation(outside), ShadowViewMutation::InsertMutation(2, added, 1), ShadowViewMutation::InsertMutation(1, outside, 1) });
@@ -301,10 +302,11 @@ TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] effect hosts render 
 	tab.instantiate();
 	tab->set_action("ui_focus_next");
 	tab->set_pressed(true);
+	added_control->grab_focus();
 	SceneTree::get_singleton()->get_root()->push_input(tab);
+	CHECK(surface.registry->find(5)->get_control()->has_focus());
 	CHECK(child_control->get_focus_next() == NodePath("authored"));
-	CHECK(added_control->get_node_or_null(added_control->get_focus_next()) == surface.registry->find(5)->get_control());
-	host->get_effect_viewport()->gui_release_focus();
+	surface.registry->find(5)->get_control()->release_focus();
 
 	surface.registry->apply({ ShadowViewMutation::UpdateMutation(parent, with_props(parent, [](ViewProps &p_props) { p_props.filter = {}; }), 0) });
 	CHECK_FALSE(component->get_effect_host());

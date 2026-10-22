@@ -39,10 +39,10 @@ Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style)
 	const bool variable = p_base->get_supported_variation_list().has(weight_tag);
 	// A FontVariation author's own settings stay, and the style only adds to them.
 	const Ref<FontVariation> authored = p_base;
-	const bool weight_chosen = authored.is_valid() && Dictionary(authored->get_variation_opentype()).has(weight_tag);
+	const bool keeps_authored_weight = authored.is_valid() && Dictionary(authored->get_variation_opentype()).has(weight_tag) && !p_style.weight_requested;
 	// A variable font's default instance need not be regular, so one with a
 	// weight axis gets the requested weight unless its author picked one.
-	if (p_style.is_default() && (!variable || weight_chosen)) {
+	if (p_style.is_default() && (!variable || keeps_authored_weight)) {
 		return p_base;
 	}
 	Ref<FontVariation> variation;
@@ -53,7 +53,7 @@ Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style)
 		variation->set_base_font(p_base);
 	}
 	Dictionary coordinates = Dictionary(variation->get_variation_opentype()).duplicate();
-	if (!weight_chosen || p_style.weight != 400) {
+	if (!keeps_authored_weight) {
 		coordinates[weight_tag] = p_style.weight;
 	}
 	variation->set_variation_opentype(coordinates);
@@ -69,8 +69,10 @@ Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style)
 		features[TS->name_to_tag(feature)] = 1;
 	}
 	variation->set_opentype_features(features);
+	// A FontVariation without fallbacks of its own uses its base font's.
+	const bool inherits_fallbacks = authored.is_valid() && authored->get_fallbacks().is_empty() && authored->get_base_font().is_valid();
 	TypedArray<Font> fallbacks;
-	for (const Variant &fallback : p_base->get_fallbacks()) {
+	for (const Variant &fallback : inherits_fallbacks ? authored->get_base_font()->get_fallbacks() : p_base->get_fallbacks()) {
 		fallbacks.push_back(rn_font_variation(Ref<Font>(fallback), p_style));
 	}
 	variation->set_fallbacks(fallbacks);

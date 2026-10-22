@@ -43,6 +43,7 @@ class RNEffectHost : public SubViewportContainer {
 	void _update_clip();
 	void _enter_focus();
 	void _set_focus_paths();
+	void _inner_focus_changed(Control *p_control);
 	void _restore_focus_paths();
 	void _use_filtered_viewport(bool p_filtered);
 	Control *_focusable(bool p_last) const;

@@ -171,9 +171,9 @@ void RNViewComponentView::_apply_style() {
 void RNViewComponentView::update_props(const facebook::react::Props::Shared &p_old, const facebook::react::Props::Shared &p_new) {
 	RNComponentView::update_props(p_old, p_new);
 	using facebook::react::PointerEventsMode;
-	auto old_props = std::static_pointer_cast<const facebook::react::ViewProps>(p_old);
 	const auto is_drop_shadow = [](const facebook::react::FilterFunction &p_function) { return p_function.type == facebook::react::FilterType::DropShadow; };
-	if ((!old_props || old_props->filter != props->filter) && std::count_if(props->filter.begin(), props->filter.end(), is_drop_shadow) > RN_MAX_DROP_SHADOWS) {
+	if (!reported_drop_shadows && std::count_if(props->filter.begin(), props->filter.end(), is_drop_shadow) > RN_MAX_DROP_SHADOWS) {
+		reported_drop_shadows = true;
 		WARN_PRINT(vformat("E_UNSUPPORTED_STYLE: React tag %d has more than %d drop-shadow filters; the later ones are ignored.", get_tag(), RN_MAX_DROP_SHADOWS));
 	}
 	const bool self_targetable = props->pointerEvents != PointerEventsMode::None && props->pointerEvents != PointerEventsMode::BoxNone;
