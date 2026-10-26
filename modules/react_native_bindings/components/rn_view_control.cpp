@@ -144,7 +144,8 @@ void RNViewControl::_notification(int p_what) {
 					if (child_window && !(child_window->is_visible() && (child_window->is_embedded() || child_window->is_popup()))) {
 						continue;
 					}
-					server->update_add_child(hidden_children, get_child(i)->get_accessibility_element());
+					// An open popup, such as the context menu, stays readable.
+					server->update_add_child(child_window ? element : hidden_children, get_child(i)->get_accessibility_element());
 				}
 			}
 			if (accessibility.clickable) {
