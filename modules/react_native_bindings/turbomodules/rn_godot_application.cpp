@@ -74,6 +74,7 @@ RNApplicationSnapshot RNGodotApplication::_capture() const {
 	const String locale = TranslationServer::get_singleton()->get_locale();
 	captured.locale = locale.utf8().get_data();
 	captured.is_rtl = force_rtl || (allow_rtl && TextServerManager::get_singleton()->get_primary_interface()->is_locale_right_to_left(locale));
+	captured.screen_reader = display && display->accessibility_screen_reader_active() == 1;
 	captured.keyboard_height = display && display->has_feature(DisplayServerEnums::FEATURE_VIRTUAL_KEYBOARD) ? display->virtual_keyboard_get_height() / scale : 0;
 	return captured;
 }
@@ -114,6 +115,9 @@ void RNGodotApplication::poll() {
 	}
 	if (current.focused != previous.focused) {
 		_emit("appStateFocusChange", current.focused);
+	}
+	if (current.screen_reader != previous.screen_reader) {
+		_emit("screenReaderChanged", current.screen_reader);
 	}
 	if (current.keyboard_height != previous.keyboard_height) {
 		const folly::dynamic coordinates = folly::dynamic::object("screenX", 0)("screenY", std::max(0.0, current.window.height - current.keyboard_height))("width", current.window.width)("height", current.keyboard_height);

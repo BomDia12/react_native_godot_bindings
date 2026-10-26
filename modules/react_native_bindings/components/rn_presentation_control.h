@@ -11,6 +11,7 @@ class RNModalOverlay : public Panel {
 
 protected:
 	static void _bind_methods() {}
+	void _notification(int p_what);
 
 public:
 	Size2 get_combined_minimum_size() const override { return Size2(); }

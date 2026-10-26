@@ -4,6 +4,7 @@
 
 #include "scene/gui/control.h"
 #include "scene/resources/style_box.h"
+#include "servers/display/accessibility_server_enums.h"
 
 #include <functional>
 
@@ -20,6 +21,12 @@ class RNTextControl : public Control {
 	HorizontalAlignment accessibility_alignment = HORIZONTAL_ALIGNMENT_LEFT;
 	RNParagraphLayout layout;
 	Ref<StyleBox> box;
+	AccessibilityServerEnums::AccessibilityRole accessibility_role = AccessibilityServerEnums::ROLE_STATIC_TEXT;
+	String accessibility_role_description;
+	// One text run per shaped line, for screen-reader selection.
+	Vector<RID> accessibility_runs;
+	void _free_accessibility_runs();
+	void _refresh_accessible_groups();
 	// Padding and border; the paragraph lays out in the content box inside them.
 	Point2 content_origin;
 	Size2 content_inset;
@@ -48,6 +55,7 @@ public:
 	void set_selection_color(const Color &p_color);
 	// The Text view's own background, borders and outline, drawn under the text.
 	void set_box(const Ref<StyleBox> &p_box);
+	void set_accessibility_role(AccessibilityServerEnums::AccessibilityRole p_role, const String &p_description = String());
 	void set_content_insets(real_t p_left, real_t p_top, real_t p_right, real_t p_bottom);
 	// A point in this control's coordinates, in the paragraph's.
 	Point2 to_content(const Point2 &p_local) const { return p_local - content_origin; }

@@ -173,8 +173,7 @@ the bundle.
 ## Pending APIs
 
 Imports of pending adapters are safe, but attempted operations report `E_UNSUPPORTED`.
-`BackHandler.exitApp`, legacy accessibility
-dispatch, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid (upstream's
+`BackHandler.exitApp`, DrawerLayoutAndroid, ProgressBarAndroid, and ToastAndroid (upstream's
 non-Android fallbacks) are not claimed as
 supported services or components. Godot reports no hardware back presses, so, as on iOS,
 `BackHandler` listeners return a subscription and never fire.
@@ -269,6 +268,31 @@ right-to-left layouts, so component controls stay left-to-right in Godot and do 
 mirror again; TextInput editors fill their host and take the layout direction. A
 View's `cursor` sets its Godot cursor shape and its React Native descendants inherit
 it where theirs is `auto`.
+
+## Accessibility
+
+Godot's AccessKit integration carries React Native accessibility. `accessibilityLabel`,
+`accessibilityHint` and `accessibilityLiveRegion` (and their `aria-*` forms) set the
+focus control's own `accessibility_name`, `accessibility_description` and
+`accessibility_live`. A View adds its role, states, value and actions in
+`NOTIFICATION_ACCESSIBILITY_UPDATE`: React Native roles map to Godot roles, roles without
+an equivalent publish a container with the React Native role as its description, `none`
+and `presentation` keep the view's own panel role, and `mixed` sends
+unchecked with the state description `mixed`, because Godot's checked state
+is boolean. Hidden subtrees and modal views set `FLAG_HIDDEN` and `FLAG_MODAL`. An
+`accessible` View is a single element, as on iOS and Android: its descendants sit under a
+hidden sub-element, as TabContainer hides inactive tabs, so screen readers skip them while
+AccessKit keeps them in the tree; an open context menu stays outside it. With no label, it is named by the text inside it. The screen reader's click
+sends the same `onKeyboardClick` a keyboard press does, or the `activate` action when one is
+listed; `increment`, `decrement`, `expand` and `collapse` use Godot's own actions, and other
+actions become custom actions. Text publishes `link` and `heading` roles and one text run
+per line for selection. Switch, TextInput, ScrollView and Godot windows keep their native
+roles, and Modal publishes a modal dialog.
+
+`AccessibilityInfo` uses the `AccessibilityManager` module that upstream's non-Android
+path calls. Announcements go through the root window's `accessibility_announcement`, and
+`setAccessibilityFocus` focuses the view's focus control. Tab and screen-reader order are
+Godot node order, which follows React order.
 
 ## Application services
 

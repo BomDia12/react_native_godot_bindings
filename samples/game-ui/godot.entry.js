@@ -1,5 +1,5 @@
 import React, {useState, useRef, useEffect} from 'react';
-import {Alert, AppRegistry, View, Text, Image, FlatList, SectionList, ScrollView, TextInput, Button, Pressable, Switch, ActivityIndicator, Modal, Appearance, useWindowDimensions} from 'react-native';
+import {AccessibilityInfo, Alert, AppRegistry, I18nManager, findNodeHandle, View, Text, Image, FlatList, SectionList, ScrollView, TextInput, Button, Pressable, Switch, ActivityIndicator, Modal, Appearance, useWindowDimensions} from 'react-native';
 import {GodotAppRegistry, useGodotAlert} from 'react-native-godot/app-registry';
 import {useGodotScene, call, callAsync} from 'react-native-godot/scene';
 import GodotWindow from 'react-native-godot/GodotWindow';
@@ -9,6 +9,7 @@ import 'react-native-godot/setup';
 import {runHTTPChecks, runSocketChecks, runLowFPSDownload} from './game/network';
 const icon = require('./assets/item.png');
 const font = fontFamily(require('./assets/OpenSans.woff2'));
+const arabicFont = fontFamily(require('./assets/NotoSansArabic.ttf'));
 const observations = global.__game = {enemies: {}, inventory: null, sequences: {}, events: [], rendered: [], network: []};
 const actions = new Map();
 let savedAlert;
@@ -78,6 +79,12 @@ function GameInventory({rootTag}) {
       httpChecks: (base, https) => runHTTPChecks(base, https).then(evidence => {observations.httpEvidence = evidence;}).catch(error => {observations.networkError = error.message;}),
       socketChecks: url => runSocketChecks(url, update => queued('networkUpdate', [update])).then(evidence => {observations.socketEvidence = evidence;}).catch(error => {observations.networkError = error.message;}),
       alert: (...args) => alert(...args), modal: setModal, window: setWindowVisible,
+      accessibility: () => Promise.all([AccessibilityInfo.isScreenReaderEnabled(), AccessibilityInfo.isReduceMotionEnabled()]).then(([screenReader, reduceMotion]) => {
+        AccessibilityInfo.announceForAccessibility('Inventory ready');
+        AccessibilityInfo.setAccessibilityFocus(findNodeHandle(editor.current));
+        observations.accessibility = {screenReader, reduceMotion};
+      }),
+      forceRTL: value => { I18nManager.forceRTL(value); observations.isRTL = I18nManager.isRTL; },
       scroll: index => list.current?.scrollToIndex({index, animated: false}),
       controlled: setControlled, clear: () => editor.current?.clear(),
       scheme: value => { Appearance.setColorScheme(value); setDark(value === 'dark'); },
@@ -109,6 +116,7 @@ function GameInventory({rootTag}) {
   };
   return <View style={{flex: 1, padding: 12, backgroundColor: dark ? '#111122' : '#18202b'}}>
     <Text testID="imported-font" style={{fontFamily: font, fontSize: 22, color: '#eeeeee'}}>{inventory.title}</Text>
+    <Text testID="bidi-text" style={{color: '#eeeeee', alignSelf: 'flex-start'}}>Market <Text onPress={() => record('arabic-press')} style={{fontFamily: arabicFont}}>سوق</Text></Text>
     <View style={{flexDirection: 'row', height: 44, alignItems: 'center'}}>
       <Image testID="asset-image" source={icon} style={{width: 32, height: 32}} onLoad={() => record('asset-load')} />
       {remote && <Image testID="remote-image" source={remote} style={{width: 32, height: 32}} onLoad={() => record('remote-load')} onError={event => {observations.networkError = event.nativeEvent.error;}} />}

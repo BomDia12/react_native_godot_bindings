@@ -6,6 +6,7 @@
 #include "core/object/callable_mp.h"
 #include "scene/main/scene_tree.h"
 #include "scene/resources/style_box_flat.h"
+#include "servers/display/accessibility_server.h"
 
 #include <map>
 
@@ -147,6 +148,15 @@ void RNModalControl::_apply_request() {
 		present(requested_visible, requested_backdrop, get_presentation_size());
 	}
 }
+void RNModalOverlay::_notification(int p_what) {
+	if (p_what == NOTIFICATION_ACCESSIBILITY_UPDATE) {
+		const RID element = get_accessibility_element();
+		ERR_FAIL_COND(element.is_null());
+		AccessibilityServer::get_singleton()->update_set_role(element, AccessibilityServerEnums::ROLE_DIALOG);
+		AccessibilityServer::get_singleton()->update_set_flag(element, AccessibilityServerEnums::FLAG_MODAL, true);
+	}
+}
+
 // Presenting reparents the overlay, which the parent forbids while it is
 // still adding this modal.
 void RNModalControl::_notification(int p_what) {
