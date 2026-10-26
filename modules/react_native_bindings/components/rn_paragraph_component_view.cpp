@@ -53,7 +53,9 @@ void RNParagraphComponentView::_follow_text_colors() {
 	AttributedString recolored;
 	for (AttributedString::Fragment fragment : attributed.getFragments()) {
 		// Raw text directly in the paragraph has its colors. A nested span with
-		// no color of its own inherits one, from the paragraph when it matches.
+		// no color of its own inherits one, but fragments don't record from which
+		// ancestor, so a span whose nearest colored ancestor matches the paragraph
+		// is treated as inheriting from it.
 		const bool direct = fragment.parentShadowView.tag == get_tag();
 		const auto *span = direct || fragment.isAttachment() ? nullptr : dynamic_cast<const TextProps *>(fragment.parentShadowView.props.get());
 		for (SharedColor TextAttributes::*color : colors) {
