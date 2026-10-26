@@ -315,6 +315,51 @@ TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] effect hosts render 
 	CHECK(child_control->get_focus_next() == NodePath("authored"));
 }
 
+TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] Tab leaves an effect host nested in another") {
+	Surface surface;
+	const auto filtered = [](const ShadowView &p_view) {
+		return with_props(p_view, [](ViewProps &p_props) { p_props.filter = { FilterFunction{ .type = FilterType::Grayscale, .parameters = Float(1) } }; });
+	};
+	const auto focusable = [](const ShadowView &p_view) {
+		return with_props(p_view, [](ViewProps &p_props) { p_props.focusable = true; });
+	};
+	const ShadowView outer = filtered(view(2, { .size = { .width = 40, .height = 40 } }));
+	const ShadowView inner = filtered(view(3, { .size = { .width = 20, .height = 20 } }));
+	const ShadowView inside = focusable(view(4, { .size = { .width = 10, .height = 10 } }));
+	const ShadowView before = focusable(view(5, { .size = { .width = 10, .height = 10 } }));
+	const ShadowView after = focusable(view(6, { .size = { .width = 10, .height = 10 } }));
+	surface.registry->apply({
+			ShadowViewMutation::CreateMutation(outer),
+			ShadowViewMutation::CreateMutation(inner),
+			ShadowViewMutation::CreateMutation(inside),
+			ShadowViewMutation::CreateMutation(before),
+			ShadowViewMutation::CreateMutation(after),
+			ShadowViewMutation::InsertMutation(1, before, 0),
+			ShadowViewMutation::InsertMutation(1, outer, 1),
+			ShadowViewMutation::InsertMutation(1, after, 2),
+			ShadowViewMutation::InsertMutation(2, inner, 0),
+			ShadowViewMutation::InsertMutation(3, inside, 0),
+	});
+	REQUIRE(static_cast<RNViewComponentView *>(surface.registry->find(3))->get_effect_host());
+	Control *inside_control = surface.registry->find(4)->get_control();
+	const auto press = [](const StringName &p_action) {
+		Ref<InputEventAction> event;
+		event.instantiate();
+		event->set_action(p_action);
+		event->set_pressed(true);
+		SceneTree::get_singleton()->get_root()->push_input(event);
+	};
+
+	inside_control->grab_focus();
+	press("ui_focus_next");
+	CHECK(surface.registry->find(6)->get_control()->has_focus());
+
+	inside_control->grab_focus();
+	press("ui_focus_prev");
+	CHECK(surface.registry->find(5)->get_control()->has_focus());
+	surface.registry->find(5)->get_control()->release_focus();
+}
+
 TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] cursors inherit from the nearest React ancestor") {
 	Surface surface;
 	const ShadowView parent = with_props(view(2, { .size = { .width = 40, .height = 40 } }), [](ViewProps &p_props) { p_props.cursor = Cursor::Pointer; });
