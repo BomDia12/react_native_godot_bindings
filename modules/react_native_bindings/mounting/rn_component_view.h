@@ -1,7 +1,8 @@
 #pragma once
 
+#include "../components/rn_rounded_rect.h"
+
 #include "scene/gui/control.h"
-#include "scene/resources/style_box_flat.h"
 
 #include <folly/dynamic.h>
 #include <react/renderer/components/view/TouchEventEmitter.h>
@@ -15,7 +16,10 @@
 #include <memory>
 
 ::Color rn_godot_color(const facebook::react::SharedColor &p_color, const ::Color &p_default = ::Color(0, 0, 0, 0));
-Ref<StyleBoxFlat> rn_view_stylebox(const facebook::react::ViewProps &p_props, const facebook::react::LayoutMetrics &p_layout);
+// Applies each React Native control's cursor to p_subtree, inheriting from the
+// nearest React Native ancestor where the cursor is auto, as CSS does.
+void rn_refresh_cursors(Control *p_subtree);
+RNRoundedRect rn_rounded_rect(const Rect2 &p_rect, const facebook::react::BorderRadii &p_radii);
 
 struct RNTouchTarget {
 	facebook::react::Tag tag = 0;

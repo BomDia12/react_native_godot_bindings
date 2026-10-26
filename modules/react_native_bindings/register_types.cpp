@@ -1,8 +1,11 @@
 #include "register_types.h"
 
+#include "components/rn_clip.h"
+#include "components/rn_effect_host.h"
 #include "components/rn_image_control.h"
 #include "components/rn_presentation_control.h"
 #include "components/rn_scroll_control.h"
+#include "components/rn_shader_cache.h"
 #include "components/rn_small_controls.h"
 #include "components/rn_text_control.h"
 #include "components/rn_text_input_control.h"
@@ -66,6 +69,9 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		Engine::get_singleton()->add_singleton(Engine::Singleton("ReactNativeHost", react_native_host, "ReactNativeHost"));
 		ClassDB::register_class<RNTextControl>();
 		ClassDB::register_class<RNViewControl>();
+		ClassDB::register_class<RNStyleBox>();
+		ClassDB::register_internal_class<RNClipControl>();
+		ClassDB::register_internal_class<RNEffectHost>();
 		ClassDB::register_class<RNImageControl>();
 		ClassDB::register_class<RNModalControl>();
 		ClassDB::register_class<RNWindowControl>();
@@ -95,6 +101,7 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 
 void uninitialize_react_native_bindings_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		rn_clear_shader_cache();
 		if (react_native_host) {
 			Engine::get_singleton()->remove_singleton("ReactNativeHost");
 			memdelete(react_native_host);

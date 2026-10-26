@@ -139,7 +139,8 @@ void RNScrollControl::set_overlay_indicators(bool p_horizontal, bool p_vertical)
 	set_vertical_scroll_mode(settings.horizontal ? SCROLL_MODE_DISABLED : SCROLL_MODE_SHOW_NEVER);
 	if (!indicators) {
 		indicators = memnew(RNScrollIndicators(this));
-		add_child(indicators, false, INTERNAL_MODE_FRONT);
+		// Drawn after the content, and clipped with it by enclosing clips.
+		add_child(indicators, false, INTERNAL_MODE_BACK);
 		set_notify_transform(true);
 	}
 	indicators->horizontal = p_horizontal;
@@ -148,18 +149,22 @@ void RNScrollControl::set_overlay_indicators(bool p_horizontal, bool p_vertical)
 }
 RNScrollIndicators::RNScrollIndicators(RNScrollControl *p_scroll) :
 		scroll(p_scroll) {
-	set_as_top_level(true);
 	set_mouse_filter(MOUSE_FILTER_IGNORE);
 }
 void RNScrollIndicators::follow_scroll() {
 	if (scroll && scroll->is_inside_tree()) {
-		set_global_position(scroll->get_global_position());
+		set_position(Point2());
 		set_size(scroll->get_size());
 		set_visible(scroll->is_visible_in_tree());
 	}
 	queue_redraw();
 }
 void RNScrollIndicators::_notification(int p_what) {
+	// ScrollContainer fits internal children to the content too, sometimes in
+	// a deferred call, so the indicators go back over the viewport after it.
+	if (p_what == NOTIFICATION_RESIZED) {
+		follow_scroll();
+	}
 	if (p_what != NOTIFICATION_DRAW || !scroll) {
 		return;
 	}

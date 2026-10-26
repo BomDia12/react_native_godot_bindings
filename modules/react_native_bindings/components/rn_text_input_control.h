@@ -49,6 +49,7 @@ class RNTextInputControl : public Control {
 	Control *editor = nullptr;
 	Control *staged_editor = nullptr;
 	RNTextInputConfig config;
+	bool right_to_left = false;
 	std::function<void(const StringName &, const Dictionary &)> event_callback;
 	std::function<void()> layout_callback;
 	Dictionary deferred_replacement;
@@ -95,6 +96,8 @@ public:
 	int get_event_count() const { return event_count; }
 	void set_callbacks(std::function<void(const StringName &, const Dictionary &)> p_event, std::function<void()> p_layout);
 	void configure(const RNTextInputConfig &p_config);
+	// The editor fills this control, so it mirrors in place.
+	void set_right_to_left(bool p_rtl);
 	void reconcile(int p_ack, const Variant &p_text, int p_start, int p_end);
 	void focus();
 	void blur();

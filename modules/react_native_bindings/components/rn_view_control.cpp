@@ -2,6 +2,25 @@
 
 #include "core/object/callable_mp.h"
 
+RNViewControl::RNViewControl() {
+	style.instantiate();
+	add_theme_style_override(SNAME("panel"), style);
+}
+
+void RNViewControl::set_paint(const RNStyleBox::Paint &p_paint, bool p_visible) {
+	style->set_paint(p_visible ? p_paint : RNStyleBox::Paint());
+	shadows.update(get_canvas_item(), p_visible ? p_paint : RNStyleBox::Paint());
+	set_notify_transform(!shadows.is_empty());
+	_update_shadow_clip();
+	queue_redraw();
+}
+
+void RNViewControl::_update_shadow_clip() {
+	if (!shadows.is_empty() && is_inside_tree()) {
+		shadows.update_clip(rn_clip_stack(this));
+	}
+}
+
 void RNViewControl::set_menu_callbacks(std::function<void(const String &)> p_action, std::function<void()> p_opening) {
 	menu_action = std::move(p_action);
 	menu_opening = std::move(p_opening);
@@ -45,6 +64,13 @@ void RNViewControl::_menu_selected(int p_id) {
 }
 
 void RNViewControl::_notification(int p_what) {
+	switch (p_what) {
+		case NOTIFICATION_ENTER_TREE:
+		case NOTIFICATION_TRANSFORM_CHANGED:
+		case RN_NOTIFICATION_CLIP_CHANGED: {
+			_update_shadow_clip();
+		} break;
+	}
 	if ((p_what == NOTIFICATION_FOCUS_ENTER || p_what == NOTIFICATION_FOCUS_EXIT) && focus_changed) {
 		focus_changed(p_what == NOTIFICATION_FOCUS_ENTER);
 	}

@@ -51,8 +51,8 @@ func has_priority(name: String) -> bool:
 
 func find_panel_with_color(node: Node, color: Color) -> Panel:
 	if node is Panel:
-		var style := node.get_theme_stylebox("panel") as StyleBoxFlat
-		if style != null and style.bg_color.is_equal_approx(color):
+		var style := node.get_theme_stylebox("panel") as RNStyleBox
+		if style != null and style.get_bg_color().is_equal_approx(color):
 			return node
 	for child in node.get_children():
 		var found := find_panel_with_color(child, color)
@@ -61,7 +61,7 @@ func find_panel_with_color(node: Node, color: Color) -> Panel:
 	return null
 
 func border_width_of(panel: Panel) -> int:
-	var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	var style := panel.get_theme_stylebox("panel") as RNStyleBox
 	return 0 if style == null else style.get_border_width(SIDE_TOP)
 
 func find_label_text(node: Node, value: String) -> RNTextControl:
