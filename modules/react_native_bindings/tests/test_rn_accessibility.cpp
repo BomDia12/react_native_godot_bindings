@@ -311,6 +311,18 @@ TEST_CASE("[ReactNativeBindings][Accessibility][SceneTree] accessible groups are
 	CHECK(reader.focus() == focusable->get_accessibility_element());
 	memdelete(focusable);
 
+	// An open context menu stays readable outside the hidden children.
+	PopupMenu *menu = nullptr;
+	for (int i = 0; i < group.control()->get_child_count() && !menu; ++i) {
+		menu = Object::cast_to<PopupMenu>(group.control()->get_child(i));
+	}
+	REQUIRE(menu);
+	menu->popup();
+	reader.flush();
+	CHECK(reader.element(group.control()).children.has(menu->get_accessibility_element()));
+	CHECK_FALSE(reader.element(hidden).children.has(menu->get_accessibility_element()));
+	menu->hide();
+
 	group.view.update_props(nullptr, std::make_shared<ViewProps>());
 	reader.flush();
 	CHECK(reader.element(group.control()).sub_elements.is_empty());
