@@ -229,7 +229,8 @@ Control *RNEffectHost::_focusable(bool p_last) const {
 		Node *node = pending[pending.size() - 1];
 		pending.resize(pending.size() - 1);
 		Control *control = Object::cast_to<Control>(node);
-		if (control && control != painter && control->is_visible_in_tree() && control->get_focus_mode_with_override() == FOCUS_ALL) {
+		// A nested host passes focus on to its own controls, which this walk reaches.
+		if (control && control != painter && !Object::cast_to<RNEffectHost>(control) && control->is_visible_in_tree() && control->get_focus_mode_with_override() == FOCUS_ALL) {
 			found.push_back(control);
 		}
 		for (int i = node->get_child_count() - 1; i >= 0; --i) {
@@ -292,14 +293,20 @@ void RNEffectHost::_restore_focus_paths() {
 // Focus inside takes it from the host, and an unfocused container only
 // forwards keys after the window's own navigation has used Tab. So while a
 // control inside has focus, keys go to it first, as to a focused container.
-void RNEffectHost::_inner_focus_changed(Control *) {
-	set_process_input(true);
-	set_process_unhandled_input(false);
+// Every enclosing host forwards too, so keys reach controls in nested hosts.
+void RNEffectHost::_inner_focus_changed(Control *p_control) {
+	for (Node *node = this; node; node = node->get_parent()) {
+		if (RNEffectHost *host = Object::cast_to<RNEffectHost>(node)) {
+			host->inner_focus = p_control->get_instance_id();
+			host->set_process_input(true);
+			host->set_process_unhandled_input(false);
+		}
+	}
 }
 
 void RNEffectHost::input(const Ref<InputEvent> &p_event) {
-	SubViewport *effect_viewport = get_effect_viewport();
-	if (!effect_viewport->gui_get_focus_owner()) {
+	const Control *focused = Object::cast_to<Control>(ObjectDB::get_instance(inner_focus));
+	if (!focused || !focused->has_focus() || !is_ancestor_of(focused)) {
 		set_process_input(false);
 		set_process_unhandled_input(true);
 		return;
@@ -308,9 +315,16 @@ void RNEffectHost::input(const Ref<InputEvent> &p_event) {
 		return;
 	}
 	// Children and neighbors change while focus is inside, so the paths out
-	// are chosen again right before the viewport moves focus.
-	if (p_event->is_action_pressed(SNAME("ui_focus_next"), true, true) || p_event->is_action_pressed(SNAME("ui_focus_prev"), true, true)) {
-		_set_focus_paths();
+	// are chosen again right before the viewport moves focus. The host holding
+	// the focus chooses for every host around it, innermost first, so an outer
+	// host's way out wins over a nested host's neighbor that wraps around.
+	SubViewport *effect_viewport = get_effect_viewport();
+	if (focused->get_viewport() == effect_viewport && (p_event->is_action_pressed(SNAME("ui_focus_next"), true, true) || p_event->is_action_pressed(SNAME("ui_focus_prev"), true, true))) {
+		for (Node *node = this; node; node = node->get_parent()) {
+			if (RNEffectHost *host = Object::cast_to<RNEffectHost>(node)) {
+				host->_set_focus_paths();
+			}
+		}
 	}
 	effect_viewport->push_input(p_event);
 }

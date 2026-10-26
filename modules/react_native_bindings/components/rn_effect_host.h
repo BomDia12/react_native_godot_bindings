@@ -32,6 +32,9 @@ class RNEffectHost : public SubViewportContainer {
 	ObjectID focus_last;
 	NodePath saved_previous;
 	NodePath saved_next;
+	// The control that last took focus anywhere below this host, including
+	// inside hosts nested in it.
+	ObjectID inner_focus;
 	real_t margin = 0;
 	Vector<RNFilterStage> stages;
 	facebook::react::BlendMode blend = facebook::react::BlendMode::Normal;
