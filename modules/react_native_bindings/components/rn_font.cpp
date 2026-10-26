@@ -31,7 +31,9 @@ Ref<Font> rn_load_font_family(const String &p_family, Dictionary &r_variation) {
 	return font;
 }
 
-Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style) {
+namespace {
+
+Ref<Font> styled_font(const Ref<Font> &p_base, const RNFontStyle &p_style, bool p_top_level) {
 	if (p_base.is_null()) {
 		return p_base;
 	}
@@ -69,12 +71,25 @@ Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style)
 		features[TS->name_to_tag(feature)] = 1;
 	}
 	variation->set_opentype_features(features);
-	// A FontVariation without fallbacks of its own uses its base font's.
-	const bool inherits_fallbacks = authored.is_valid() && authored->get_fallbacks().is_empty() && authored->get_base_font().is_valid();
+	// A FontVariation without fallbacks of its own uses its base font's, or the
+	// theme's when it has no base. Godot does this only for the font it draws
+	// with; fonts in a fallback chain contribute their own fallbacks alone.
+	TypedArray<Font> source = p_base->get_fallbacks();
+	if (p_top_level && authored.is_valid() && source.is_empty()) {
+		if (const Ref<Font> base = authored->_get_base_font_or_default(); base.is_valid()) {
+			source = base->get_fallbacks();
+		}
+	}
 	TypedArray<Font> fallbacks;
-	for (const Variant &fallback : inherits_fallbacks ? authored->get_base_font()->get_fallbacks() : p_base->get_fallbacks()) {
-		fallbacks.push_back(rn_font_variation(Ref<Font>(fallback), p_style));
+	for (const Variant &fallback : source) {
+		fallbacks.push_back(styled_font(Ref<Font>(fallback), p_style, false));
 	}
 	variation->set_fallbacks(fallbacks);
 	return variation;
+}
+
+} // namespace
+
+Ref<Font> rn_font_variation(const Ref<Font> &p_base, const RNFontStyle &p_style) {
+	return styled_font(p_base, p_style, true);
 }

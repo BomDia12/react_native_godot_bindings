@@ -171,6 +171,30 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] weight, style and features app
 	const Ref<FontVariation> bold = rn_font_variation(authored, style);
 	REQUIRE(bold->get_fallbacks().size() == 1);
 	CHECK(int(Dictionary(Ref<FontVariation>(bold->get_fallbacks()[0])->get_variation_opentype())[TS->name_to_tag("wght")]) == 700);
+
+	// Inside a fallback chain a variation brings only its own fallbacks.
+	Ref<FontVariation> nested;
+	nested.instantiate();
+	nested->set_base_font(with_fallbacks);
+	Ref<FontVariation> chain;
+	chain.instantiate();
+	chain->set_base_font(variable);
+	chain->set_fallbacks({ nested });
+	const Ref<FontVariation> chained = rn_font_variation(chain, style);
+	REQUIRE(chained->get_fallbacks().size() == 1);
+	CHECK(Ref<FontVariation>(chained->get_fallbacks()[0])->get_fallbacks().is_empty());
+
+	// Without a base font, the theme's font supplies the fallbacks.
+	Ref<FontFile> theme_font = rn_test_font("NotoSansHebrew.ttf");
+	theme_font->set_fallbacks({ rn_test_font("NotoSansArabic.ttf") });
+	const Ref<Theme> theme = ThemeDB::get_singleton()->get_default_theme();
+	theme->set_font("font", "FontVariation", theme_font);
+	Ref<FontVariation> unbased;
+	unbased.instantiate();
+	const Ref<FontVariation> themed = rn_font_variation(unbased, style);
+	theme->clear_font("font", "FontVariation");
+	REQUIRE(themed->get_fallbacks().size() == 1);
+	CHECK(int(Dictionary(Ref<FontVariation>(themed->get_fallbacks()[0])->get_variation_opentype())[TS->name_to_tag("wght")]) == 700);
 }
 
 } // namespace TestRNText
