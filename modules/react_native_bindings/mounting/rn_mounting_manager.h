@@ -2,6 +2,7 @@
 
 #include "rn_component_view_registry.h"
 
+#include <react/renderer/animations/LayoutAnimationDriver.h>
 #include <react/renderer/uimanager/IMountingManager.h>
 
 #include <map>
@@ -31,11 +32,19 @@ class RNMountingManager : public facebook::react::IMountingManager {
 
 	std::map<facebook::react::SurfaceId, RNMountedSurface> surfaces;
 
+	// The Scheduler builds the component registry through this manager's
+	// factory; LayoutAnimation needs that registry and context.
+	facebook::react::SharedComponentDescriptorRegistry component_registry;
+	std::shared_ptr<const facebook::react::ContextContainer> context_container;
+	std::shared_ptr<facebook::react::LayoutAnimationDriver> layout_animations;
+	std::weak_ptr<facebook::react::UIManager> ui_manager;
+
 	void _flush();
 	RNComponentView *_find(facebook::react::Tag p_tag, facebook::react::SurfaceId &r_surface) const;
 
 public:
 	RNMountingManager(std::shared_ptr<RNMainThreadQueue> p_main_thread, std::shared_ptr<const RNComponentViewFactories> p_factories, facebook::react::ComponentRegistryFactory p_registry_factory, std::shared_ptr<facebook::react::IImageLoader> p_image_loader);
+	~RNMountingManager() override;
 
 	void register_surface(facebook::react::SurfaceId p_surface, const RNMountedSurface &p_mounted);
 	// Gives keyboard and screen-reader focus to a focusable mounted view.
@@ -52,4 +61,9 @@ public:
 	bool hasComponent(const std::string &p_name) override { return factories->has(p_name); }
 	void setSchedulerTaskExecutor(facebook::react::SchedulerTaskExecutor &&p_executor) noexcept override;
 	std::shared_ptr<facebook::react::IImageLoader> getImageLoader() noexcept override { return image_loader; }
+	void setUIManager(std::weak_ptr<facebook::react::UIManager> p_ui_manager) noexcept override;
+	// Advances running layout animations by one frame; their interpolated
+	// mutations arrive as ordinary mount transactions.
+	void tick_layout_animations();
+	bool has_layout_animations() const { return layout_animations != nullptr; }
 };

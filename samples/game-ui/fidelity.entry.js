@@ -1,5 +1,5 @@
-import React, {useEffect} from 'react';
-import {AppRegistry, ScrollView, Text, View} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {Animated, AppRegistry, Easing, LayoutAnimation, ScrollView, Text, View} from 'react-native';
 import {fontFamily} from 'react-native-godot/fonts';
 import 'react-native-godot/setup';
 
@@ -8,10 +8,10 @@ const arabic = fontFamily(require('./assets/NotoSansArabic.ttf'));
 const hebrew = fontFamily(require('./assets/NotoSansHebrew.ttf'));
 const ink = '#003d5b';
 
-function Screen({name, children}) {
+function Screen({name, children, ready = true}) {
   useEffect(() => {
-    rendered[name] = true;
-  }, [name]);
+    rendered[name] = ready;
+  }, [name, ready]);
   return <View style={{width: 480, height: 360, backgroundColor: '#f4f1ea', padding: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 12}}>{children}</View>;
 }
 
@@ -139,6 +139,33 @@ function TextGallery() {
 }
 
 AppRegistry.registerComponent('TextGallery', () => TextGallery);
+// Every animation runs to its end; the golden records where each one stops.
+function AnimationGallery() {
+  const js = useRef(new Animated.Value(0)).current;
+  const native = useRef(new Animated.Value(0)).current;
+  const spring = useRef(new Animated.Value(0)).current;
+  const [expanded, setExpanded] = useState(false);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    LayoutAnimation.configureNext({...LayoutAnimation.Presets.easeInEaseOut, duration: 300});
+    setExpanded(true);
+    Animated.parallel([
+      Animated.timing(js, {toValue: 1, duration: 300, easing: Easing.inOut(Easing.quad), useNativeDriver: false}),
+      Animated.timing(native, {toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true}),
+      Animated.spring(spring, {toValue: 1, stiffness: 180, damping: 18, useNativeDriver: true}),
+    ]).start(() => setTimeout(() => setDone(true), 400));
+  }, []);
+  const tile = {width: 72, height: 72, margin: 12};
+  return <Screen name="AnimationGallery" ready={done}>
+    <Animated.View style={{...tile, opacity: js.interpolate({inputRange: [0, 1], outputRange: [0.2, 1]}), backgroundColor: js.interpolate({inputRange: [0, 1], outputRange: ['#d1495b', '#00798c']}), transform: [{translateY: js.interpolate({inputRange: [0, 1], outputRange: [0, 40]})}]}} />
+    <Animated.View style={{...tile, backgroundColor: '#30638e', opacity: native, transform: [{rotate: native.interpolate({inputRange: [0, 1], outputRange: ['0deg', '45deg']})}, {scale: native.interpolate({inputRange: [0, 1], outputRange: [0.5, 1]})}]}} />
+    <Animated.View style={{...tile, backgroundColor: '#edae49', transform: [{translateX: spring.interpolate({inputRange: [0, 1], outputRange: [0, 60]})}]}} />
+    <View style={{width: expanded ? 300 : 72, height: 48, margin: 12, backgroundColor: '#003d5b'}} />
+    <Animated.Text style={{color: js.interpolate({inputRange: [0, 1], outputRange: ['#d1495b', '#003d5b']}), fontSize: 18, margin: 12}}>Animated text</Animated.Text>
+  </Screen>;
+}
+
+AppRegistry.registerComponent('AnimationGallery', () => AnimationGallery);
 AppRegistry.registerComponent('StyleGallery', () => StyleGallery);
 AppRegistry.registerComponent('EffectsGallery', () => EffectsGallery);
 AppRegistry.registerComponent('RTLGallery', () => RTLGallery);
