@@ -1,8 +1,12 @@
 import React, {useEffect} from 'react';
 import {AppRegistry, ScrollView, Text, View} from 'react-native';
+import {fontFamily} from 'react-native-godot/fonts';
 import 'react-native-godot/setup';
 
 const rendered = global.__fidelity = {};
+const arabic = fontFamily(require('./assets/NotoSansArabic.ttf'));
+const hebrew = fontFamily(require('./assets/NotoSansHebrew.ttf'));
+const ink = '#003d5b';
 
 function Screen({name, children}) {
   useEffect(() => {
@@ -95,9 +99,46 @@ function RTLGallery() {
       <View style={{position: 'absolute', end: 8, top: 8, width: 56, height: 56, backgroundColor: '#edae49'}} />
       <View style={{position: 'absolute', left: 120, top: 8, width: 56, height: 56, backgroundColor: '#30638e'}} />
     </View>
+    <Text style={{width: 456, color: ink, fontSize: 14}}>Natural alignment follows the layout</Text>
+    <Text style={{width: 456, color: ink, fontSize: 14, textAlign: 'left'}}>Left swaps to the right</Text>
+    <Text style={{width: 456, color: ink, fontSize: 14, fontFamily: hebrew}}>שלום עולם</Text>
+    <Text style={{width: 456, color: ink, fontSize: 14, fontFamily: arabic}}>مرحبا بالعالم</Text>
   </Screen>;
 }
 
+const line = {width: 220, color: ink, fontSize: 14};
+const long = 'The quick brown fox jumps over the lazy dog';
+
+function TextGallery() {
+  return <Screen name="TextGallery">
+    <View style={{width: 220, gap: 4}}>
+      <Text style={line}>Regular <Text style={{fontWeight: 'bold'}}>bold</Text> <Text style={{fontStyle: 'italic'}}>italic</Text> <Text style={{letterSpacing: 3}}>spaced</Text></Text>
+      <Text style={{...line, textDecorationLine: 'underline', textDecorationStyle: 'double', textDecorationColor: '#d1495b'}}>Double underline</Text>
+      <Text style={{...line, textDecorationLine: 'underline line-through', textDecorationStyle: 'dashed'}}>Dashed both lines</Text>
+      <Text style={{...line, textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: '#00798c'}}>Dotted underline</Text>
+      <Text style={{...line, textShadowColor: 'rgba(209, 73, 91, 0.8)', textShadowOffset: {width: 2, height: 2}, textShadowRadius: 1}}>Text shadow</Text>
+      <Text style={line}><Text style={{textTransform: 'uppercase'}}>upper</Text> <Text style={{textTransform: 'capitalize'}}>capital letters</Text> <Text style={{textTransform: 'lowercase'}}>LOWER</Text></Text>
+      <Text style={{...line, fontVariant: ['tabular-nums']}}>1111 | 8888</Text>
+      <Text style={{...line, lineHeight: 28, backgroundColor: '#ffffff'}}>Line height 28{'\n'}second line</Text>
+      <Text style={{...line, borderWidth: 2, borderColor: '#d1495b', padding: 4}}>Bordered and padded</Text>
+      <Text style={line}>Mixed <Text style={{fontFamily: hebrew}}>שלום עולם</Text> and <Text style={{fontFamily: arabic}}>مرحبا</Text></Text>
+    </View>
+    <View style={{width: 220, gap: 6}}>
+      <Text numberOfLines={1} ellipsizeMode="tail" style={line}>{long}</Text>
+      <Text numberOfLines={1} ellipsizeMode="head" style={line}>{long}</Text>
+      <Text numberOfLines={1} ellipsizeMode="middle" style={line}>{long}</Text>
+      <Text numberOfLines={1} ellipsizeMode="clip" style={line}>{long}</Text>
+      <Text numberOfLines={2} style={line}>{long + ' ' + long}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={{...line, fontSize: 20}}>{long}</Text>
+      <Text style={{...line, textAlign: 'center'}}>Centered</Text>
+      <Text style={{...line, textAlign: 'right'}}>Right</Text>
+      <Text style={{...line, textAlign: 'justify'}}>Justified text spreads its words over the whole width of the line.</Text>
+      <Text style={{...line, fontFamily: arabic, writingDirection: 'rtl'}}>مرحبا بالعالم من محرك جودو</Text>
+    </View>
+  </Screen>;
+}
+
+AppRegistry.registerComponent('TextGallery', () => TextGallery);
 AppRegistry.registerComponent('StyleGallery', () => StyleGallery);
 AppRegistry.registerComponent('EffectsGallery', () => EffectsGallery);
 AppRegistry.registerComponent('RTLGallery', () => RTLGallery);
