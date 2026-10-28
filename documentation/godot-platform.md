@@ -8,17 +8,36 @@ Applications depend on it and use its Metro config:
 module.exports = require('react-native-godot/metro').createGodotMetroConfig(__dirname);
 ```
 
-Bundles run React Native's own `InitializeCore` before the main module. The application
-entry imports `react-native-godot/setup`, which installs Godot asset resolution through
-`resolveAssetSource.setCustomSourceTransformer`. The sample bundle command is:
+Its Babel preset is `react-native-godot/babel` and its TypeScript base configuration is
+`react-native-godot/tsconfig.json`. Bundles run React Native's own `InitializeCore` and then
+`react-native-godot/setup` before the main module, so entries need no preamble.
+`react-native-godot/setup` installs Godot asset resolution through
+`resolveAssetSource.setCustomSourceTransformer`.
+
+The JavaScript project lives in `react_native/project/root` (default `res://react_native/`),
+the folder that holds its `package.json`. The samples set it to `res://`. The editor writes
+`node_modules/.gdignore` there, so Godot neither imports nor exports installed packages,
+while the project's own sources stay visible to the editor.
+
+The package is a React Native Community CLI platform. From the JavaScript project:
 
 ```sh
-npm --prefix samples/view-text run build:godot
+npx react-native build-godot [--entry <file>] [--out <bundle>] [--dev] [--minify]
+npx react-native run-godot [--no-packager] [--editor] [--godot <editor>] [-- <Godot arguments>]
 ```
 
-The builder invokes Metro once with `platform: "godot"`, writes a source map and sorted
-dependency list, rejects selected `.android.*` and `.ios.*` modules, stages assets, and
-publishes the completed `dist/` directory only after validation succeeds.
+`build-godot` defaults to `react_native/dev_server/entry` and `react_native/bundle/path`. It
+invokes Metro once with `platform: "godot"`, writes a source map and sorted dependency list,
+rejects selected `.android.*` and `.ios.*` modules, stages assets, and replaces the bundle's
+directory only after validation succeeds. Other bundles in that directory are kept.
+
+`run-godot` uses Metro when `react_native/dev_server/enabled` is on, starting it unless one
+answers on the configured host and port, and stops it again with the game. Otherwise, or
+with `--no-packager`, it builds the bundle file and passes `--react-native-no-dev-server`,
+which makes the runtime load that file even in a project that enables the developer
+server. It imports the project once when `.godot/` is missing. The editor is `--godot`,
+then `GODOT_EDITOR`, then the prebuilt editor of the installed package version, downloaded
+once to `${XDG_CACHE_HOME:-~/.cache}/react-native-godot/<commit>/`.
 
 ## Resolution and React Native overrides
 
@@ -140,6 +159,8 @@ bundle and reloads the runtime in place. Godot instead reuses upstream's pieces:
   DevTools socket answers DevTools page reloads itself and reloads through
   `ReactNativeHost.reload()`. Each reload registers a new inspector page, so DevTools
   reconnects to it.
+- `react-native-godot-start` also answers `GET /status` with `packager-status:running`, as
+  React Native's own server does, and `POST /reload` with the reload its `r` key sends.
 - LogBox opens its inspector in its own `ReactNativeRootView` with the `LogBox`
   application key, on a `CanvasLayer` above every other layer. A reload closes it.
 
@@ -155,10 +176,12 @@ as `{$godot: 'Color', r: 0.2, g: 0.4, b: 0.6, a: 1}`; see [interop](interop.md).
 
 ## Local assets
 
-Metro-reported variants are copied to
-`res://dist/assets/<metro-content-hash>/<scale>.<extension>`. The generated manifest
-preserves logical name, type, dimensions, scales, hashes, and ordered URIs without host
-paths or timestamps. At runtime the resolver chooses the smallest scale at least as
+Metro-reported variants are copied to `assets/<metro-content-hash>/<scale>.<extension>`
+beside the bundle, for example `res://react_native/dist/assets/…`. The generated manifest
+preserves logical name, type, dimensions, scales, hashes, and ordered paths relative to the
+bundle, without host paths or timestamps. A bundle file reports its `res://` path as
+`SourceCode.scriptURL`, and assets resolve next to it. A bundle that Metro served gets its
+assets from Metro, as on other platforms, so assets added while developing need no rebuild. At runtime the resolver chooses the smallest scale at least as
 large as `assetScale`, or the largest available, and returns React Native's local asset
 shape.
 

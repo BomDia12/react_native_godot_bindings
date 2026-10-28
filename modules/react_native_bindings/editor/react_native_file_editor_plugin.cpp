@@ -4,11 +4,14 @@
 
 #include "../singletons/react_native_file_singleton.h"
 
+#include "core/config/project_settings.h"
+#include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
 #include "editor/file_system/editor_file_system.h"
 
 ReactNativeFileEditorPlugin::ReactNativeFileEditorPlugin() {
+	_ignore_node_modules();
 	_update_monitored_path();
 }
 
@@ -59,7 +62,18 @@ void ReactNativeFileEditorPlugin::_update_monitored_path() {
 	monitored_path = singleton ? singleton->get_monitored_file() : String();
 }
 
+// Godot would otherwise import, and export, the thousands of files that npm
+// installs, while the React sources beside them stay visible to the editor.
+void ReactNativeFileEditorPlugin::_ignore_node_modules() {
+	const String node_modules = String(GLOBAL_GET("react_native/project/root")).path_join("node_modules");
+	const String marker = node_modules.path_join(".gdignore");
+	if (DirAccess::exists(node_modules) && !FileAccess::exists(marker)) {
+		FileAccess::open(marker, FileAccess::WRITE);
+	}
+}
+
 void ReactNativeFileEditorPlugin::_on_filesystem_changed() {
+	_ignore_node_modules();
 	_check_file_status();
 }
 

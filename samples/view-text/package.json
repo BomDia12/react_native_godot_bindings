@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:godot": "node ../../scripts/build_godot_bundle.cjs --project . --entry godot.entry.js --out dist/godot.bundle.js",
+    "build:godot": "react-native build-godot --entry godot.entry.js --out dist/godot.bundle.js",
     "start:godot": "react-native-godot-start"
   },
   "dependencies": {
@@ -12,10 +12,7 @@
     "react-native-godot": "file:../../packages/react-native-godot"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
-    "@react-native/babel-preset": "0.87.1",
-    "@react-native/metro-config": "0.87.1",
-    "metro": "0.87.0"
+    "@react-native-community/cli": "20.2.0"
   },
   "engines": {
     "node": ">=22.13.0"

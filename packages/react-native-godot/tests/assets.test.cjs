@@ -8,7 +8,7 @@ const {
 } = require('../assets.cjs');
 const {pickScale} = require('../asset-scale.cjs');
 
-test('asset metadata uses deterministic Godot URIs and scales', () => {
+test('asset metadata uses deterministic paths relative to the bundle', () => {
   const data = godotAssetMetadata({
     hash: 'abcdef',
     type: 'png',
@@ -16,9 +16,9 @@ test('asset metadata uses deterministic Godot URIs and scales', () => {
     scales: [1, 2, 3],
   });
   assert.deepEqual(data.variants, [
-    {scale: 1, uri: 'res://dist/assets/abcdef/1.png'},
-    {scale: 2, uri: 'res://dist/assets/abcdef/2.png'},
-    {scale: 3, uri: 'res://dist/assets/abcdef/3.png'},
+    {scale: 1, path: 'assets/abcdef/1.png'},
+    {scale: 2, path: 'assets/abcdef/2.png'},
+    {scale: 3, path: 'assets/abcdef/3.png'},
   ]);
   assert.equal(canonicalScale(1.5), '1.5');
   assert.throws(() => canonicalScale(0), /Invalid/);

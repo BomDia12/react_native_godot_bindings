@@ -2,14 +2,12 @@
 
 const path = require('path');
 const {createRequire} = require('module');
+const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 const {createGodotResolver} = require('./resolver.cjs');
 
 function createGodotMetroConfig(projectRoot) {
   const resolvedProjectRoot = path.resolve(projectRoot);
   const projectRequire = createRequire(path.join(resolvedProjectRoot, 'package.json'));
-  const {getDefaultConfig, mergeConfig} = projectRequire(
-    '@react-native/metro-config',
-  );
   const reactNativeRoot = path.dirname(
     projectRequire.resolve('react-native/package.json'),
   );

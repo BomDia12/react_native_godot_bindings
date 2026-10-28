@@ -32,31 +32,55 @@
       "types": "./types/setup.d.ts",
       "default": "./src/setup.js"
     },
-    "./specs/*": "./specs/*.js"
+    "./specs/*": "./specs/*.js",
+    "./babel": "./babel.cjs",
+    "./tsconfig.json": "./tsconfig.json"
   },
   "types": "./godot.d.ts",
   "bin": {
+    "react-native-godot-init": "./cli/init.cjs",
     "react-native-godot-start": "./scripts/start.cjs"
   },
+  "files": [
+    "Libraries",
+    "cli",
+    "src",
+    "specs",
+    "types",
+    "scripts/start.cjs",
+    "asset-scale.cjs",
+    "assets.cjs",
+    "babel.cjs",
+    "color.cjs",
+    "godot.d.ts",
+    "metro.cjs",
+    "resolver.cjs",
+    "overrides.json",
+    "react-native.config.js",
+    "tsconfig.json",
+    "godot-platform.json"
+  ],
   "scripts": {
     "test": "node --test tests/*.test.cjs",
     "check-overrides": "node scripts/check-overrides.cjs",
     "codegen": "node scripts/codegen.cjs"
+  },
+  "dependencies": {
+    "@react-native/babel-preset": "0.87.1",
+    "@react-native/codegen": "0.87.1",
+    "@react-native/metro-config": "0.87.1",
+    "metro": "^0.87.0"
   },
   "peerDependencies": {
     "react": "19.2.3",
     "react-native": "0.87.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
-    "@react-native/babel-preset": "0.87.1",
-    "@react-native/codegen": "0.87.1",
-    "@react-native/metro-config": "0.87.1",
     "@types/react": "^19.2.0",
-    "metro": "0.87.0",
     "react": "19.2.3",
     "react-native": "0.87.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "@babel/core": "^7.25.2"
   },
   "engines": {
     "node": ">=22.13.0"

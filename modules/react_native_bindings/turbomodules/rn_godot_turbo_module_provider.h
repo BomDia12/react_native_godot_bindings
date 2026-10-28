@@ -21,8 +21,8 @@ struct RNTurboModuleContext {
 	std::shared_ptr<RNSceneBindings> scenes;
 	std::shared_ptr<IImageLoader> image_loader;
 	std::map<std::string, RNTurboModuleFactory> extensions;
-	// The Metro URL of a bundle served by the developer server, which JS uses
-	// to find Metro for symbolication and Fast Refresh.
+	// Where the bundle came from: its Metro URL, which JS uses to find Metro for
+	// symbolication and Fast Refresh, or its file, next to which assets are staged.
 	std::string source_url;
 };
 

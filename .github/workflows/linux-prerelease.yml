@@ -79,11 +79,13 @@ jobs:
             gh release upload "$RELEASE_TAG" \
               "artifacts/${ARCHIVE_NAME}" \
               "artifacts/${ARCHIVE_NAME}.sha256" \
+              artifacts/react-native-godot.tgz \
               --clobber
           else
             gh release create "$RELEASE_TAG" \
               "artifacts/${ARCHIVE_NAME}" \
               "artifacts/${ARCHIVE_NAME}.sha256" \
+              artifacts/react-native-godot.tgz \
               --target "$GITHUB_SHA" \
               --title "Linux baseline ${GITHUB_SHA::12}" \
               --notes-file artifacts/release-notes.md \
@@ -102,6 +104,7 @@ jobs:
           ASSETS=$(gh api "$RELEASE_API" --jq '.assets[].name')
           grep -Fx "$ARCHIVE_NAME" <<<"$ASSETS"
           grep -Fx "${ARCHIVE_NAME}.sha256" <<<"$ASSETS"
+          grep -Fx react-native-godot.tgz <<<"$ASSETS"
           mkdir -p artifacts/published
           gh release download "$RELEASE_TAG" \
             --pattern "$ARCHIVE_NAME" \

@@ -179,7 +179,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 						if (auto alive = weak.lock()) {
 							alive->focus_view(p_tag);
 						} } };
-	modules.source_url = dev_server ? dev_server->bundle_url() : "";
+	modules.source_url = dev_server ? dev_server->bundle_url() : std::string(p_setup.bundle.utf8().get_data());
 	modules.application = { application, main_thread };
 	modules.network = { blobs, http, websockets, main_thread };
 	modules.scenes = scenes;

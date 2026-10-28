@@ -39,6 +39,7 @@ class RNHostInstance {
 public:
 	struct Setup {
 		RNServiceSettings settings;
+		String bundle;
 		std::shared_ptr<RNThemeMetricsStore> theme;
 		uint64_t generation = 0;
 		std::function<ReactNativeRootView *(facebook::react::SurfaceId p_surface)> find_root;

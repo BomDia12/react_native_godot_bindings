@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
-// Serves the Godot project in the current directory the way `react-native
-// start` serves an app: Metro with the project's Godot config, React Native's
-// dev middleware for DevTools, and the /message socket that Metro's reload key
-// and the runtime's packager connection share.
+// Serves a Godot project's JavaScript, from --project-root or the current
+// directory, the way `react-native start` serves an app: Metro with the
+// project's Godot config, React Native's dev middleware for DevTools, and the
+// /message socket that Metro's reload key and the runtime's packager
+// connection share.
 const path = require('path');
 const {createRequire} = require('module');
 const {parseArgs} = require('util');
@@ -13,16 +14,17 @@ const {values} = parseArgs({
   options: {
     port: {type: 'string', default: '8081'},
     host: {type: 'string', default: 'localhost'},
-    config: {type: 'string', default: 'metro.config.godot.js'},
+    config: {type: 'string', default: 'metro.config.js'},
+    'project-root': {type: 'string', default: process.cwd()},
     'reset-cache': {type: 'boolean', default: false},
   },
 });
 
-const projectRoot = process.cwd();
+const projectRoot = path.resolve(values['project-root']);
 const projectRequire = createRequire(path.join(projectRoot, 'package.json'));
 const reactNativeRequire = createRequire(projectRequire.resolve('react-native/package.json'));
-const Metro = projectRequire('metro');
-const {Server: WebSocketServer} = createRequire(projectRequire.resolve('metro'))('ws');
+const Metro = require('metro');
+const {Server: WebSocketServer} = createRequire(require.resolve('metro'))('ws');
 const {createDevMiddleware} = reactNativeRequire('@react-native/dev-middleware');
 
 function createMessageSocket() {
@@ -36,6 +38,22 @@ function createMessageSocket() {
   };
   server.on('connection', client => client.on('message', data => send(data.toString(), client)));
   return {server, broadcast: method => send(JSON.stringify({version: 2, method}))};
+}
+
+// Answers the status probe that React Native tools use to find a running
+// server, and lets tools without a terminal, such as the Godot editor, reload
+// every runtime the way the r key does.
+function toolMiddleware(messages) {
+  return (request, response, next) => {
+    if (request.method === 'GET' && request.url === '/status') {
+      response.end('packager-status:running');
+    } else if (request.method === 'POST' && request.url === '/reload') {
+      messages.broadcast('reload');
+      response.end('OK');
+    } else {
+      next();
+    }
+  };
 }
 
 function attachKeys(messages, serverBaseUrl) {
@@ -69,7 +87,7 @@ async function main() {
   const messages = createMessageSocket();
   await Metro.runServer(config, {
     host: values.host,
-    unstable_extraMiddleware: [devTools.middleware],
+    unstable_extraMiddleware: [devTools.middleware, toolMiddleware(messages)],
     websocketEndpoints: {...devTools.websocketEndpoints, '/message': messages.server},
     // Metro stops watching files when it detects a CI environment, which
     // would leave Fast Refresh without any edits to send.
