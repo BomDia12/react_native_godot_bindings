@@ -54,6 +54,7 @@ class ReactNativeHost : public Object {
 	HashMap<facebook::react::SurfaceId, ObjectID> surfaces;
 	facebook::react::SurfaceId next_surface_id = 1;
 	uint64_t generation = 0;
+	uint64_t theme_revision = 0;
 	ObjectID lifecycle_node;
 	bool frame_connected = false;
 	bool processing_frame = false;
@@ -69,6 +70,7 @@ class ReactNativeHost : public Object {
 	void _retire();
 	void _finish_retired();
 	void _start_surface(ReactNativeRootView *p_root);
+	void _publish_theme(ReactNativeRootView *p_root, facebook::react::SurfaceId p_surface);
 	void _stop_surface(ReactNativeRootView *p_root, bool p_stop_react = true);
 	void _process_frame();
 	void _theme_changed();
@@ -76,6 +78,7 @@ class ReactNativeHost : public Object {
 	void _record_error(uint64_t p_generation, const String &p_error);
 	void _finish_evaluation(uint64_t p_id, const Variant &p_result);
 	bool _defer(std::function<void()> p_task);
+	void _update_suspension();
 
 protected:
 	static void _bind_methods();
@@ -98,6 +101,9 @@ public:
 	void restart_root(ReactNativeRootView *p_root);
 	void update_root_layout(ReactNativeRootView *p_root);
 	void scene_binding_changed(facebook::react::SurfaceId p_surface);
+	void root_state_changed(ReactNativeRootView *p_root);
+	bool handles_back_press() const;
+	void back_pressed();
 	ReactNativeRootView *find_root(facebook::react::SurfaceId p_surface) const;
 	void shutdown();
 };

@@ -7,11 +7,12 @@ class RNTextShaper;
 
 class RNTextInputComponentView : public RNComponentView {
 	RNTextInputControl *input;
+	facebook::react::SurfaceId surface;
 	std::shared_ptr<const RNTextShaper> shaper;
 	void _emit(const StringName &p_event, const Dictionary &p_payload);
 
 public:
-	RNTextInputComponentView(facebook::react::Tag p_tag, std::shared_ptr<const RNTextShaper> p_shaper);
+	RNTextInputComponentView(facebook::react::Tag p_tag, facebook::react::SurfaceId p_surface, std::shared_ptr<const RNTextShaper> p_shaper);
 	~RNTextInputComponentView() override;
 	void update_props(const facebook::react::Props::Shared &p_old, const facebook::react::Props::Shared &p_new) override;
 	void update_layout(const facebook::react::LayoutMetrics &p_metrics) override;

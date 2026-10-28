@@ -86,8 +86,9 @@ scene-owned resources are touched only on the main thread, which drains a task q
 from `SceneTree.process_frame`. The main thread never waits on the JS thread. A
 synchronous TurboModule call that needs Godot blocks the JS thread until its main-thread
 task finishes; while the host shuts down, such calls fail with `E_CANCELLED`. JS timers
-use the steady clock, so pausing the SceneTree does not stop them. Interval ticks that
-come due while JavaScript is busy are skipped, not queued.
+use the steady clock and pause only while the runtime is suspended (see
+[Roots in a scene](#roots-in-a-scene)). Interval ticks that come due while JavaScript is
+busy are skipped, not queued.
 
 A reload or bundle refresh starts the new runtime at once, and the old runtime is torn
 down off the main thread. From that point on, it cannot reach Godot: its queued Godot work
@@ -122,10 +123,10 @@ alive, so LeakChecker reports them there, such as a closed LogBox.
 Each `ReactNativeRootView` runs one surface. Surface ids, which React Native calls root
 tags, are allocated as `1, 11, 21, …` and never reused. A root starts its surface when it
 enters the tree and stops it when it leaves; `reload()` and `application_key` changes
-start a new surface. Root size, layout direction, content scale and the
-`react_native/text/font_scale` setting become the surface's layout constraints. A root's
-`reload()` and `application_key` changes restart only that surface, on the current
-runtime.
+start a new surface. Root size, layout direction, the pixel scale of the root's viewport and
+the `react_native/text/font_scale` setting become the surface's layout constraints. A
+root's `reload()`, `application_key` and `initial_properties` changes restart only that
+surface, on the current runtime.
 
 A hard reload replaces the runtime and restarts every live root. It comes only from
 `ReactNativeHost.reload()`, from a bundle change signalled by `ReactNativeFileSingleton`,
@@ -136,6 +137,83 @@ unchanged, and so does a new `set_monitored_file()` path. Only the editor proces
 the bundle file for changes; a running game or an exported build doesn't. A bundle that is
 missing when roots start leaves them empty, and the bundle-change signal that makes it
 available starts the runtime and every waiting root.
+
+## Roots in a scene
+
+A `ReactNativeRootView` is an ordinary `Control`, and works in containers, under themed
+controls, in `SubViewport`s and in other windows.
+
+- **Content size.** `fit_content` (`None`, `Width`, `Height`, `Both`) is Godot's counterpart
+  of `RCTRootViewSizeFlexibility`. React lays the fitted axes out without a bound, and the
+  root reports the laid-out size as its minimum size, so `BoxContainer`s and
+  `ScrollContainer`s size it like a `Label`.
+- **Scale and position.** Text and images rasterize at the pixels per unit of the root's
+  viewport: the window's stretch in `canvas_items` mode, 1 in `viewport` mode, and a
+  `SubViewport`'s own stretch. `measureInWindow` reports positions in the root's window,
+  through any `SubViewportContainer`s. DPI changes and viewport resizes lay the surface out
+  again.
+- **Themes.** Each root measures and draws text, TextInput and Switch with the theme it
+  inherits from its parents: the `RichTextLabel` font and color, and the `LineEdit`,
+  `TextEdit`, `CheckButton` and `ProgressBar` metrics. React's default `fontSize` of 14
+  still applies, as on other platforms.
+- **Initial properties.** `initial_properties` is a Dictionary passed to the component as
+  its initial props, converted like other Godot values.
+- **Editor preview.** With `editor_preview` off, the editor doesn't run the root and draws
+  its application key instead. Running games ignore it.
+
+### State and pausing
+
+`useGodotRootState()` from `react-native-godot/root` returns the calling root's
+`{visible, processing, focused}`: whether it is visible in the tree, whether it can
+process, and whether its window has focus. It updates on visibility, pause and process
+mode changes and on window focus. `getRootState(rootTag)` and
+`onRootStateChanged(rootTag, callback)` read it outside components.
+
+While no root can process, because the tree is paused or their process mode disables
+them, the runtime is suspended. JS timers, and so `requestAnimationFrame`, keep their
+remaining delay and resume with it. Native-driver animations stop and resume where they
+were. LayoutAnimation and JS-driven `Animated` timing read upstream's own clocks, so an
+animation that spans a pause ends at its wall-clock position on resume. JavaScript still
+runs: `ReactNativeHost.evaluate()`, scene bindings, network responses and other Godot events
+keep reaching it. A root with `PROCESS_MODE_ALWAYS`, such as LogBox's, keeps the runtime
+running. The editor never pauses.
+
+### Godot scenes in React
+
+`react-native-godot/GodotScene` shows a `PackedScene` in React layout:
+
+```js
+<GodotScene nativeID="minimap" source="res://ui/minimap.tscn" style={{width: 200, height: 200}}
+  onLoad={() => {}} onError={event => console.warn(event.nativeEvent.message)} />
+```
+
+The scene loads on a resource-loader thread. A `Control` scene fills the component. Other
+scenes, such as `Node2D` or `Node3D` ones, render through a stretched `SubViewport`, with a
+world of their own for 3D. A new `source` frees the previous instance. Once an instance is
+added, the root emits `scene_loaded(native_id, instance)`, and
+`root.get_native_node(native_id)` returns it later; for other views `get_native_node`
+returns the view's control. The scene's controls receive Godot input directly. Pointer
+input they don't handle reaches React as on a View, and keys typed into them don't. A
+`ReactNativeRootView` inside the scene is an ordinary nested root on the same runtime.
+
+### Gamepads and focus
+
+Gamepads drive React views through Godot's `ui_*` actions and focus. Godot's directional
+actions move focus between focusable views. `ui_accept` from a non-keyboard device presses
+the focused view, as Enter does, unless the view's Godot control handles presses itself.
+Godot binds no gamepad button to `ui_accept` or `ui_cancel` by default, so games add them
+in the Input Map, as Godot's own controls need them too.
+
+Upstream's TV props `nextFocusUp`, `nextFocusDown`, `nextFocusLeft`, `nextFocusRight` and
+`nextFocusForward` take the React tag of a view (`findNodeHandle`) and become the focused
+view's focus neighbors and `focus_next`, resolved again after every mount. A view whose
+`hasTVPreferredFocus` turns true takes focus.
+
+`BackHandler` listeners receive `ui_cancel` presses, a gamepad's B button once bound, made
+while focus is in a React view, and Godot's back requests. Godot can't wait for JavaScript
+to decide whether a press was handled, so roots take `ui_cancel` from the game only while
+at least one listener is registered. Unhandled presses don't exit; `BackHandler.exitApp`
+stays unsupported.
 
 ## Developer server
 

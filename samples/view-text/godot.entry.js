@@ -9,6 +9,7 @@ import './platform.entry';
 import './component_registry.entry';
 import './native_module.entry';
 import './native_animated.entry';
+import './engine_integration.entry';
 
 const styles = StyleSheet.create({
   container: {

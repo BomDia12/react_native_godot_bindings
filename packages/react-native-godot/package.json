@@ -15,9 +15,17 @@
       "types": "./types/scene.d.ts",
       "default": "./src/scene.js"
     },
+    "./root": {
+      "types": "./types/root.d.ts",
+      "default": "./src/root.js"
+    },
     "./GodotWindow": {
       "types": "./types/GodotWindow.d.ts",
       "default": "./src/GodotWindow.js"
+    },
+    "./GodotScene": {
+      "types": "./types/GodotScene.d.ts",
+      "default": "./src/GodotScene.js"
     },
     "./fonts": {
       "types": "./types/fonts.d.ts",

@@ -12,7 +12,7 @@ class IHermes;
 } // namespace facebook::hermes
 
 namespace facebook::react {
-class PlatformTimerRegistry;
+class GodotTimerRegistry;
 class ReactHost;
 } // namespace facebook::react
 
@@ -21,7 +21,7 @@ class ReactHost;
 // runtime is initialized.
 struct RNHostRuntime {
 	std::unique_ptr<facebook::react::ReactHost> react_host;
-	facebook::react::PlatformTimerRegistry *timers = nullptr;
+	facebook::react::GodotTimerRegistry *timers = nullptr;
 	std::atomic<facebook::hermes::IHermes *> hermes = nullptr;
 
 	RNHostRuntime();

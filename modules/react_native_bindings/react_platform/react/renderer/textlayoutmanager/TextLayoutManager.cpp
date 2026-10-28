@@ -22,7 +22,8 @@ TextLayoutManager::TextLayoutManager(const std::shared_ptr<const ContextContaine
 
 TextMeasurement TextLayoutManager::measure(const AttributedStringBox &attributedStringBox, const ParagraphAttributes &paragraphAttributes, const TextLayoutContext &, const LayoutConstraints &layoutConstraints) const {
 	const AttributedString &attributedString = attributedStringBox.getValue();
-	return textMeasureCache_.get({ attributedString, paragraphAttributes, layoutConstraints }, [&]() {
+	const RNTextMeasureCacheKey key{ .text = { attributedString, paragraphAttributes, layoutConstraints }, .theme_revision = shaper_->get_theme_metrics(attributedString)->revision };
+	return textMeasureCache_.get(key, [&]() {
 		RNParagraphLayout layout;
 		shaper_->shape(attributedString, paragraphAttributes, available_size(layoutConstraints.maximumSize), layout);
 		TextMeasurement::Attachments attachments;

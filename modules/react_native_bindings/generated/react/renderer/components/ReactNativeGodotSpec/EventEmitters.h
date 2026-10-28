@@ -13,6 +13,21 @@
 
 
 namespace facebook::react {
+class GodotSceneEventEmitter : public ViewEventEmitter {
+ public:
+  using ViewEventEmitter::ViewEventEmitter;
+
+  struct OnLoad {
+      
+    };
+
+  struct OnError {
+      std::string message;
+    };
+  void onLoad(OnLoad value) const;
+
+  void onError(OnError value) const;
+};
 class GodotWindowEventEmitter : public ViewEventEmitter {
  public:
   using ViewEventEmitter::ViewEventEmitter;

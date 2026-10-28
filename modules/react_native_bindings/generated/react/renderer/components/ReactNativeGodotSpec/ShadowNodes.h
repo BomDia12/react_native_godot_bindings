@@ -18,6 +18,17 @@
 
 namespace facebook::react {
 
+JSI_EXPORT extern const char GodotSceneComponentName[];
+
+/*
+ * `ShadowNode` for <GodotScene> component.
+ */
+using GodotSceneShadowNode = ConcreteViewShadowNode<
+    GodotSceneComponentName,
+    GodotSceneProps,
+    GodotSceneEventEmitter,
+    GodotSceneState>;
+
 JSI_EXPORT extern const char RNExampleMeterComponentName[];
 
 /*

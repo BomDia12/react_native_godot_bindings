@@ -19,7 +19,9 @@ global.__godotPlatformState = state;
 Promise.resolve().then(() => state.microtasks.push('promise'));
 queueMicrotask(() => state.microtasks.push('native'));
 state.microtasks.push('sync');
-state.backListenerRemovable = typeof BackHandler.addEventListener('hardwareBackPress', () => true).remove === 'function';
+const backSubscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+state.backListenerRemovable = typeof backSubscription.remove === 'function';
+backSubscription.remove();
 try {
   BackHandler.exitApp();
 } catch (error) {

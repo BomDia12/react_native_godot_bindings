@@ -33,8 +33,12 @@ class RNComponentViewRegistry {
 	std::unordered_map<facebook::react::Tag, RNComponentView *> roots;
 	std::unordered_set<std::string> reported_unknown;
 	std::vector<std::pair<facebook::react::Tag, facebook::react::Tag>> removed;
+	std::unordered_set<facebook::react::Tag> focus_references;
 	std::function<void(RNComponentView *)> change_listener;
 	std::function<void(facebook::react::Tag)> destroy_listener;
+
+	void _track_focus_references(RNComponentView *p_view);
+	void _resolve_focus_references();
 
 public:
 	explicit RNComponentViewRegistry(std::shared_ptr<const RNComponentViewFactories> p_factories);
@@ -43,6 +47,7 @@ public:
 	void unregister_root(facebook::react::Tag p_tag);
 	RNComponentView *find(facebook::react::Tag p_tag) const;
 	RNComponentView *find_for_control(Control *p_control) const;
+	RNComponentView *find_by_native_id(const std::string &p_native_id) const;
 	void set_change_listener(std::function<void(RNComponentView *)> p_listener) { change_listener = std::move(p_listener); }
 	void set_destroy_listener(std::function<void(facebook::react::Tag)> p_listener) { destroy_listener = std::move(p_listener); }
 

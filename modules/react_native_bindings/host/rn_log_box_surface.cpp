@@ -39,6 +39,8 @@ void RNLogBoxSurface::_open(const std::string &p_application_key) {
 	}
 	CanvasLayer *canvas = memnew(CanvasLayer);
 	canvas->set_layer(RSE::CANVAS_LAYER_MAX);
+	// LogBox stays usable, and keeps JavaScript running, while the game is paused.
+	canvas->set_process_mode(Node::PROCESS_MODE_ALWAYS);
 	ReactNativeRootView *root = memnew(ReactNativeRootView);
 	root->set_application_key(String::utf8(p_application_key.c_str()));
 	root->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);

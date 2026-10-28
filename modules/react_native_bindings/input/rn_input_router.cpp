@@ -381,6 +381,13 @@ void RNInputRouter::route_key(const Ref<InputEventKey> &p_key, const Target &p_t
 	}
 }
 
+void RNInputRouter::activate(const Target &p_target) {
+	auto emitter = view_emitter(p_target);
+	if (emitter && !p_target.owns_activation) {
+		emitter->onKeyboardClick();
+	}
+}
+
 void RNInputRouter::_cancel(const Target &p_target, const Position &p_position, int p_touch, int p_pointer, const char *p_type, bool p_primary) {
 	if (!p_target.owns_activation) {
 		p_target.emitter->onTouchCancel(touch_event(touch(p_target, p_position, p_touch, 0), true));

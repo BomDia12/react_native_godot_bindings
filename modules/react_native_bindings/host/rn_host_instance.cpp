@@ -1,5 +1,6 @@
 #include "rn_host_instance.h"
 
+#include "../components/rn_godot_scene_component_view.h"
 #include "../components/rn_image_component_view.h"
 #include "../components/rn_paragraph_component_view.h"
 #include "../components/rn_presentation_component_views.h"
@@ -11,6 +12,7 @@
 #include "../components/rn_view_component_view.h"
 #include "../examples/rn_example_meter_component_view.h"
 #include "../examples/rn_example_scene_module.h"
+#include "../interop/rn_dynamic.h"
 #include "../interop/rn_value_codec.h"
 #include "../mounting/rn_mounting_manager.h"
 #include "../native_modules/rn_blob_service.h"
@@ -18,8 +20,10 @@
 #include "../native_modules/rn_image_service.h"
 #include "../root_view/react_native_root_view.h"
 #include "../turbomodules/rn_godot_alerts.h"
+#include "../turbomodules/rn_godot_host_module.h"
 #include "../turbomodules/rn_godot_turbo_module_provider.h"
 #include "../turbomodules/rn_image_loader.h"
+#include "rn_animation_clock.h"
 #include "rn_dev_server.h"
 #include "rn_inspector_socket.h"
 #include "rn_log_box_surface.h"
@@ -51,6 +55,9 @@
 #include <react/runtime/platform/godot/GodotTimerRegistry.h>
 #include <react/utils/RunLoopObserverManager.h>
 
+#include <cmath>
+#include <limits>
+
 using namespace facebook;
 using namespace facebook::react;
 
@@ -72,6 +79,7 @@ ComponentRegistryFactory component_registry_factory() {
 			registry->add(concreteComponentDescriptorProvider<GodotTextInputComponentDescriptor>());
 			registry->add(concreteComponentDescriptorProvider<GodotSwitchComponentDescriptor>());
 			registry->add(concreteComponentDescriptorProvider<GodotWindowComponentDescriptor>());
+			registry->add(concreteComponentDescriptorProvider<GodotSceneComponentDescriptor>());
 			registry->add(concreteComponentDescriptorProvider<RNExampleMeterComponentDescriptor>());
 			return registry;
 		}();
@@ -91,24 +99,28 @@ std::shared_ptr<RNComponentViewFactories> component_view_factories(const std::sh
 	factories->add("Paragraph", [p_shaper](const ShadowView &p_view) { return std::make_unique<RNParagraphComponentView>(p_view.tag, p_shaper); });
 	factories->add("Image", [p_images](const ShadowView &p_view) { return std::make_unique<RNImageComponentView>(p_view.tag, p_images); });
 	factories->add("ScrollView", [](const ShadowView &p_view) { return std::make_unique<RNScrollComponentView>(p_view.tag); });
-	factories->add(GodotTextInputComponentName, [p_shaper](const ShadowView &p_view) { return std::make_unique<RNTextInputComponentView>(p_view.tag, p_shaper); });
+	factories->add(GodotTextInputComponentName, [p_shaper](const ShadowView &p_view) { return std::make_unique<RNTextInputComponentView>(p_view.tag, p_view.surfaceId, p_shaper); });
 	factories->add(GodotSwitchComponentName, [](const ShadowView &p_view) { return std::make_unique<RNSwitchComponentView>(p_view.tag); });
 	factories->add(ActivityIndicatorViewComponentName, [](const ShadowView &p_view) { return std::make_unique<RNActivityIndicatorComponentView>(p_view.tag); });
 	factories->add("ModalHostView", [](const ShadowView &p_view) { return std::make_unique<RNModalComponentView>(p_view.tag); });
 	factories->add(GodotWindowComponentName, [](const ShadowView &p_view) { return std::make_unique<RNWindowComponentView>(p_view.tag); });
+	factories->add(GodotSceneComponentName, [](const ShadowView &p_view) { return std::make_unique<RNGodotSceneComponentView>(p_view.tag); });
 	factories->add(RNExampleMeterComponentName, [](const ShadowView &p_view) { return std::make_unique<RNExampleMeterComponentView>(p_view.tag); });
 	return factories;
 }
 
+// A root lays React out at its own size, except on the axes it fits to the
+// content. Text rasterizes at the pixels per unit of the root's render target,
+// which a SubViewport sets apart from its window.
 void layout_for(ReactNativeRootView *p_root, const RNGodotApplication &p_application, LayoutConstraints &r_constraints, LayoutContext &r_context) {
 	const Size2 size = p_root->get_size();
-	r_constraints.minimumSize = { .width = size.x, .height = size.y };
-	r_constraints.maximumSize = r_constraints.minimumSize;
+	constexpr Float unbounded = std::numeric_limits<Float>::infinity();
+	r_constraints.minimumSize = { .width = p_root->fits_width() ? 0 : size.x, .height = p_root->fits_height() ? 0 : size.y };
+	r_constraints.maximumSize = { .width = p_root->fits_width() ? unbounded : size.x, .height = p_root->fits_height() ? unbounded : size.y };
 	r_constraints.layoutDirection = p_root->is_layout_rtl() || p_application.forces_rtl() ? LayoutDirection::RightToLeft : LayoutDirection::LeftToRight;
-	const Window *window = p_root->get_window();
-	r_context.pointScaleFactor = window ? window->get_content_scale_factor() : 1;
+	r_context.pointScaleFactor = std::abs(p_root->get_viewport()->get_final_transform().get_scale().x);
 	r_context.fontSizeMultiplier = double(GLOBAL_GET("react_native/text/font_scale"));
-	const Point2 offset = p_root->get_global_position();
+	const Point2 offset = p_root->get_window()->get_final_transform().affine_inverse().xform(p_root->get_screen_transform().get_origin());
 	r_context.viewportOffset = { .x = offset.x, .y = offset.y };
 	r_context.swapLeftAndRightInRTL = p_application.get_snapshot().swap_left_and_right;
 }
@@ -147,6 +159,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	websockets = std::make_shared<RNWebSocketHub>(blobs, p_setup.settings);
 	shaper = std::make_shared<RNTextShaper>(p_setup.theme, main_thread);
 	scenes = std::make_shared<RNSceneBindings>(p_setup.find_root);
+	host_events = std::make_shared<RNGodotHostEvents>();
 	auto image_loader = std::make_shared<RNImageLoader>(images, main_thread);
 	mounting = std::make_shared<RNMountingManager>(main_thread, component_view_factories(shaper, images), component_registry_factory(), image_loader);
 	run_loop_observers = std::make_shared<RunLoopObserverManager>();
@@ -183,6 +196,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	modules.application = { application, main_thread };
 	modules.network = { blobs, http, websockets, main_thread };
 	modules.scenes = scenes;
+	modules.host_events = host_events;
 	modules.image_loader = image_loader;
 	modules.extensions[std::string(RNExampleSceneModule::kModuleName)] = [](const std::shared_ptr<CallInvoker> &p_invoker, const RNHostModuleContext &p_host) {
 		return std::make_shared<RNExampleSceneModule>(p_invoker, p_host);
@@ -220,6 +234,9 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	// Native Animated starts and stops its frame callback from the JS thread and
 	// from inside a frame, so the callback is swapped under a lock and runs on
 	// the main thread once per Godot frame.
+	// The clock is shared, and a runtime retired while suspended leaves it paused.
+	g_setNativeAnimatedNowTimestampFunction(&rn_animation_clock_now);
+	rn_set_animation_clock_paused(false);
 	auto animated = std::make_shared<NativeAnimatedNodesManagerProvider>(
 			[this](std::function<void()> &&p_on_render, bool) {
 				std::lock_guard lock(animation_mutex);
@@ -289,8 +306,8 @@ void RNHostInstance::start_surface(ReactNativeRootView *p_root, SurfaceId p_surf
 	LayoutConstraints constraints;
 	LayoutContext context;
 	layout_for(p_root, *application, constraints, context);
-	_on_js_thread([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), constraints, context] {
-		host->startSurface(p_surface, key, folly::dynamic::object(), constraints, context);
+	_on_js_thread([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(p_root->get_initial_properties()), constraints, context] {
+		host->startSurface(p_surface, key, properties, constraints, context);
 	});
 }
 
@@ -328,6 +345,29 @@ void RNHostInstance::scene_binding_changed(SurfaceId p_surface) {
 
 void RNHostInstance::set_paused(bool p_paused) {
 	application->set_paused(p_paused);
+}
+
+// The timer registry lives on the JS thread, which creates it before running
+// any scheduled work.
+void RNHostInstance::set_suspended(bool p_suspended) {
+	if (suspended == p_suspended) {
+		return;
+	}
+	suspended = p_suspended;
+	rn_set_animation_clock_paused(p_suspended);
+	_on_js_thread([this, p_suspended] { runtime.timers->setPaused(p_suspended); });
+}
+
+void RNHostInstance::root_state_changed(SurfaceId p_surface, const RNRootState &p_state) {
+	host_events->root_state_changed(p_surface, p_state);
+}
+
+bool RNHostInstance::handles_back_press() const {
+	return host_events->is_back_handler_enabled();
+}
+
+void RNHostInstance::back_pressed() {
+	runtime.react_host->emitDeviceEvent(folly::dynamic::array("hardwareBackPress"));
 }
 
 void RNHostInstance::evaluate(const String &p_code, std::function<void(const Variant &)> p_done) {
@@ -375,9 +415,13 @@ void RNHostInstance::_run_animation_frame() {
 }
 
 void RNHostInstance::process_frame() {
-	mounting->tick_layout_animations();
+	if (!suspended) {
+		mounting->tick_layout_animations();
+	}
 	main_thread->drain();
-	_run_animation_frame();
+	if (!suspended) {
+		_run_animation_frame();
+	}
 	application->poll();
 	websockets->process_frame();
 	http->process_requests();

@@ -31,7 +31,7 @@ public:
 	}
 
 	Size measureContent(const LayoutContext &, const LayoutConstraints &layoutConstraints) const override {
-		const Size2 size = theme_ ? theme_->get()->switch_size : Size2();
+		const Size2 size = theme_ ? theme_->get(getSurfaceId())->switch_size : Size2();
 		return layoutConstraints.clamp({ .width = size.x, .height = size.y });
 	}
 

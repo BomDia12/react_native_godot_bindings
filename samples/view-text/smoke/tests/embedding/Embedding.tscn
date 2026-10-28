@@ -1,0 +1,72 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://smoke/tests/embedding/embedding.gd" id="1"]
+
+[sub_resource type="FontVariation" id="FontVariation_wide"]
+spacing_glyph = 12
+
+[sub_resource type="Theme" id="Theme_wide"]
+RichTextLabel/fonts/normal_font = SubResource("FontVariation_wide")
+
+[node name="EmbeddingSmoke" type="Node"]
+script = ExtResource("1")
+
+[node name="Column" type="VBoxContainer" parent="."]
+offset_right = 300.0
+offset_bottom = 200.0
+
+[node name="Fitted" type="ReactNativeRootView" parent="Column"]
+layout_mode = 2
+application_key = "GodotEmbeddingApp"
+initial_properties = {
+"label": "fitted"
+}
+fit_content = 2
+
+[node name="Below" type="Label" parent="Column"]
+layout_mode = 2
+text = "Below"
+
+[node name="Normal" type="ReactNativeRootView" parent="."]
+offset_left = 320.0
+offset_right = 470.0
+offset_bottom = 80.0
+application_key = "GodotEmbeddingApp"
+initial_properties = {
+"label": "normal"
+}
+
+[node name="Themed" type="Control" parent="."]
+offset_left = 480.0
+offset_right = 680.0
+offset_bottom = 80.0
+theme = SubResource("Theme_wide")
+
+[node name="Wide" type="ReactNativeRootView" parent="Themed"]
+offset_right = 200.0
+offset_bottom = 80.0
+application_key = "GodotEmbeddingApp"
+initial_properties = {
+"label": "wide"
+}
+
+[node name="Frame" type="SubViewportContainer" parent="."]
+offset_left = 400.0
+offset_top = 300.0
+offset_right = 600.0
+offset_bottom = 400.0
+stretch = true
+
+[node name="Viewport" type="SubViewport" parent="Frame"]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(200, 100)
+render_target_update_mode = 4
+
+[node name="Inner" type="ReactNativeRootView" parent="Frame/Viewport"]
+offset_right = 200.0
+offset_bottom = 100.0
+application_key = "GodotEmbeddingApp"
+initial_properties = {
+"label": "inner"
+}

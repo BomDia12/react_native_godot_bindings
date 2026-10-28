@@ -1,0 +1,19 @@
+[gd_scene format=3]
+
+[node name="Panel" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Field" type="LineEdit" parent="."]
+layout_mode = 0
+offset_right = 90.0
+offset_bottom = 30.0
+
+[node name="Nested" type="ReactNativeRootView" parent="."]
+layout_mode = 0
+offset_top = 40.0
+offset_right = 100.0
+offset_bottom = 80.0
+application_key = "GodotSceneNestedApp"

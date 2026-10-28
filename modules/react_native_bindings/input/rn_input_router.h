@@ -61,6 +61,8 @@ public:
 	// Returns the pressed view's focus control after a primary press.
 	Control *route_pointer(const Ref<InputEvent> &p_event, const Target &p_target, const Position &p_position);
 	void route_key(const Ref<InputEventKey> &p_key, const Target &p_target);
+	// Presses the focused view, as Enter does, for ui_accept from a gamepad.
+	void activate(const Target &p_target);
 	void view_destroyed(facebook::react::Tag p_tag);
 	bool is_mouse_pressed() const { return mouse_buttons != 0; }
 	void cancel_mouse();

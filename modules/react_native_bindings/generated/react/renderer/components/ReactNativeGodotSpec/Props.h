@@ -16,6 +16,24 @@
 
 namespace facebook::react {
 
+class GodotSceneProps final : public ViewProps {
+ public:
+  GodotSceneProps() = default;
+  GodotSceneProps(const PropsParserContext& context, const GodotSceneProps &sourceProps, const RawProps &rawProps);
+
+#pragma mark - Props
+
+  std::string source{};
+
+  #ifdef RN_SERIALIZABLE_STATE
+  ComponentName getDiffPropsImplementationTarget() const override;
+
+  folly::dynamic getDiffProps(const Props* prevProps) const override;
+  #endif
+
+  
+};
+
 class GodotWindowProps final : public ViewProps {
  public:
   GodotWindowProps() = default;

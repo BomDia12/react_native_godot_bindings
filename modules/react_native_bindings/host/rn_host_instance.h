@@ -21,9 +21,11 @@ class RunLoopObserverManager;
 } // namespace facebook::react
 
 class ReactNativeRootView;
+struct RNRootState;
 class RNBlobService;
 class RNDevServer;
 class RNGodotApplication;
+class RNGodotHostEvents;
 class RNHTTPService;
 class RNImageService;
 class RNLogBoxSurface;
@@ -58,6 +60,7 @@ private:
 	std::shared_ptr<RNImageService> images;
 	std::shared_ptr<facebook::react::RNWebSocketHub> websockets;
 	std::shared_ptr<RNSceneBindings> scenes;
+	std::shared_ptr<RNGodotHostEvents> host_events;
 	std::shared_ptr<RNMountingManager> mounting;
 	std::shared_ptr<facebook::react::RunLoopObserverManager> run_loop_observers;
 	std::unique_ptr<RNDevServer> dev_server;
@@ -65,6 +68,7 @@ private:
 	std::shared_ptr<RNLogBoxSurface> log_box;
 	std::mutex animation_mutex;
 	std::function<void()> animation_frame;
+	bool suspended = false;
 	RNHostRuntime runtime;
 	std::unique_ptr<RNHostTeardown> teardown;
 
@@ -82,6 +86,10 @@ public:
 	void update_layout(ReactNativeRootView *p_root);
 	void scene_binding_changed(facebook::react::SurfaceId p_surface);
 	void set_paused(bool p_paused);
+	void set_suspended(bool p_suspended);
+	void root_state_changed(facebook::react::SurfaceId p_surface, const RNRootState &p_state);
+	bool handles_back_press() const;
+	void back_pressed();
 	void evaluate(const String &p_code, std::function<void(const Variant &p_result)> p_done);
 	Dictionary stats() const;
 	void open_debugger();

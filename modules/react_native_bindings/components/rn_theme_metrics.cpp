@@ -43,10 +43,22 @@ RNThemeMetrics RNThemeMetrics::capture(Control *p_theme_owner, uint64_t p_revisi
 void RNThemeMetricsStore::publish(RNThemeMetrics p_metrics) {
 	auto published = std::make_shared<const RNThemeMetrics>(std::move(p_metrics));
 	std::lock_guard lock(mutex);
-	current = std::move(published);
+	fallback = std::move(published);
 }
 
-std::shared_ptr<const RNThemeMetrics> RNThemeMetricsStore::get() const {
+void RNThemeMetricsStore::publish(int p_surface, RNThemeMetrics p_metrics) {
+	auto published = std::make_shared<const RNThemeMetrics>(std::move(p_metrics));
 	std::lock_guard lock(mutex);
-	return current;
+	surfaces[p_surface] = std::move(published);
+}
+
+void RNThemeMetricsStore::forget(int p_surface) {
+	std::lock_guard lock(mutex);
+	surfaces.erase(p_surface);
+}
+
+std::shared_ptr<const RNThemeMetrics> RNThemeMetricsStore::get(int p_surface) const {
+	std::lock_guard lock(mutex);
+	auto found = surfaces.find(p_surface);
+	return found == surfaces.end() ? fallback : found->second;
 }

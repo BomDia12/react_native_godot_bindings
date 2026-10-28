@@ -139,7 +139,7 @@ Ref<Font> RNTextShaper::_font(const TextAttributes &p_attributes, const RNThemeM
 	const bool italic = p_attributes.fontStyle.value_or(FontStyle::Normal) != FontStyle::Normal;
 	const float spacing = std::isnan(p_attributes.letterSpacing) ? 0 : p_attributes.letterSpacing;
 	const int variant = int(p_attributes.fontVariant.value_or(FontVariant::Default));
-	const FontKey key(p_attributes.fontFamily, weight, italic, spacing, variant);
+	const FontKey key(uint64_t(p_metrics.text_font.is_valid() ? p_metrics.text_font->get_instance_id() : ObjectID()), p_attributes.fontFamily, weight, italic, spacing, variant);
 	{
 		std::lock_guard lock(mutex);
 		auto cached = fonts.find(key);
@@ -178,15 +178,20 @@ Ref<Font> RNTextShaper::_font(const TextAttributes &p_attributes, const RNThemeM
 	return font;
 }
 
-Ref<Font> RNTextShaper::resolve_font(const TextAttributes &p_attributes, int &r_size, ::Color &r_color) const {
-	const std::shared_ptr<const RNThemeMetrics> metrics = theme->get();
+std::shared_ptr<const RNThemeMetrics> RNTextShaper::get_theme_metrics(const AttributedString &p_string) const {
+	const auto &fragments = p_string.getFragments();
+	return theme->get(fragments.empty() ? -1 : fragments.front().parentShadowView.surfaceId);
+}
+
+Ref<Font> RNTextShaper::resolve_font(const TextAttributes &p_attributes, SurfaceId p_surface, int &r_size, ::Color &r_color) const {
+	const std::shared_ptr<const RNThemeMetrics> metrics = theme->get(p_surface);
 	r_size = MAX(1, int(Math::round(effective_font_size(p_attributes, metrics->text_font_size))));
 	r_color = godot_color(p_attributes.foregroundColor, metrics->text_color);
 	return _font(p_attributes, *metrics);
 }
 
 void RNTextShaper::_shape(const AttributedString &p_string, const ParagraphAttributes &p_paragraph, float p_width, float p_scale, RNParagraphLayout &r_layout) const {
-	const std::shared_ptr<const RNThemeMetrics> metrics = theme->get();
+	const std::shared_ptr<const RNThemeMetrics> metrics = get_theme_metrics(p_string);
 	Vector<RNParagraphLayout::Fragment> fragments;
 	std::optional<TextAlignment> alignment;
 	std::optional<WritingDirection> direction;

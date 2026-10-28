@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 
 class Control;
 
@@ -23,11 +24,18 @@ struct RNThemeMetrics {
 	static RNThemeMetrics capture(Control *p_theme_owner, uint64_t p_revision);
 };
 
+// The theme each surface measures and draws with, captured from its root, so
+// roots under differently themed controls look like their surroundings.
+// Surfaces without metrics of their own, and readers without a surface, use
+// the fallback.
 class RNThemeMetricsStore {
 	mutable std::mutex mutex;
-	std::shared_ptr<const RNThemeMetrics> current = std::make_shared<RNThemeMetrics>();
+	std::shared_ptr<const RNThemeMetrics> fallback = std::make_shared<RNThemeMetrics>();
+	std::unordered_map<int, std::shared_ptr<const RNThemeMetrics>> surfaces;
 
 public:
 	void publish(RNThemeMetrics p_metrics);
-	std::shared_ptr<const RNThemeMetrics> get() const;
+	void publish(int p_surface, RNThemeMetrics p_metrics);
+	void forget(int p_surface);
+	std::shared_ptr<const RNThemeMetrics> get(int p_surface = -1) const;
 };

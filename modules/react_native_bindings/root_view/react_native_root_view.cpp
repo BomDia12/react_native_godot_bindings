@@ -4,11 +4,13 @@
 #include "../host/react_native_host.h"
 #include "../turbomodules/rn_godot_alerts.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
+#include "scene/resources/font.h"
 
 using namespace facebook::react;
 
@@ -37,7 +39,22 @@ void ReactNativeRootView::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_application_key", "application_key"), &ReactNativeRootView::set_application_key);
 	ClassDB::bind_method(D_METHOD("get_application_key"), &ReactNativeRootView::get_application_key);
 	ClassDB::bind_method(D_METHOD("reload"), &ReactNativeRootView::reload);
+	ClassDB::bind_method(D_METHOD("set_initial_properties", "properties"), &ReactNativeRootView::set_initial_properties);
+	ClassDB::bind_method(D_METHOD("get_initial_properties"), &ReactNativeRootView::get_initial_properties);
+	ClassDB::bind_method(D_METHOD("set_fit_content", "fit"), &ReactNativeRootView::set_fit_content);
+	ClassDB::bind_method(D_METHOD("get_fit_content"), &ReactNativeRootView::get_fit_content);
+	ClassDB::bind_method(D_METHOD("set_editor_preview", "preview"), &ReactNativeRootView::set_editor_preview);
+	ClassDB::bind_method(D_METHOD("is_editor_preview"), &ReactNativeRootView::is_editor_preview);
+	ClassDB::bind_method(D_METHOD("get_native_node", "native_id"), &ReactNativeRootView::get_native_node);
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "application_key"), "set_application_key", "get_application_key");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "initial_properties"), "set_initial_properties", "get_initial_properties");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "fit_content", PROPERTY_HINT_ENUM, "None,Width,Height,Both"), "set_fit_content", "get_fit_content");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "editor_preview"), "set_editor_preview", "is_editor_preview");
+	ADD_SIGNAL(MethodInfo("scene_loaded", PropertyInfo(Variant::STRING, "native_id"), PropertyInfo(Variant::OBJECT, "instance", PROPERTY_HINT_RESOURCE_TYPE, "Node")));
+	BIND_ENUM_CONSTANT(FIT_CONTENT_NONE);
+	BIND_ENUM_CONSTANT(FIT_CONTENT_WIDTH);
+	BIND_ENUM_CONSTANT(FIT_CONTENT_HEIGHT);
+	BIND_ENUM_CONSTANT(FIT_CONTENT_BOTH);
 }
 
 void ReactNativeRootView::_notification(int p_what) {
@@ -48,20 +65,87 @@ void ReactNativeRootView::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &ReactNativeRootView::_surface_changed));
-			host->register_root(this);
+			_connect_window(true);
+			reported_state = get_state();
+			if (_is_running()) {
+				host->register_root(this);
+			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 			ProjectSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &ReactNativeRootView::_surface_changed));
+			_connect_window(false);
 			host->unregister_root(this);
 		} break;
 		case NOTIFICATION_RESIZED:
 		case NOTIFICATION_TRANSFORM_CHANGED:
 		case NOTIFICATION_LAYOUT_DIRECTION_CHANGED:
 		case NOTIFICATION_TRANSLATION_CHANGED:
-		case NOTIFICATION_THEME_CHANGED: {
+		case NOTIFICATION_THEME_CHANGED:
+		case NOTIFICATION_WM_DPI_CHANGE: {
 			_surface_changed();
 		} break;
+		case NOTIFICATION_VISIBILITY_CHANGED:
+		case NOTIFICATION_PAUSED:
+		case NOTIFICATION_UNPAUSED:
+		case NOTIFICATION_DISABLED:
+		case NOTIFICATION_ENABLED: {
+			_state_changed();
+		} break;
+		case NOTIFICATION_DRAW: {
+			if (!_is_running()) {
+				_draw_placeholder();
+			}
+		} break;
 	}
+}
+
+// Window focus and viewport resizes don't reach controls as notifications.
+void ReactNativeRootView::_connect_window(bool p_connect) {
+	Window *own_window = get_window();
+	const Callable state_changed = callable_mp(this, &ReactNativeRootView::_state_changed);
+	const std::pair<Object *, std::pair<const char *, Callable>> signals[] = {
+		{ own_window, { "focus_entered", state_changed } },
+		{ own_window, { "focus_exited", state_changed } },
+		{ get_viewport(), { "size_changed", callable_mp(this, &ReactNativeRootView::_surface_changed) } },
+	};
+	for (const auto &[object, connection] : signals) {
+		if (p_connect) {
+			object->connect(connection.first, connection.second);
+		} else {
+			object->disconnect(connection.first, connection.second);
+		}
+	}
+}
+
+// A root the editor doesn't preview leaves the runtime alone and only shows
+// which component it would host.
+bool ReactNativeRootView::_is_running() const {
+	return editor_preview || !Engine::get_singleton()->is_editor_hint();
+}
+
+void ReactNativeRootView::_draw_placeholder() {
+	const Rect2 rect(Point2(), get_size());
+	draw_rect(rect, ::Color(1, 1, 1, 0.3), false, 1);
+	const Ref<Font> font = get_theme_default_font();
+	const int font_size = get_theme_default_font_size();
+	const Size2 text_size = font->get_string_size(application_key, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size);
+	draw_string(font, (rect.size - text_size) / 2 + Vector2(0, font->get_ascent(font_size)), application_key, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, ::Color(1, 1, 1, 0.6));
+}
+
+void ReactNativeRootView::_state_changed() {
+	const RNRootState state = get_state();
+	if (state == reported_state || !is_inside_tree()) {
+		return;
+	}
+	reported_state = state;
+	if (ReactNativeHost::get_singleton()) {
+		ReactNativeHost::get_singleton()->root_state_changed(this);
+	}
+}
+
+RNRootState ReactNativeRootView::get_state() const {
+	const Window *own_window = is_inside_tree() ? get_window() : nullptr;
+	return { .visible = is_visible_in_tree(), .processing = is_inside_tree() && can_process(), .focused = own_window && own_window->has_focus() };
 }
 
 // Notifications arrive while Godot propagates them through the tree, where
@@ -81,17 +165,68 @@ void ReactNativeRootView::_update_layout() {
 	}
 }
 
+void ReactNativeRootView::_content_size_changed(const Size2 &p_size) {
+	if (content_size != p_size) {
+		content_size = p_size;
+		update_minimum_size();
+	}
+}
+
+Size2 ReactNativeRootView::get_minimum_size() const {
+	return Size2(fits_width() ? content_size.x : 0, fits_height() ? content_size.y : 0);
+}
+
+void ReactNativeRootView::set_fit_content(FitContent p_fit) {
+	if (fit_content == p_fit) {
+		return;
+	}
+	fit_content = p_fit;
+	update_minimum_size();
+	_surface_changed();
+}
+
+void ReactNativeRootView::set_initial_properties(const Dictionary &p_properties) {
+	if (initial_properties == p_properties) {
+		return;
+	}
+	initial_properties = p_properties.duplicate(true);
+	reload();
+}
+
+void ReactNativeRootView::set_editor_preview(bool p_preview) {
+	if (editor_preview == p_preview) {
+		return;
+	}
+	editor_preview = p_preview;
+	queue_redraw();
+	ReactNativeHost *host = ReactNativeHost::get_singleton();
+	if (!is_inside_tree() || !host) {
+		return;
+	}
+	if (_is_running()) {
+		host->register_root(this);
+	} else {
+		host->unregister_root(this);
+	}
+}
+
+Node *ReactNativeRootView::get_native_node(const String &p_native_id) const {
+	RNComponentView *view = views ? views->find_by_native_id(p_native_id.utf8().get_data()) : nullptr;
+	return view ? view->get_native_node() : nullptr;
+}
+
 void ReactNativeRootView::set_application_key(const String &p_key) {
 	ERR_FAIL_COND_MSG(p_key.is_empty(), "ReactNativeRootView.application_key cannot be empty.");
 	if (application_key == p_key) {
 		return;
 	}
 	application_key = p_key;
+	queue_redraw();
 	reload();
 }
 
 void ReactNativeRootView::reload() {
-	if (is_inside_tree() && ReactNativeHost::get_singleton()) {
+	if (is_inside_tree() && _is_running() && ReactNativeHost::get_singleton()) {
 		ReactNativeHost::get_singleton()->restart_root(this);
 	}
 }
@@ -100,6 +235,7 @@ RNMountedSurface ReactNativeRootView::_attach_surface(SurfaceId p_surface, std::
 	_detach_surface();
 	surface_id = p_surface;
 	root_component = std::make_unique<RNRootComponentView>(p_surface, container);
+	root_component->set_size_listener([this](const Size2 &p_size) { _content_size_changed(p_size); });
 	views = std::make_unique<RNComponentViewRegistry>(std::move(p_factories));
 	views->register_root(p_surface, root_component.get());
 	views->set_change_listener([this](RNComponentView *p_view) { _connect_input(p_view); });
@@ -139,16 +275,30 @@ void ReactNativeRootView::input(const Ref<InputEvent> &p_event) {
 // Godot delivers gui_input to the deepest control first and then bubbles it
 // through PASS parents. The first React control that sees an input serial
 // claims it; motion nobody claims still moves hover off React targets.
+// Keys, back presses and gamepad presses go to the focused React view. Godot
+// controls inside a GodotScene keep theirs.
 void ReactNativeRootView::_begin_input(const Ref<InputEvent> &p_event, ObjectID p_viewport_id) {
 	++input_serial;
 	if (Ref<InputEventMouseMotion>(p_event).is_valid()) {
 		callable_mp(this, &ReactNativeRootView::_route_unclaimed_motion).call_deferred(p_event, input_serial, p_viewport_id);
-	} else if (Ref<InputEventKey> key = p_event; key.is_valid() && views && get_viewport()) {
-		Control *focus_owner = get_viewport()->gui_get_focus_owner();
-		if (focus_owner && container->is_ancestor_of(focus_owner)) {
-			RNComponentView *view = views->find_for_control(focus_owner);
-			input_router.route_key(key, RNInputRouter::target_for(view, Point2()));
-		}
+		return;
+	}
+	Control *focus_owner = views && get_viewport() ? get_viewport()->gui_get_focus_owner() : nullptr;
+	RNComponentView *focused = focus_owner && container->is_ancestor_of(focus_owner) ? views->find_for_control(focus_owner) : nullptr;
+	if (!focused) {
+		return;
+	}
+	ReactNativeHost *host = ReactNativeHost::get_singleton();
+	if (host && host->handles_back_press() && p_event->is_action_pressed(SNAME("ui_cancel"))) {
+		get_viewport()->set_input_as_handled();
+		host->back_pressed();
+		return;
+	}
+	const RNInputRouter::Target target = RNInputRouter::target_for(focused, Point2());
+	if (Ref<InputEventKey> key = p_event; key.is_valid()) {
+		input_router.route_key(key, target);
+	} else if (p_event->is_action_released(SNAME("ui_accept"))) {
+		input_router.activate(target);
 	}
 }
 

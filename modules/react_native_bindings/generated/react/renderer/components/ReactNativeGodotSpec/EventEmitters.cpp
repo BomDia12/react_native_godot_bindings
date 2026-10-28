@@ -13,6 +13,24 @@
 
 namespace facebook::react {
 
+void GodotSceneEventEmitter::onLoad(OnLoad event) const {
+  dispatchEvent("load", [](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    
+    return payload;
+  });
+}
+
+
+void GodotSceneEventEmitter::onError(OnError event) const {
+  dispatchEvent("error", [event=std::move(event)](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    payload.setProperty(runtime, "message", event.message);
+    return payload;
+  });
+}
+
+
 void GodotWindowEventEmitter::onShow(OnShow event) const {
   dispatchEvent("show", [](jsi::Runtime &runtime) {
     auto payload = jsi::Object(runtime);
