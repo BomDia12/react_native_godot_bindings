@@ -15,6 +15,7 @@
 #include <vector>
 
 namespace facebook::react {
+class RNSourceURL;
 class RNWebSocketHub;
 class RunLoopObserverManager;
 } // namespace facebook::react
@@ -60,6 +61,7 @@ private:
 	std::shared_ptr<RNMountingManager> mounting;
 	std::shared_ptr<facebook::react::RunLoopObserverManager> run_loop_observers;
 	std::unique_ptr<RNDevServer> dev_server;
+	std::shared_ptr<facebook::react::RNSourceURL> source_url;
 	std::shared_ptr<RNLogBoxSurface> log_box;
 	std::mutex animation_mutex;
 	std::function<void()> animation_frame;

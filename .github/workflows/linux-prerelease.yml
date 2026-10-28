@@ -39,6 +39,14 @@ jobs:
           name: linux-baseline-package
           path: artifacts
 
+      # Each package records the editor archive of its own commit, so that
+      # archive stays on the release after later prereleases replace the rest.
+      - name: Name the commit's editor archive
+        run: |
+          COMMIT_ARCHIVE_NAME="react-native-godot-linux-x86_64-${GITHUB_SHA::12}.zip"
+          ln "artifacts/${ARCHIVE_NAME}" "artifacts/${COMMIT_ARCHIVE_NAME}"
+          echo "COMMIT_ARCHIVE_NAME=${COMMIT_ARCHIVE_NAME}" >> "$GITHUB_ENV"
+
       - name: Write release notes
         run: |
           source baseline.env
@@ -79,11 +87,15 @@ jobs:
             gh release upload "$RELEASE_TAG" \
               "artifacts/${ARCHIVE_NAME}" \
               "artifacts/${ARCHIVE_NAME}.sha256" \
+              "artifacts/${COMMIT_ARCHIVE_NAME}" \
+              artifacts/react-native-godot.tgz \
               --clobber
           else
             gh release create "$RELEASE_TAG" \
               "artifacts/${ARCHIVE_NAME}" \
               "artifacts/${ARCHIVE_NAME}.sha256" \
+              "artifacts/${COMMIT_ARCHIVE_NAME}" \
+              artifacts/react-native-godot.tgz \
               --target "$GITHUB_SHA" \
               --title "Linux baseline ${GITHUB_SHA::12}" \
               --notes-file artifacts/release-notes.md \
@@ -102,11 +114,17 @@ jobs:
           ASSETS=$(gh api "$RELEASE_API" --jq '.assets[].name')
           grep -Fx "$ARCHIVE_NAME" <<<"$ASSETS"
           grep -Fx "${ARCHIVE_NAME}.sha256" <<<"$ASSETS"
+          grep -Fx react-native-godot.tgz <<<"$ASSETS"
+          grep -Fx "$COMMIT_ARCHIVE_NAME" <<<"$ASSETS"
+          EDITOR_URL=$(tar -xzOf artifacts/react-native-godot.tgz package/godot-platform.json | jq -r '.editors["linux-x86_64"].url')
+          [[ "$EDITOR_URL" == "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${COMMIT_ARCHIVE_NAME}" ]]
           mkdir -p artifacts/published
           gh release download "$RELEASE_TAG" \
             --pattern "$ARCHIVE_NAME" \
             --pattern "${ARCHIVE_NAME}.sha256" \
+            --pattern "$COMMIT_ARCHIVE_NAME" \
             --dir artifacts/published
           cmp "artifacts/${ARCHIVE_NAME}.sha256" "artifacts/published/${ARCHIVE_NAME}.sha256"
+          cmp "artifacts/published/${ARCHIVE_NAME}" "artifacts/published/${COMMIT_ARCHIVE_NAME}"
           cd artifacts/published
           sha256sum --check "${ARCHIVE_NAME}.sha256"

@@ -179,7 +179,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 						if (auto alive = weak.lock()) {
 							alive->focus_view(p_tag);
 						} } };
-	modules.source_url = dev_server ? dev_server->bundle_url() : "";
+	source_url = modules.source_url;
 	modules.application = { application, main_thread };
 	modules.network = { blobs, http, websockets, main_thread };
 	modules.scenes = scenes;
@@ -248,14 +248,18 @@ RNHostInstance::~RNHostInstance() = default;
 // A Metro bundle loads under its URL, which ResourceLoader resolves to the
 // downloaded copy. Surfaces started meanwhile wait for the bundle in ReactHost.
 bool RNHostInstance::load_script(const String &p_bundle) {
+	const std::string bundle_file = p_bundle.utf8().get_data();
 	if (!dev_server) {
-		return runtime.react_host->loadScript(p_bundle.utf8().get_data(), "");
+		source_url->set(bundle_file);
+		return runtime.react_host->loadScript(bundle_file, "");
 	}
-	dev_server->download_bundle(*http, [this, p_bundle](bool p_downloaded) {
+	dev_server->download_bundle(*http, [this, p_bundle, bundle_file](bool p_downloaded) {
 		if (retired) {
 			return;
 		}
-		const bool loaded = p_downloaded ? runtime.react_host->loadScript(dev_server->bundle_url(), "") : FileAccess::exists(p_bundle) && runtime.react_host->loadScript(p_bundle.utf8().get_data(), "");
+		const std::string script = p_downloaded ? dev_server->bundle_url() : bundle_file;
+		source_url->set(script);
+		const bool loaded = (p_downloaded || FileAccess::exists(p_bundle)) && runtime.react_host->loadScript(script, "");
 		if (!loaded) {
 			const String error = vformat("React Native bundle '%s' could not be loaded from Metro or from disk.", p_bundle);
 			on_error(error);

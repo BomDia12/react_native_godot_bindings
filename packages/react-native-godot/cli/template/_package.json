@@ -1,0 +1,24 @@
+{
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "react-native-godot-start",
+    "build": "react-native build-godot",
+    "godot": "react-native run-godot",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "{{react}}",
+    "react-native": "{{reactNative}}",
+    "react-native-godot": "{{reactNativeGodot}}"
+  },
+  "devDependencies": {
+    "@react-native-community/cli": "20.2.0",
+    "@types/react": "{{typesReact}}",
+    "typescript": "{{typescript}}"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

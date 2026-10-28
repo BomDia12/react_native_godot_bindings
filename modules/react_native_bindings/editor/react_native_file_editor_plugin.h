@@ -11,6 +11,7 @@ class ReactNativeFileEditorPlugin : public EditorPlugin {
 	uint64_t last_known_modified_time = 0;
 	bool last_known_exists = false;
 
+	void _ignore_node_modules();
 	void _update_monitored_path();
 	void _check_file_status(bool p_force_refresh = false);
 	void _on_filesystem_changed();

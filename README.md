@@ -13,6 +13,23 @@ keeps enemy and inventory state in GDScript: signals update four RN surfaces dir
 and declared RN commands mutate only their bound Godot target. Network scenarios feed
 updates into the same Godot authority.
 
+## Use it in a Godot project
+
+Add React Native to a Godot project, new or existing, with the package and editor from the
+rolling Linux prerelease. Node.js 22.13.0 or newer is required:
+
+```sh
+cd my-godot-game
+npx --yes --package=https://github.com/BomDia12/react_native_godot_bindings/releases/download/baseline-linux-latest/react-native-godot.tgz react-native-godot-init
+cd react_native
+npx react-native run-godot --editor
+```
+
+See [getting started](documentation/getting-started.md) for what this creates and how to
+build, run and debug it.
+
+## Demo game
+
 Build and stage the standalone demo under the workspace's `godotProjects` directory:
 
 ```sh
@@ -52,6 +69,7 @@ scripts/run_baseline.sh
 scripts/run_component_display.sh
 scripts/run_visual_regression.sh
 scripts/run_staged_game.sh
+scripts/run_consumer.sh
 ```
 
 `bootstrap.sh` creates or verifies the pinned `godot/` checkout, initializes the pinned
@@ -66,7 +84,11 @@ declared headless smoke test. Shared manifests with the same package, npm script
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the
 default concurrency of two Godot processes. `run_staged_game.sh` stages the game demo
 built by the smoke run into a temporary project outside the repository, imports it, and
-checks that all four of its roots mount without diagnostics.
+checks that all four of its roots mount without diagnostics. `run_consumer.sh` creates a
+consumer project with `react-native-godot-init` from `artifacts/react-native-godot.tgz`,
+which `package_linux_baseline.sh` and `package_npm.sh` build, or from the source tree when
+that file is missing. It runs the project from a bundle file, from the bundle file after
+failing to reach Metro, and from Metro.
 `run_visual_regression.sh` builds the fidelity bundle, imports the game sample, and renders
 each `samples/game-ui/smoke/visual/*.tscn` application under Xvfb with software OpenGL,
 comparing it with its golden PNG in `smoke/visual/goldens/`. Failing captures are written
@@ -75,9 +97,9 @@ to `artifacts/visual/`; `RN_VISUAL_UPDATE=1` rewrites the goldens instead. Like
 without Xvfb.
 
 The JavaScript platform is the `react-native-godot` package in `packages/react-native-godot/`.
-Samples depend on it through `file:../../packages/react-native-godot`, and the sample's
-`build:godot` script uses the package's Metro config and stages its
-bundle, source map, dependency evidence, and local asset variants under
+Samples depend on it through `file:../../packages/react-native-godot` and use it as a
+consumer would: the sample's `build:godot` script runs `react-native build-godot`, which
+stages its bundle, source map, dependency evidence, and local asset variants under
 `samples/view-text/dist/`. Application resolution prefers `.godot.*`, then `.native.*`,
 then generic files; the supported graph does not select Android/iOS platform files.
 
@@ -114,11 +136,11 @@ npm --prefix samples/view-text run start:godot
 ```
 
 `start:godot` runs the package's `react-native-godot-start`, which serves the project's
-`metro.config.godot.js` with React Native's dev middleware. `react_native/dev_server/host`
+`metro.config.js` with React Native's dev middleware; `npx react-native run-godot` starts it
+for you. `react_native/dev_server/host`
 and `react_native/dev_server/port` (default `localhost:8081`) locate Metro, and
 `react_native/dev_server/entry` (default `index`) names the entry file without its
-extension, for example `godot.entry` in `samples/view-text`. The entry file imports
-`react-native-godot/setup`. The runtime downloads its bundle from Metro and falls back to
+extension, for example `godot.entry` in `samples/view-text`. The runtime downloads its bundle from Metro and falls back to
 `react_native/bundle/path` when Metro can't serve it. Exported games always load the
 bundle file.
 
@@ -129,4 +151,6 @@ to open React Native DevTools.
 
 Successful merges to `main` replace the `baseline-linux-latest` rolling prerelease. Its
 Linux archive contains the Godot editor executable, `libhermesvm.so`, and `libjsi.so`,
-with a separate SHA-256 checksum asset.
+with a separate SHA-256 checksum asset. The same archive is also published as
+`react-native-godot-linux-x86_64-<commit>.zip`, which later prereleases keep, so that the
+`react-native-godot.tgz` of every commit can still download its editor.

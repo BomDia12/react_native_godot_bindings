@@ -90,25 +90,36 @@ def main() -> int:
         if not required.is_file():
             failures.append(f"missing provenance file: {required.relative_to(REPO_ROOT)}")
 
-    expected_packages = {
-        "react": baseline["REACT_VERSION"],
-        "react-native": baseline["REACT_NATIVE_VERSION"],
-        "metro": baseline["METRO_VERSION"],
+    def check_lock(lock_path: Path, name: str, expected: str) -> None:
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        locked = lock.get("packages", {}).get(f"node_modules/{name}", {}).get("version")
+        if locked != expected:
+            failures.append(f"{lock_path.relative_to(REPO_ROOT)} {name}: expected {expected}, got {locked}")
+
+    # Applications declare React and React Native. The platform package owns
+    # the build tooling and takes Metro in upstream React Native's range, so
+    # the lockfiles pin the Metro that npm resolves.
+    application_packages = {"react": baseline["REACT_VERSION"], "react-native": baseline["REACT_NATIVE_VERSION"]}
+    tooling_packages = {
         "@react-native/metro-config": baseline["REACT_NATIVE_VERSION"],
         "@react-native/babel-preset": baseline["REACT_NATIVE_VERSION"],
     }
+    platform_path = REPO_ROOT / "packages/react-native-godot/package.json"
+    platform = json.loads(platform_path.read_text(encoding="utf-8"))
+    for name, expected in tooling_packages.items():
+        if platform.get("dependencies", {}).get(name) != expected:
+            failures.append(f"react-native-godot {name}: expected {expected}, got {platform.get('dependencies', {}).get(name)}")
+    check_lock(platform_path.with_name("package-lock.json"), "metro", baseline["METRO_VERSION"])
 
     for package_path in sorted((REPO_ROOT / "samples").glob("*/package.json")):
         package = json.loads(package_path.read_text(encoding="utf-8"))
         lock_path = package_path.with_name("package-lock.json")
-        lock = json.loads(lock_path.read_text(encoding="utf-8"))
         declared = {**package.get("dependencies", {}), **package.get("devDependencies", {})}
-        for name, expected in expected_packages.items():
+        for name, expected in application_packages.items():
             if declared.get(name) != expected:
-                failures.append(f"package.json {name}: expected {expected}, got {declared.get(name)}")
-            locked = lock.get("packages", {}).get(f"node_modules/{name}", {}).get("version")
-            if locked != expected:
-                failures.append(f"package-lock.json {name}: expected {expected}, got {locked}")
+                failures.append(f"{package_path.relative_to(REPO_ROOT)} {name}: expected {expected}, got {declared.get(name)}")
+            check_lock(lock_path, name, expected)
+        check_lock(lock_path, "metro", baseline["METRO_VERSION"])
 
     if (REPO_ROOT / ".nvmrc").read_text(encoding="utf-8").strip() != baseline["NODE_VERSION"]:
         failures.append(".nvmrc does not match NODE_VERSION")

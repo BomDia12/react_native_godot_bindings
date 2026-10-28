@@ -23,19 +23,11 @@ function godotAssetMetadata(asset) {
   if (!Array.isArray(asset.files) || asset.files.length !== asset.scales.length) {
     throw new Error('Metro asset files/scales do not match');
   }
-  const variants = asset.scales.map((scale, index) => ({
-    scale,
-    uri:
-      'res://dist/assets/' +
-      asset.hash +
-      '/' +
-      canonicalScale(scale) +
-      '.' +
-      asset.type,
-    source: asset.files[index],
-  }));
   return {
-    variants: variants.map(({scale, uri}) => ({scale, uri})),
+    variants: asset.scales.map(scale => ({
+      scale,
+      path: 'assets/' + asset.hash + '/' + canonicalScale(scale) + '.' + asset.type,
+    })),
   };
 }
 
@@ -58,12 +50,11 @@ function stageAssets(assets, stagingRoot) {
       if (!stat.isFile()) {
         throw new Error('Metro asset source is not a regular file: ' + source);
       }
-      const relative = variant.uri.slice('res://dist/'.length);
-      const destination = path.join(stagingRoot, relative);
+      const destination = path.join(stagingRoot, variant.path);
       const digest = hashFile(source);
       const prior = destinations.get(destination);
       if (prior != null && prior !== digest) {
-        throw new Error('Asset destination collision: ' + variant.uri);
+        throw new Error('Asset destination collision: ' + variant.path);
       }
       destinations.set(destination, digest);
       fs.mkdirSync(path.dirname(destination), {recursive: true});

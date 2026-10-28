@@ -9,7 +9,8 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 | Hermes | Exact commit `3477757eb2475555cf8d8df24bfb1deb0613880d` (`hermes-v250829098.0.17`) | Git submodule, build script |
 | React Native | `0.87.1` | Package manifest and lockfile |
 | React | `19.2.3` | Package manifest and lockfile |
-| Metro | `0.87.0` | Direct dependency and lockfile |
+| Metro | `0.87.2`, through React Native's `^0.87.0` range | `react-native-godot` dependency and lockfiles |
+| React Native Community CLI | `20.2.0`, the version React Native 0.87.1's own tooling uses | Template and sample manifests |
 | React Native core | `v0.87.1` commit `a59eff64fa907ed6e919fafe6cbd26d1d54c2de3`, including Yoga and JSI | Git submodule, provenance validation |
 | folly, glog, fmt, double-conversion, fast_float, nlohmann/json | React Native 0.87.1 pins | Git submodules, provenance validation |
 | Boost | `1.83.0` headers | `bootstrap.sh` SHA-256 check |
@@ -23,6 +24,12 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 | Ninja | CI `1.11` | Workflow |
 | Compiler | CI GCC 13 with C++20 | Workflow and Godot build |
 | C++ formatter | Clang Format 18 | `check_format.sh`, Ubuntu CI toolchain |
+
+Each prerelease `react-native-godot.tgz` contains a `godot-platform.json` written by
+`scripts/package_npm.sh`. It records the repository commit, the Godot commit, the React
+Native version and the URL and SHA-256 of the editor archive built from the same commit,
+which the CLI downloads and verifies. That archive is the release's
+`react-native-godot-linux-x86_64-<commit>.zip` asset, which later prereleases keep. Its version is `0.1.0-preview.g<commit>`.
 
 Only the Linux editor and headless runtime path are currently tested. The Godot Metro
 adapter map is pinned to the React Native 0.87.1 public module layout and must be reviewed

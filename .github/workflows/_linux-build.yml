@@ -203,8 +203,12 @@ jobs:
         run: scripts/run_staged_game.sh
 
       - name: Package Linux baseline
-        if: inputs.package_release
-        run: scripts/package_linux_baseline.sh
+        run: |
+          scripts/package_linux_baseline.sh
+          scripts/package_npm.sh
+
+      - name: Run a consumer project from the package
+        run: scripts/run_consumer.sh
 
       - name: Upload release package
         if: inputs.package_release
@@ -216,6 +220,7 @@ jobs:
           path: |
             artifacts/react-native-godot-linux-x86_64.zip
             artifacts/react-native-godot-linux-x86_64.zip.sha256
+            artifacts/react-native-godot.tgz
 
       - name: Upload failure diagnostics
         if: failure()

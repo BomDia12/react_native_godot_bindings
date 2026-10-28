@@ -1,0 +1,3 @@
+# The consumer check runs a project that uses the developer server without
+# starting Metro, so the runtime falls back to the bundle file.
+^WARNING: The Metro bundle at http://localhost:8081/index\.bundle\?\S+ could not be downloaded \(.+\); loading the prebuilt bundle\.$

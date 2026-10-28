@@ -48,6 +48,7 @@ void rn_register_service_settings() {
 	GLOBAL_DEF("react_native/dev_server/port", 8081);
 	settings->set_custom_property_info(PropertyInfo(Variant::INT, "react_native/dev_server/port", PROPERTY_HINT_RANGE, "1,65535,1"));
 	GLOBAL_DEF("react_native/dev_server/entry", "index");
+	GLOBAL_DEF(PropertyInfo(Variant::STRING, "react_native/project/root", PROPERTY_HINT_DIR), "res://react_native/");
 }
 bool RNServiceSettings::snapshot(RNServiceSettings &r_settings, RNError &r_error) {
 	ProjectSettings *settings = ProjectSettings::get_singleton();
@@ -83,8 +84,10 @@ bool RNServiceSettings::snapshot(RNServiceSettings &r_settings, RNError &r_error
 		r_error = RNError::make(RNErrorCode::VALIDATION, "invalid developer server configuration", "settings.snapshot", "react_native/dev_server");
 		return false;
 	}
-	// Exported games never reach a developer machine's Metro server.
-	snapshot.dev_server.enabled = bool(dev_enabled) && !OS::get_singleton()->has_feature("template");
+	// Exported games never reach a developer machine's Metro server, and
+	// `run-godot --no-packager` runs the bundle file it has just built.
+	const bool bundle_file_requested = OS::get_singleton()->get_cmdline_args().find("--react-native-no-dev-server") != nullptr;
+	snapshot.dev_server.enabled = bool(dev_enabled) && !OS::get_singleton()->has_feature("template") && !bundle_file_requested;
 	snapshot.dev_server.host = dev_host;
 	snapshot.dev_server.port = dev_port;
 	snapshot.dev_server.entry = dev_entry;

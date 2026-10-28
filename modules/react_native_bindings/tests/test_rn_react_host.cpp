@@ -136,7 +136,6 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 	int focused_tag = 0;
 	react::RNTurboModuleContext modules;
 	modules.host = { main_thread, nullptr, [&reloads] { ++reloads; }, [&debugger_requests] { ++debugger_requests; }, [&focused_tag](int p_tag) { focused_tag = p_tag; } };
-	modules.source_url = "http://localhost:8081/index.bundle?platform=godot";
 	modules.application = { std::make_shared<RNGodotApplication>(), main_thread };
 	modules.network = { blobs, nullptr, nullptr, main_thread };
 	auto context = std::make_shared<react::ContextContainer>();
@@ -146,6 +145,7 @@ TEST_CASE("[ReactNativeBindings][ReactHost] Godot TurboModules serve JavaScript 
 	config.enableDevMode = false;
 	config.enableInspector = false;
 	react::ReactHost host(config, std::make_shared<RecordingMountingManager>(), std::make_shared<react::RunLoopObserverManager>(), context, [](jsi::Runtime &, const react::JsErrorHandler::ProcessedError &) {}, nullptr, nullptr, { react::rn_godot_turbo_module_provider(modules) });
+	modules.source_url->set("http://localhost:8081/index.bundle?platform=godot");
 	REQUIRE(host.loadScript(script_path.utf8().get_data(), ""));
 
 	auto minor = read_answer(host, "__minor");

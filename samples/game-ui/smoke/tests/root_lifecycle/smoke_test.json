@@ -24,7 +24,7 @@
     "samples/game-ui/game/inventory.gd",
     "samples/game-ui/game/schemas.gd",
     "samples/game-ui/godot.entry.js",
-    "samples/game-ui/metro.config.godot.js",
+    "samples/game-ui/metro.config.js",
     "samples/game-ui/package-lock.json",
     "samples/game-ui/package.json",
     "samples/game-ui/project.godot",

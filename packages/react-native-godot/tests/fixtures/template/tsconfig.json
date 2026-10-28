@@ -1,0 +1,4 @@
+{
+  "extends": "../../../tsconfig.json",
+  "files": ["../../../cli/template/App.tsx"]
+}

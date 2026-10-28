@@ -16,7 +16,7 @@
     "samples/view-text/interaction.entry.js",
     "samples/view-text/multi_root.entry.js",
     "samples/view-text/transaction.entry.js",
-    "samples/view-text/metro.config.godot.js",
+    "samples/view-text/metro.config.js",
     "samples/view-text/babel.config.js",
     "samples/view-text/package.json",
     "samples/view-text/package-lock.json",
