@@ -2,13 +2,17 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const {findEntry} = require('../cli/build.cjs');
-const {resolveEditor} = require('../cli/editor.cjs');
+const {spawnSync} = require('node:child_process');
+const {buildBundle, findEntry} = require('../cli/build.cjs');
+const {downloadEditor, hostPlatform, resolveEditor} = require('../cli/editor.cjs');
 const {addMainScene, packageName, writeTemplate} = require('../cli/init.cjs');
 const {addProjectSettings, ignoreNodeModules, loadGodotProject, readProjectSettings} = require('../cli/project.cjs');
+const {importProject, runEditor} = require('../cli/run.cjs');
 
 function godotProject(settings) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-cli-'));
@@ -89,4 +93,57 @@ test('an explicit editor takes precedence and must exist', async () => {
   fs.writeFileSync(editor, '');
   assert.equal(await resolveEditor({godot: editor}), editor);
   await assert.rejects(resolveEditor({godot: editor + '-missing'}), /not found/);
+});
+
+test('the prebuilt editor is downloaded once and checked against the package', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-download-'));
+  const packageDir = path.join(root, 'react-native-godot-linux-x86_64');
+  fs.mkdirSync(packageDir);
+  fs.writeFileSync(path.join(packageDir, 'godot.linuxbsd.editor.dev.x86_64'), '');
+  const archivePath = path.join(root, 'editor.zip');
+  assert.equal(spawnSync('python3', ['-m', 'zipfile', '-c', archivePath, packageDir]).status, 0);
+  const archive = fs.readFileSync(archivePath);
+  let requests = 0;
+  const server = http.createServer((_request, response) => {
+    requests += 1;
+    response.end(archive);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  t.after(() => server.closeAllConnections());
+  const cacheHome = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = path.join(root, 'cache');
+  t.after(() => (cacheHome == null ? delete process.env.XDG_CACHE_HOME : (process.env.XDG_CACHE_HOME = cacheHome)));
+  t.mock.method(console, 'info', () => {});
+
+  const url = `http://127.0.0.1:${server.address().port}/editor.zip`;
+  const sha256 = crypto.createHash('sha256').update(archive).digest('hex');
+  const platform = commit => ({bindingsCommit: commit, editors: {[hostPlatform()]: {url, sha256}}});
+  const editor = await downloadEditor(platform('first'));
+  assert.equal(path.basename(editor), 'godot.linuxbsd.editor.dev.x86_64');
+  assert.ok(fs.statSync(editor).mode & 0o100);
+  assert.equal(await downloadEditor(platform('first')), editor);
+  assert.equal(requests, 1);
+  await assert.rejects(
+    downloadEditor({bindingsCommit: 'second', editors: {[hostPlatform()]: {url, sha256: '0'.repeat(64)}}}),
+    /changed since this package was built.*Update the vendored react-native-godot package, or pass --godot/,
+  );
+});
+
+test('an editor that cannot start or import fails with a clear error', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-broken-editor-'));
+  const notExecutable = path.join(root, 'godot');
+  fs.writeFileSync(notExecutable, '');
+  await assert.rejects(runEditor(notExecutable, []), /Could not start the Godot editor .*godot: spawn .* EACCES/);
+  const failing = path.join(root, 'failing-godot');
+  fs.writeFileSync(failing, '#!/bin/sh\nexit 3\n', {mode: 0o755});
+  assert.throws(() => importProject(failing, root), /Godot could not import .*: exit code 3/);
+});
+
+test('a bundle cannot share its directory with the JavaScript project', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-bundle-'));
+  const jsRoot = path.join(root, 'react_native');
+  for (const out of [path.join(root, 'game.bundle.js'), 'index.bundle.js']) {
+    await assert.rejects(buildBundle({projectRoot: jsRoot, entry: 'index', out}), /must be in a directory of its own/);
+  }
 });

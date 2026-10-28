@@ -109,7 +109,6 @@ bool ReactNativeHost::_start() {
 	}
 	RNHostInstance::Setup setup;
 	setup.settings = settings;
-	setup.bundle = bundle;
 	setup.theme = theme;
 	setup.generation = generation;
 	setup.find_root = [this](SurfaceId p_surface) { return find_root(p_surface); };

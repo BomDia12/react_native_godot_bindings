@@ -41,6 +41,11 @@ function replaceDirectory(source, destination) {
   }
 }
 
+function isWithin(directory, file) {
+  const relative = path.relative(directory, file);
+  return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+}
+
 function collectSources(sourceMap) {
   const sources = [...(sourceMap.sources ?? [])];
   for (const section of sourceMap.sections ?? []) {
@@ -53,9 +58,12 @@ function collectSources(sourceMap) {
 // and its assets staged beside it. Other files in the output directory, such
 // as other bundles, are kept.
 async function buildBundle({projectRoot, entry, out, dev = false, minify = false}) {
-  const Metro = require('metro');
   const output = path.resolve(projectRoot, out);
   const outputDirectory = path.dirname(output);
+  if (isWithin(outputDirectory, projectRoot)) {
+    throw new Error(`The bundle ${output} must be in a directory of its own, such as dist/: a build replaces its whole directory, which here contains the JavaScript project ${projectRoot}.`);
+  }
+  const Metro = require('metro');
   const config = require(path.join(projectRoot, 'metro.config.js'));
   const cacheRoot = path.join(projectRoot, 'node_modules', '.cache', 'react-native-godot');
   fs.mkdirSync(cacheRoot, {recursive: true});

@@ -15,6 +15,7 @@
 #include <vector>
 
 namespace facebook::react {
+class RNSourceURL;
 class RNWebSocketHub;
 class RunLoopObserverManager;
 } // namespace facebook::react
@@ -39,7 +40,6 @@ class RNHostInstance {
 public:
 	struct Setup {
 		RNServiceSettings settings;
-		String bundle;
 		std::shared_ptr<RNThemeMetricsStore> theme;
 		uint64_t generation = 0;
 		std::function<ReactNativeRootView *(facebook::react::SurfaceId p_surface)> find_root;
@@ -61,6 +61,7 @@ private:
 	std::shared_ptr<RNMountingManager> mounting;
 	std::shared_ptr<facebook::react::RunLoopObserverManager> run_loop_observers;
 	std::unique_ptr<RNDevServer> dev_server;
+	std::shared_ptr<facebook::react::RNSourceURL> source_url;
 	std::shared_ptr<RNLogBoxSurface> log_box;
 	std::mutex animation_mutex;
 	std::function<void()> animation_frame;

@@ -63,9 +63,7 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 	});
 	add(RNAccessibilityManagerModule::kModuleName, [host, application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAccessibilityManagerModule>(p_invoker, host, application); });
 	add(RNDevSettingsModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNDevSettingsModule>(p_invoker, host); });
-	if (!context.source_url.empty()) {
-		add(SourceCodeModule::kModuleName, [url = context.source_url](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<SourceCodeModule>(p_invoker, url); });
-	}
+	add(SourceCodeModule::kModuleName, [url = context.source_url](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<SourceCodeModule>(p_invoker, url->get()); });
 	add(ImageLoaderModule::kModuleName, [loader = std::weak_ptr<IImageLoader>(context.image_loader)](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<ImageLoaderModule>(p_invoker, loader); });
 	return [factories, host](const std::string &p_name, const std::shared_ptr<CallInvoker> &p_invoker) -> std::shared_ptr<TurboModule> {
 		auto factory = factories->find(p_name);

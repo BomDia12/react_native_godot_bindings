@@ -7,6 +7,7 @@ const path = require('path');
 const {spawnSync} = require('child_process');
 
 const PLATFORM_FILE = path.join(__dirname, '..', 'godot-platform.json');
+const EDITOR_ALTERNATIVES = 'Update the vendored react-native-godot package, or pass --godot <editor> or set GODOT_EDITOR.';
 
 function cacheRoot() {
   return path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'react-native-godot');
@@ -64,12 +65,12 @@ async function downloadEditor(platform) {
   console.info(`Downloading the React Native Godot editor from ${release.url}`);
   const response = await fetch(release.url);
   if (!response.ok) {
-    throw new Error(`Downloading ${release.url} failed: HTTP ${response.status}. Run react-native-godot-init again to update the platform.`);
+    throw new Error(`Downloading ${release.url} failed: HTTP ${response.status}. ${EDITOR_ALTERNATIVES}`);
   }
   const archive = Buffer.from(await response.arrayBuffer());
   const digest = crypto.createHash('sha256').update(archive).digest('hex');
   if (digest !== release.sha256) {
-    throw new Error(`The editor at ${release.url} does not match this package (sha256 ${digest}). Run react-native-godot-init again to update the platform.`);
+    throw new Error(`The editor archive at ${release.url} changed since this package was built (sha256 ${digest}). ${EDITOR_ALTERNATIVES}`);
   }
   const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'react-native-godot-editor-'));
   try {
@@ -103,4 +104,4 @@ async function resolveEditor({godot} = {}) {
   return downloadEditor(platform);
 }
 
-module.exports = {cacheRoot, findEditorBinary, hostPlatform, readPlatform, resolveEditor};
+module.exports = {cacheRoot, downloadEditor, findEditorBinary, hostPlatform, readPlatform, resolveEditor};

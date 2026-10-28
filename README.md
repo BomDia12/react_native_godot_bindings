@@ -84,9 +84,11 @@ declared headless smoke test. Shared manifests with the same package, npm script
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the
 default concurrency of two Godot processes. `run_staged_game.sh` stages the game demo
 built by the smoke run into a temporary project outside the repository, imports it, and
-checks that all four of its roots mount without diagnostics. `run_consumer.sh` packs
-`react-native-godot`, creates a consumer project from it with `react-native-godot-init`, and
-runs that project from a bundle file and from Metro.
+checks that all four of its roots mount without diagnostics. `run_consumer.sh` creates a
+consumer project with `react-native-godot-init` from `artifacts/react-native-godot.tgz`,
+which `package_linux_baseline.sh` and `package_npm.sh` build, or from the source tree when
+that file is missing. It runs the project from a bundle file, from the bundle file after
+failing to reach Metro, and from Metro.
 `run_visual_regression.sh` builds the fidelity bundle, imports the game sample, and renders
 each `samples/game-ui/smoke/visual/*.tscn` application under Xvfb with software OpenGL,
 comparing it with its golden PNG in `smoke/visual/goldens/`. Failing captures are written
@@ -149,4 +151,6 @@ to open React Native DevTools.
 
 Successful merges to `main` replace the `baseline-linux-latest` rolling prerelease. Its
 Linux archive contains the Godot editor executable, `libhermesvm.so`, and `libjsi.so`,
-with a separate SHA-256 checksum asset.
+with a separate SHA-256 checksum asset. The same archive is also published as
+`react-native-godot-linux-x86_64-<commit>.zip`, which later prereleases keep, so that the
+`react-native-godot.tgz` of every commit can still download its editor.

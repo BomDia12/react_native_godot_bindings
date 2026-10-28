@@ -28,7 +28,8 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 Each prerelease `react-native-godot.tgz` contains a `godot-platform.json` written by
 `scripts/package_npm.sh`. It records the repository commit, the Godot commit, the React
 Native version and the URL and SHA-256 of the editor archive built from the same commit,
-which the CLI downloads and verifies. Its version is `0.1.0-preview.g<commit>`.
+which the CLI downloads and verifies. That archive is the release's
+`react-native-godot-linux-x86_64-<commit>.zip` asset, which later prereleases keep. Its version is `0.1.0-preview.g<commit>`.
 
 Only the Linux editor and headless runtime path are currently tested. The Godot Metro
 adapter map is pinned to the React Native 0.87.1 public module layout and must be reviewed

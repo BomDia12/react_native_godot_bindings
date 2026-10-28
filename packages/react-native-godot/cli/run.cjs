@@ -35,9 +35,18 @@ async function startMetro(project) {
   return metro;
 }
 
+function importProject(editor, godotRoot) {
+  const result = spawnSync(editor, ['--headless', '--editor', '--import', '--path', godotRoot], {stdio: 'inherit'});
+  if (result.status !== 0) {
+    throw new Error(`Godot could not import ${godotRoot}: ${result.error?.message ?? `exit code ${result.status ?? result.signal}`}`);
+  }
+}
+
 function runEditor(editor, args) {
-  return new Promise(resolve => {
-    spawn(editor, args, {stdio: 'inherit'}).on('exit', code => resolve(code ?? 1));
+  return new Promise((resolve, reject) => {
+    spawn(editor, args, {stdio: 'inherit'})
+      .on('error', error => reject(new Error(`Could not start the Godot editor ${editor}: ${error.message}`)))
+      .on('exit', code => resolve(code ?? 1));
   });
 }
 
@@ -55,7 +64,7 @@ async function runGodot(project, {packager = true, editor: openEditor = false, g
   try {
     const editor = await resolveEditor({godot});
     if (!fs.existsSync(path.join(project.godotRoot, '.godot'))) {
-      spawnSync(editor, ['--headless', '--editor', '--import', '--path', project.godotRoot], {stdio: 'inherit'});
+      importProject(editor, project.godotRoot);
     }
     const args = ['--path', project.godotRoot, ...(openEditor ? ['--editor'] : []), ...(usesMetro ? [] : ['--react-native-no-dev-server']), ...godotArgs];
     process.exitCode = await runEditor(editor, args);
@@ -64,4 +73,4 @@ async function runGodot(project, {packager = true, editor: openEditor = false, g
   }
 }
 
-module.exports = {isMetroRunning, runGodot};
+module.exports = {importProject, isMetroRunning, runEditor, runGodot};

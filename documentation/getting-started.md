@@ -18,7 +18,7 @@ JavaScript project (default `react_native`) and `--godot <editor>`. It:
 1. creates `project.godot` when the directory has none;
 2. writes the JavaScript project from the template, refusing to overwrite existing files;
 3. copies the package into `react_native/vendor/` and depends on it from there, so the
-   lockfile stays valid when the prerelease is replaced;
+   lockfile and the editor download stay valid when the prerelease is replaced;
 4. runs `npm install` and writes `node_modules/.gdignore`;
 5. adds the `[react_native]` settings that the project doesn't set yet;
 6. adds `Main.tscn`, a full-window `ReactNativeRootView` showing the `App` component, when

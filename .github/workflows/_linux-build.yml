@@ -202,14 +202,13 @@ jobs:
       - name: Run the staged game demo
         run: scripts/run_staged_game.sh
 
-      - name: Run a consumer project
-        run: scripts/run_consumer.sh
-
       - name: Package Linux baseline
-        if: inputs.package_release
         run: |
           scripts/package_linux_baseline.sh
           scripts/package_npm.sh
+
+      - name: Run a consumer project from the package
+        run: scripts/run_consumer.sh
 
       - name: Upload release package
         if: inputs.package_release

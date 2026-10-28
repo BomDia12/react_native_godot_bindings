@@ -9,8 +9,29 @@
 #include <react/nativemodule/TurboModuleProvider.h>
 
 #include <map>
+#include <mutex>
+#include <string>
 
 namespace facebook::react {
+
+// Where the bundle was loaded from: its Metro URL, which JS uses to find Metro
+// for symbolication, Fast Refresh and assets, or its file, next to which assets
+// are staged. The host sets it once it knows which of the two it loads, before
+// JS can create the SourceCode module that reads it.
+class RNSourceURL {
+	mutable std::mutex mutex;
+	std::string url;
+
+public:
+	void set(std::string p_url) {
+		std::lock_guard lock(mutex);
+		url = std::move(p_url);
+	}
+	std::string get() const {
+		std::lock_guard lock(mutex);
+		return url;
+	}
+};
 
 using RNTurboModuleFactory = std::function<std::shared_ptr<TurboModule>(const std::shared_ptr<CallInvoker> &, const RNHostModuleContext &)>;
 
@@ -21,9 +42,7 @@ struct RNTurboModuleContext {
 	std::shared_ptr<RNSceneBindings> scenes;
 	std::shared_ptr<IImageLoader> image_loader;
 	std::map<std::string, RNTurboModuleFactory> extensions;
-	// Where the bundle came from: its Metro URL, which JS uses to find Metro for
-	// symbolication and Fast Refresh, or its file, next to which assets are staged.
-	std::string source_url;
+	std::shared_ptr<RNSourceURL> source_url = std::make_shared<RNSourceURL>();
 };
 
 // Godot's modules take precedence over the ReactCxxPlatform defaults that ReactHost falls back to.

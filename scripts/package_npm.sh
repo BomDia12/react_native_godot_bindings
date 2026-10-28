@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Packs react-native-godot for the rolling prerelease, recording the editor
-# archive built from the same commit so the CLI can download it.
+# archive built from the same commit so the CLI can download it. The archive's
+# per-commit name stays on the release after later prereleases replace the rest.
 set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -20,7 +21,7 @@ trap 'rm -rf -- "$STAGING"' EXIT
 
 npm pack "$REPO_ROOT/packages/react-native-godot" --pack-destination "$STAGING" --silent > /dev/null
 tar -xzf "$STAGING"/react-native-godot-*.tgz -C "$STAGING"
-COMMIT="$COMMIT" SHA256=$(cut -d' ' -f1 "$ARTIFACT_DIR/$ARCHIVE_NAME.sha256") URL="$RELEASE_URL/$ARCHIVE_NAME" \
+COMMIT="$COMMIT" SHA256=$(cut -d' ' -f1 "$ARTIFACT_DIR/$ARCHIVE_NAME.sha256") URL="$RELEASE_URL/react-native-godot-linux-x86_64-${COMMIT::12}.zip" \
 GODOT_COMMIT="$GODOT_COMMIT" REACT_NATIVE_VERSION="$REACT_NATIVE_VERSION" PACKAGE_DIR="$STAGING/package" node <<'NODE'
 const fs = require('fs');
 const path = require('path');

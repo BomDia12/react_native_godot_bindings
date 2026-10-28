@@ -180,7 +180,8 @@ Metro-reported variants are copied to `assets/<metro-content-hash>/<scale>.<exte
 beside the bundle, for example `res://react_native/dist/assets/…`. The generated manifest
 preserves logical name, type, dimensions, scales, hashes, and ordered paths relative to the
 bundle, without host paths or timestamps. A bundle file reports its `res://` path as
-`SourceCode.scriptURL`, and assets resolve next to it. A bundle that Metro served gets its
+`SourceCode.scriptURL`, and assets resolve next to it; this includes the bundle file that
+the runtime falls back to when Metro can't serve the bundle. A bundle that Metro served gets its
 assets from Metro, as on other platforms, so assets added while developing need no rebuild. At runtime the resolver chooses the smallest scale at least as
 large as `assetScale`, or the largest available, and returns React Native's local asset
 shape.
