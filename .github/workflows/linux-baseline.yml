@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/phase8-*
+      - feature/phase9-*
 
 permissions:
   contents: read
