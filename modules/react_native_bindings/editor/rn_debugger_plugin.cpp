@@ -28,6 +28,7 @@ RNDebuggerTab::RNDebuggerTab() {
 }
 
 void RNDebuggerTab::clear() {
+	++generation;
 	errors->clear();
 	errors->create_item();
 	console->set_text(String());
@@ -69,17 +70,18 @@ void RNDebuggerTab::_show_frame(TreeItem *p_item, const String &p_method, const 
 
 // Bundle files carry their source map beside them, as builds write it.
 std::shared_ptr<RNSourceMap> RNDebuggerTab::_source_map(const String &p_bundle) {
-	auto cached = source_maps.find(p_bundle);
-	if (cached != source_maps.end()) {
-		return cached->second;
-	}
-	auto map = std::make_shared<RNSourceMap>();
 	const String path = p_bundle + ".map";
-	if (!FileAccess::exists(path) || !map->parse(FileAccess::get_file_as_string(path))) {
-		map = nullptr;
+	const uint64_t modified_time = FileAccess::exists(path) ? FileAccess::get_modified_time(path) : 0;
+	CachedSourceMap &cached = source_maps[p_bundle];
+	if (cached.modified_time == modified_time) {
+		return cached.map;
 	}
-	source_maps[p_bundle] = map;
-	return map;
+	cached.modified_time = modified_time;
+	cached.map = std::make_shared<RNSourceMap>();
+	if (modified_time == 0 || !cached.map->parse(FileAccess::get_file_as_string(path))) {
+		cached.map = nullptr;
+	}
+	return cached.map;
 }
 
 void RNDebuggerTab::_symbolicate_with_metro(TreeItem *p_error, const Array &p_frames, const String &p_server) {
@@ -90,14 +92,14 @@ void RNDebuggerTab::_symbolicate_with_metro(TreeItem *p_error, const Array &p_fr
 	}
 	HTTPRequest *request = memnew(HTTPRequest);
 	add_child(request);
-	request->connect("request_completed", callable_mp(this, &RNDebuggerTab::_metro_symbolicated).bind(p_error, request));
+	request->connect("request_completed", callable_mp(this, &RNDebuggerTab::_metro_symbolicated).bind(p_error, generation, request));
 	request->request(p_server + "/symbolicate", { "Content-Type: application/json" }, HTTPClient::METHOD_POST, JSON::stringify(Dictionary({ { "stack", stack } })));
 }
 
-void RNDebuggerTab::_metro_symbolicated(int p_result, int p_code, const PackedStringArray &, const PackedByteArray &p_body, TreeItem *p_error, HTTPRequest *p_request) {
+void RNDebuggerTab::_metro_symbolicated(int p_result, int p_code, const PackedStringArray &, const PackedByteArray &p_body, TreeItem *p_error, uint64_t p_generation, HTTPRequest *p_request) {
 	p_request->queue_free();
 	const Variant response = JSON::parse_string(String::utf8(reinterpret_cast<const char *>(p_body.ptr()), p_body.size()));
-	if (p_result != HTTPRequest::RESULT_SUCCESS || p_code != 200 || response.get_type() != Variant::DICTIONARY || !ObjectDB::get_instance(errors->get_instance_id())) {
+	if (p_result != HTTPRequest::RESULT_SUCCESS || p_code != 200 || response.get_type() != Variant::DICTIONARY || p_generation != generation) {
 		return;
 	}
 	const Array stack = Dictionary(response).get("stack", Array());

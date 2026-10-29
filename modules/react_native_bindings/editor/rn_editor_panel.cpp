@@ -20,6 +20,7 @@ namespace {
 
 constexpr int LOG_LINES = 2000;
 constexpr double PROBE_INTERVAL = 0.5;
+constexpr double ATTACHED_PROBE_INTERVAL = 5;
 
 } // namespace
 
@@ -129,6 +130,9 @@ void RNEditorPanel::_probe_completed(int p_result, int p_code, const PackedStrin
 		}
 	} else if (state == METRO_STARTING && running) {
 		state = METRO_RUNNING;
+	} else if (state == METRO_ATTACHED && p_result == HTTPRequest::RESULT_CANT_CONNECT) {
+		// A busy Metro can be slow to answer, so only one that is gone is replaced.
+		_start_metro();
 	}
 	_update_status();
 }
@@ -159,8 +163,8 @@ void RNEditorPanel::_process_metro(double p_delta) {
 	if ((state == METRO_STARTING || state == METRO_RUNNING) && !metro.is_running()) {
 		state = METRO_FAILED;
 		_update_status();
-	} else if (state == METRO_STARTING && (probe_delay -= p_delta) <= 0) {
-		probe_delay = PROBE_INTERVAL;
+	} else if ((state == METRO_STARTING || state == METRO_ATTACHED) && (probe_delay -= p_delta) <= 0) {
+		probe_delay = state == METRO_STARTING ? PROBE_INTERVAL : ATTACHED_PROBE_INTERVAL;
 		_probe();
 	}
 }

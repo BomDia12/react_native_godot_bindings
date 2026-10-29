@@ -19,14 +19,20 @@ class TreeItem;
 class RNDebuggerTab : public VBoxContainer {
 	GDCLASS(RNDebuggerTab, VBoxContainer);
 
+	struct CachedSourceMap {
+		uint64_t modified_time = 0;
+		std::shared_ptr<RNSourceMap> map;
+	};
+
 	Tree *errors = nullptr;
 	TextEdit *console = nullptr;
-	std::map<String, std::shared_ptr<RNSourceMap>> source_maps;
+	std::map<String, CachedSourceMap> source_maps;
+	uint64_t generation = 0;
 
 	std::shared_ptr<RNSourceMap> _source_map(const String &p_bundle);
 	void _show_frame(TreeItem *p_item, const String &p_method, const String &p_file, int p_line, int p_column);
 	void _symbolicate_with_metro(TreeItem *p_error, const Array &p_frames, const String &p_server);
-	void _metro_symbolicated(int p_result, int p_code, const PackedStringArray &p_headers, const PackedByteArray &p_body, TreeItem *p_error, HTTPRequest *p_request);
+	void _metro_symbolicated(int p_result, int p_code, const PackedStringArray &p_headers, const PackedByteArray &p_body, TreeItem *p_error, uint64_t p_generation, HTTPRequest *p_request);
 	void _frame_activated();
 
 protected:

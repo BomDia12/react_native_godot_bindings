@@ -28,7 +28,8 @@ and when the generated TypeScript is older than the contract.
 
 The **React Native** bottom panel manages Metro while `react_native/dev_server/enabled` is on.
 It reuses a Metro that already answers on the configured host and port, and otherwise
-starts the project's own with `react-native-godot-start`, which it stops with the editor. A
+starts the project's own with `react-native-godot-start`, which it stops with the editor. When
+a reused Metro stops accepting connections, the panel starts the project's own in its place. A
 headless editor, such as one running an import or an export, never starts Metro. The panel
 shows Metro's state and log, and has:
 
@@ -41,8 +42,8 @@ shows Metro's state and log, and has:
   `<project>-editor`, apart from the game.
 
 The **Problems** tab lists `tsc --watch` diagnostics when the project has a `tsconfig.json`,
-and the editor preview's last JavaScript error. Activating a problem opens its file at the
-line. `node` comes from the editor setting `react_native/tooling/node_path`.
+and the editor preview's last JavaScript error. Activating a TypeScript problem opens its
+file at the line. `node` comes from the editor setting `react_native/tooling/node_path`.
 
 ## JavaScript and TypeScript files
 
@@ -59,7 +60,8 @@ A game the editor runs sends its JavaScript errors and console output to a **Rea
 tab in the debugger. Error stacks are symbolicated: through Metro's `/symbolicate` for a
 bundle Metro served, and from the `.map` file beside the bundle otherwise. Frames whose
 sources are inside the project open in the script editor; others, such as
-`node_modules`, are listed without a link. The tab clears when a new session starts.
+`node_modules`, are listed without a link. A `.map` file is read again when it changes. The
+tab clears when a new session starts.
 
 ## Exporting
 
