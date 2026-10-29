@@ -80,6 +80,22 @@ TEST_CASE("[ReactNativeBindings][EngineIntegration][SceneTree] TV focus props be
 	CHECK(tree.control(2)->get_focus_next().is_empty());
 }
 
+TEST_CASE("[ReactNativeBindings][EngineIntegration][SceneTree] preferred focus waits until its view can take focus") {
+	ViewTree tree;
+	const ShadowView unfocusable = view(2, [](ViewProps &p_props) {
+		p_props.focusable = false;
+		p_props.hasTVPreferredFocus = true;
+	});
+	tree.registry.apply({ ShadowViewMutation::CreateMutation(unfocusable), ShadowViewMutation::InsertMutation(1, unfocusable, 0) });
+	MessageQueue::get_singleton()->flush();
+	CHECK_FALSE(tree.control(2)->has_focus());
+
+	const ShadowView focusable = view(2, [](ViewProps &p_props) { p_props.hasTVPreferredFocus = true; });
+	tree.registry.apply({ ShadowViewMutation::UpdateMutation(unfocusable, focusable, 1) });
+	MessageQueue::get_singleton()->flush();
+	CHECK(tree.control(2)->has_focus());
+}
+
 TEST_CASE("[ReactNativeBindings][EngineIntegration] a root sized to its content reports React's size as its minimum") {
 	ReactNativeRootView *root = memnew(ReactNativeRootView);
 	const RNMountedSurface surface = root->_attach_surface(1, std::make_shared<RNComponentViewFactories>());

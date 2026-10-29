@@ -181,7 +181,7 @@ void RNViewComponentView::update_props(const facebook::react::Props::Shared &p_o
 	view->set_menu_entries(self_targetable ? Array(rn_variant_from_dynamic(props->godotContextMenu)) : Array());
 	view->set_accessibility(rn_view_accessibility(*props));
 	auto old = std::static_pointer_cast<const facebook::react::ViewProps>(p_old);
-	preferred_focus_pending = preferred_focus_pending || (props->hasTVPreferredFocus && !(old && old->hasTVPreferredFocus));
+	preferred_focus_pending = props->hasTVPreferredFocus && (preferred_focus_pending || !(old && old->hasTVPreferredFocus));
 	if (!has_focus_references()) {
 		resolve_focus_references([](facebook::react::Tag) { return nullptr; });
 	}
@@ -202,11 +202,9 @@ void RNViewComponentView::resolve_focus_references(const std::function<Control *
 	view->set_focus_neighbor(SIDE_LEFT, path_to(props->nextFocusLeft));
 	view->set_focus_neighbor(SIDE_RIGHT, path_to(props->nextFocusRight));
 	view->set_focus_next(path_to(props->nextFocusForward));
-	if (preferred_focus_pending && view->is_inside_tree()) {
+	if (preferred_focus_pending && view->is_inside_tree() && view->get_focus_mode() != Control::FOCUS_NONE) {
 		preferred_focus_pending = false;
-		if (view->get_focus_mode() != Control::FOCUS_NONE) {
-			view->call_deferred("grab_focus");
-		}
+		view->call_deferred("grab_focus");
 	}
 }
 
