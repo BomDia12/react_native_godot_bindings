@@ -7,6 +7,7 @@
 #include "../turbomodules/rn_godot_host_module.h"
 #include "support/rn_upstream_test_macros.h"
 
+#include "core/io/dir_access.h"
 #include "core/io/resource_saver.h"
 #include "core/object/message_queue.h"
 #include "core/os/os.h"
@@ -144,6 +145,8 @@ Node *load_scene(RNGodotSceneHost *p_host, Node *p_scene_root, const String &p_p
 	scene.instantiate();
 	scene->pack(p_scene_root);
 	memdelete(p_scene_root);
+	// Test runs have no project, so nothing has created the user data directory yet.
+	DirAccess::make_dir_recursive_absolute(OS::get_singleton()->get_user_data_dir());
 	REQUIRE(ResourceSaver::save(scene, p_path) == OK);
 	Node *loaded = nullptr;
 	p_host->set_callbacks([&loaded](Node *p_instance) { loaded = p_instance; }, [](const String &p_message) { FAIL(p_message); });
