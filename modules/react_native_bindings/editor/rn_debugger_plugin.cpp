@@ -13,6 +13,10 @@
 #include "scene/gui/tree.h"
 #include "scene/main/http_request.h"
 
+// A long session keeps its most recent output, as the Metro log does.
+constexpr int CONSOLE_LINES = 2000;
+constexpr int ERRORS = 200;
+
 RNDebuggerTab::RNDebuggerTab() {
 	set_name("React Native");
 	errors = memnew(Tree);
@@ -28,7 +32,6 @@ RNDebuggerTab::RNDebuggerTab() {
 }
 
 void RNDebuggerTab::clear() {
-	++generation;
 	errors->clear();
 	errors->create_item();
 	console->set_text(String());
@@ -36,9 +39,15 @@ void RNDebuggerTab::clear() {
 
 void RNDebuggerTab::add_log(int p_level, const String &p_message) {
 	console->insert_line_at(console->get_line_count() - 1, p_message);
+	if (console->get_line_count() > CONSOLE_LINES) {
+		console->remove_text(0, 0, console->get_line_count() - CONSOLE_LINES, 0);
+	}
 }
 
 void RNDebuggerTab::add_error(const String &p_message, const Array &p_frames) {
+	if (errors->get_root()->get_child_count() >= ERRORS) {
+		memdelete(errors->get_root()->get_first_child());
+	}
 	TreeItem *error = errors->create_item(errors->get_root());
 	error->set_text(0, p_message.get_slicec('\n', 0));
 	error->set_tooltip_text(0, p_message);
@@ -92,18 +101,20 @@ void RNDebuggerTab::_symbolicate_with_metro(TreeItem *p_error, const Array &p_fr
 	}
 	HTTPRequest *request = memnew(HTTPRequest);
 	add_child(request);
-	request->connect("request_completed", callable_mp(this, &RNDebuggerTab::_metro_symbolicated).bind(p_error, generation, request));
+	request->connect("request_completed", callable_mp(this, &RNDebuggerTab::_metro_symbolicated).bind(p_error->get_instance_id(), request));
 	request->request(p_server + "/symbolicate", { "Content-Type: application/json" }, HTTPClient::METHOD_POST, JSON::stringify(Dictionary({ { "stack", stack } })));
 }
 
-void RNDebuggerTab::_metro_symbolicated(int p_result, int p_code, const PackedStringArray &, const PackedByteArray &p_body, TreeItem *p_error, uint64_t p_generation, HTTPRequest *p_request) {
+void RNDebuggerTab::_metro_symbolicated(int p_result, int p_code, const PackedStringArray &, const PackedByteArray &p_body, ObjectID p_error, HTTPRequest *p_request) {
 	p_request->queue_free();
+	// A restart or a newer error can remove the row before Metro answers.
+	TreeItem *error = Object::cast_to<TreeItem>(ObjectDB::get_instance(p_error));
 	const Variant response = JSON::parse_string(String::utf8(reinterpret_cast<const char *>(p_body.ptr()), p_body.size()));
-	if (p_result != HTTPRequest::RESULT_SUCCESS || p_code != 200 || response.get_type() != Variant::DICTIONARY || p_generation != generation) {
+	if (!error || p_result != HTTPRequest::RESULT_SUCCESS || p_code != 200 || response.get_type() != Variant::DICTIONARY) {
 		return;
 	}
 	const Array stack = Dictionary(response).get("stack", Array());
-	TreeItem *item = p_error->get_first_child();
+	TreeItem *item = error->get_first_child();
 	for (int i = 0; i < stack.size() && item; ++i, item = item->get_next()) {
 		const Dictionary frame = stack[i];
 		_show_frame(item, frame.get("methodName", ""), frame.get("file", ""), frame.get("lineNumber", 0), frame.get("column", 0));
