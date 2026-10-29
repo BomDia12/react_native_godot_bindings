@@ -158,7 +158,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	images->set_transport(rn_http_image_transport(http));
 	websockets = std::make_shared<RNWebSocketHub>(blobs, p_setup.settings);
 	shaper = std::make_shared<RNTextShaper>(p_setup.theme, main_thread);
-	scenes = std::make_shared<RNSceneBindings>(p_setup.find_root);
+	scenes = std::make_shared<RNSceneBindings>(p_setup.find_root, p_setup.find_module);
 	host_events = std::make_shared<RNGodotHostEvents>();
 	auto image_loader = std::make_shared<RNImageLoader>(images, main_thread);
 	mounting = std::make_shared<RNMountingManager>(main_thread, component_view_factories(shaper, images), component_registry_factory(), image_loader);
@@ -306,7 +306,7 @@ void RNHostInstance::start_surface(ReactNativeRootView *p_root, SurfaceId p_surf
 	LayoutConstraints constraints;
 	LayoutContext context;
 	layout_for(p_root, *application, constraints, context);
-	_on_js_thread([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(p_root->get_initial_properties()), constraints, context] {
+	_on_js_thread([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(p_root->get_surface_properties()), constraints, context] {
 		host->startSurface(p_surface, key, properties, constraints, context);
 	});
 }
@@ -314,7 +314,7 @@ void RNHostInstance::start_surface(ReactNativeRootView *p_root, SurfaceId p_surf
 void RNHostInstance::stop_surface(ReactNativeRootView *p_root, bool p_stop_react) {
 	const SurfaceId surface = p_root->get_root_tag();
 	mounting->unregister_surface(surface);
-	scenes->close_surface(surface);
+	scenes->close_scope(surface);
 	if (GodotAlerts *alerts = GodotAlerts::get_singleton()) {
 		alerts->close_surface(surface);
 	}
@@ -343,6 +343,10 @@ void RNHostInstance::scene_binding_changed(SurfaceId p_surface) {
 	scenes->binding_changed(p_surface);
 }
 
+void RNHostInstance::module_changed(const String &p_name) {
+	scenes->binding_changed(RNBindingScope::of_module(p_name));
+}
+
 void RNHostInstance::set_paused(bool p_paused) {
 	application->set_paused(p_paused);
 }
@@ -360,6 +364,10 @@ void RNHostInstance::set_suspended(bool p_suspended) {
 
 void RNHostInstance::root_state_changed(SurfaceId p_surface, const RNRootState &p_state) {
 	host_events->root_state_changed(p_surface, p_state);
+}
+
+void RNHostInstance::send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload) {
+	host_events->send_message(p_root_tag, p_name, p_payload);
 }
 
 bool RNHostInstance::handles_back_press() const {

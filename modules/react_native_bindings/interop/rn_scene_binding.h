@@ -7,8 +7,15 @@
 #include "core/templates/hash_map.h"
 
 struct RNSceneCommand {
+	enum Kind {
+		METHOD,
+		// Emits the signal named by method instead of calling a method.
+		SIGNAL,
+	};
+
 	StringName method;
 	RNMethodSchema schema;
+	Kind kind = METHOD;
 };
 struct RNSceneSignal {
 	StringName event;

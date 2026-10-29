@@ -193,6 +193,9 @@ jobs:
       - name: Run headless smoke tests
         run: scripts/run_baseline.sh
 
+      - name: Check generated component contracts
+        run: git diff --exit-code -- samples/*/godot samples/*/components
+
       - name: Run native component display checks
         run: scripts/run_component_display.sh
 

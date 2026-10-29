@@ -51,6 +51,15 @@ if [[ -f "$PUBLISHED_PACKAGE" && ! -f "$PROJECT_DIR/react_native/node_modules/re
 	exit 1
 fi
 cp "$SCRIPT_DIR/consumer_check.gd" "$PROJECT_DIR/"
+# A component contract makes the build generate its props type, registry and
+# component, which the template must type-check with.
+mkdir -p "$PROJECT_DIR/react_native/contracts"
+cp "$SCRIPT_DIR/consumer_contract.tres" "$PROJECT_DIR/react_native/contracts/Scoreboard.tres"
+(cd "$PROJECT_DIR/react_native" && npx react-native build-godot > "$LOG_DIR/consumer-build.log" 2>&1)
+if [[ ! -f "$PROJECT_DIR/react_native/components/Scoreboard.tsx" ]]; then
+	echo "The build did not generate the contract's component." >&2
+	exit 1
+fi
 (cd "$PROJECT_DIR/react_native" && npx tsc --noEmit)
 "$GODOT_BINARY" --headless --editor --import --path "$PROJECT_DIR" > "$LOG_DIR/consumer-import.log" 2>&1
 check consumer-file "$REPO_ROOT/documentation/expected-warnings.txt" --no-packager

@@ -1,0 +1,20 @@
+[gd_resource type="RNComponentContract" format=3]
+
+[resource]
+component = "Scoreboard"
+properties = [{
+"default": 0,
+"name": "score",
+"value": {
+"type": "integer"
+}
+}]
+events = [{
+"arguments": [{
+"name": "player_id",
+"value": {
+"type": "string"
+}
+}],
+"name": "reset_score"
+}]

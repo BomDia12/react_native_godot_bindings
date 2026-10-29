@@ -1,16 +1,39 @@
 #include "rn_godot_host_module.h"
 
+#include "../host/react_native_host.h"
 #include "../host/rn_main_thread_queue.h"
+#include "../interop/rn_value_codec.h"
 #include "rn_js_promise.h"
 
-void RNGodotHostEvents::add_listener(std::function<bool(int, const RNRootState &)> p_listener) {
+std::vector<std::shared_ptr<facebook::react::RNGodotHostModule>> RNGodotHostEvents::_live_modules() {
 	std::lock_guard lock(mutex);
-	listeners.push_back(std::move(p_listener));
+	std::vector<std::shared_ptr<facebook::react::RNGodotHostModule>> live;
+	std::erase_if(modules, [&live](const std::weak_ptr<facebook::react::RNGodotHostModule> &p_module) {
+		auto module = p_module.lock();
+		if (!module) {
+			return true;
+		}
+		live.push_back(std::move(module));
+		return false;
+	});
+	return live;
+}
+
+void RNGodotHostEvents::add_module(std::weak_ptr<facebook::react::RNGodotHostModule> p_module) {
+	std::lock_guard lock(mutex);
+	modules.push_back(std::move(p_module));
 }
 
 void RNGodotHostEvents::root_state_changed(int p_root_tag, const RNRootState &p_state) {
-	std::lock_guard lock(mutex);
-	std::erase_if(listeners, [&](const std::function<bool(int, const RNRootState &)> &p_listener) { return !p_listener(p_root_tag, p_state); });
+	for (const auto &module : _live_modules()) {
+		module->emit_root_state(p_root_tag, p_state);
+	}
+}
+
+void RNGodotHostEvents::send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload) {
+	for (const auto &module : _live_modules()) {
+		module->emit_message(p_root_tag, p_name, p_payload);
+	}
 }
 
 namespace facebook::react {
@@ -23,6 +46,10 @@ jsi::Object state_to_js(jsi::Runtime &p_runtime, const RNRootState &p_state) {
 	state.setProperty(p_runtime, "processing", p_state.processing);
 	state.setProperty(p_runtime, "focused", p_state.focused);
 	return state;
+}
+
+jsi::Value root_tag_to_js(std::optional<int> p_root_tag) {
+	return p_root_tag ? jsi::Value(*p_root_tag) : jsi::Value::null();
 }
 
 } // namespace
@@ -52,11 +79,46 @@ void RNGodotHostModule::setBackHandlerEnabled(jsi::Runtime &, bool enabled) {
 	events->set_back_handler_enabled(enabled);
 }
 
+// Messages for a root go out through its message_received signal, and
+// application messages through ReactNativeHost's.
+void RNGodotHostModule::postMessage(jsi::Runtime &rt, std::optional<double> rootTag, jsi::String name, jsi::Value payload) {
+	RNDecodedValue decoded = RNValueCodec::from_js(rt, payload, RNValueSchema::value(RNValueType::DYNAMIC), "GodotHost.postMessage", "payload");
+	if (!decoded.ok()) {
+		rn_throw_js_error(rt, decoded.error.code.utf8().get_data(), decoded.error.message.utf8().get_data());
+	}
+	const String message = String::utf8(name.utf8(rt).c_str());
+	const std::optional<int> root_tag = rootTag ? std::optional<int>(int(*rootTag)) : std::nullopt;
+	host.main_thread->post([find_root = host.find_root, root_tag, message, value = decoded.value] {
+		Object *target = root_tag ? find_root(*root_tag) : ReactNativeHost::get_singleton();
+		if (!target) {
+			WARN_PRINT(vformat("The message '%s' was dropped because root %d is not running.", message, *root_tag));
+			return;
+		}
+		target->emit_signal("message_received", message, value);
+	});
+}
+
 void RNGodotHostModule::emit_root_state(int p_root_tag, const RNRootState &p_state) {
 	static_cast<AsyncEventEmitter<jsi::Value> &>(*eventEmitterMap_["onRootStateChanged"]).emit([p_root_tag, p_state](jsi::Runtime &p_runtime) -> jsi::Value {
 		jsi::Object change = state_to_js(p_runtime, p_state);
 		change.setProperty(p_runtime, "rootTag", p_root_tag);
 		return change;
+	});
+}
+
+void RNGodotHostModule::emit_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload) {
+	static_cast<AsyncEventEmitter<jsi::Value> &>(*eventEmitterMap_["onMessage"]).emit([p_root_tag, p_name, p_payload](jsi::Runtime &p_runtime) -> jsi::Value {
+		jsi::Value payload;
+		RNError error;
+		if (!RNValueCodec::to_js(p_runtime, p_payload, RNValueSchema::value(RNValueType::DYNAMIC), payload, error, nullptr, "postMessage", "payload")) {
+			ERR_PRINT(vformat("The message '%s' was dropped: %s", p_name, error.describe()));
+			return jsi::Value::null();
+		}
+		jsi::Object message(p_runtime);
+		message.setProperty(p_runtime, "rootTag", root_tag_to_js(p_root_tag));
+		message.setProperty(p_runtime, "name", jsi::String::createFromUtf8(p_runtime, p_name.utf8().get_data()));
+		message.setProperty(p_runtime, "payload", payload);
+		return message;
 	});
 }
 

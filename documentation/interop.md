@@ -105,6 +105,50 @@ for readiness, re-reads the snapshot on later sequences and removes its subscrip
 cleanup. Handles cannot cross roots. Scene calls run on Godot's main thread; a call that
 reloads a root takes effect on the next frame.
 
+A root whose component has a [contract](component-contracts.md) is its own binding:
+`attach_scene_binding` fails on it with `E_VALIDATION`. Contract events are commands that
+emit a signal instead of calling a method, and are always queued.
+
+## Application modules
+
+A module is a GDScript object, such as an autoload, that every root can use. It is declared
+with the same `RNSceneBinding` grammar as a root's binding:
+
+```gdscript
+func _ready() -> void:
+	var error := ReactNativeHost.register_module("Scoreboard", self, preload("res://scoreboard_binding.tres"))
+	assert(error.is_empty(), str(error))
+```
+
+`register_module(name, target, binding)` returns an empty Dictionary or an error Dictionary,
+and replaces an earlier module of the same name. `unregister_module(name)` removes it.
+Modules belong to `ReactNativeHost`, not to a runtime, so they survive hard reloads.
+Object handles a module returns belong to the module rather than to a root: any root can
+use them, and they are revoked when the module is replaced or unregistered.
+
+`react-native-godot/modules` exports `getGodotModule(name)`, which returns
+`{ready, read(), call(command, ...args), callAsync(command, ...args), onChanged(callback)}`,
+`onModuleChanged(name, callback)`, and `useGodotModule(name)`, which returns
+`{module, value, sequence}` or `null` while the module isn't registered. Module changes carry
+`module` instead of `rootTag`. A module registered again needs a fresh `getGodotModule()`.
+
+## Messages
+
+Messages carry any value the codec carries, without a schema:
+
+| Direction | Godot | JavaScript (`react-native-godot/messages`) |
+|---|---|---|
+| Godot to one root | `root.post_message(name, payload)` | `useGodotMessage(name, handler)`, or `onGodotMessage(name, handler, rootTag)` |
+| Godot to the application | `ReactNativeHost.post_message(name, payload)` | `onGodotMessage(name, handler)` |
+| one root to Godot | signal `root.message_received(name, payload)` | `usePostGodotMessage()(name, payload)`, or `postGodotMessage(name, payload, rootTag)` |
+| the application to Godot | signal `ReactNativeHost.message_received(name, payload)` | `postGodotMessage(name, payload)` |
+
+`useGodotMessage` and `usePostGodotMessage` address the root the component renders in.
+Messages arrive in order and return nothing. JavaScript posts reach Godot on the main thread
+on the next frame. A message for a root that isn't running is dropped with a warning, and
+a payload holding an Object is dropped with an error, because Objects need a declared
+capability.
+
 ## Binary and network ownership
 
 Strings reject embedded NUL. Networking text uses byte transport, preserving NUL and

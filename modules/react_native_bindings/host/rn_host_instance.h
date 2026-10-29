@@ -12,6 +12,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 namespace facebook::react {
@@ -32,6 +33,7 @@ class RNLogBoxSurface;
 class RNMainThreadQueue;
 class RNMountingManager;
 class RNSceneBindings;
+struct RNSceneAttachment;
 class RNTextShaper;
 class RNThemeMetricsStore;
 
@@ -45,6 +47,7 @@ public:
 		std::shared_ptr<RNThemeMetricsStore> theme;
 		uint64_t generation = 0;
 		std::function<ReactNativeRootView *(facebook::react::SurfaceId p_surface)> find_root;
+		std::function<std::shared_ptr<const RNSceneAttachment>(const String &p_name)> find_module;
 		std::function<void(const String &p_error)> on_error;
 		std::function<void()> reload;
 	};
@@ -85,10 +88,12 @@ public:
 	void stop_surface(ReactNativeRootView *p_root, bool p_stop_react);
 	void update_layout(ReactNativeRootView *p_root);
 	void scene_binding_changed(facebook::react::SurfaceId p_surface);
+	void module_changed(const String &p_name);
 	void set_paused(bool p_paused);
 	void set_suspended(bool p_suspended);
 	void root_state_changed(facebook::react::SurfaceId p_surface, const RNRootState &p_state);
 	bool handles_back_press() const;
+	void send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload);
 	void back_pressed();
 	void evaluate(const String &p_code, std::function<void(const Variant &p_result)> p_done);
 	Dictionary stats() const;

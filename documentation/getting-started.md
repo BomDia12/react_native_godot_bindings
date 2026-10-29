@@ -31,6 +31,7 @@ res://
   Main.tscn
   react_native/
     package.json  index.js  App.tsx  tsconfig.json  metro.config.js  babel.config.js
+    godot/           TypeScript generated from component contracts
     vendor/react-native-godot-<version>.tgz
     dist/            bundle, source map and assets, after a build
     node_modules/
@@ -45,7 +46,10 @@ dev_server/entry="index"
 ```
 
 `index.js` registers components with `GodotAppRegistry.registerComponent`. It needs no
-setup import: the package's Metro configuration runs `react-native-godot/setup` first.
+setup import: the package's Metro configuration runs `react-native-godot/setup` first. It
+also imports `godot/registry`, which registers the components that have
+[component contracts](component-contracts.md): typed properties and events that Godot sets
+and receives on the root.
 
 ## Run
 

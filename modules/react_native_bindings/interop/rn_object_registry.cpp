@@ -2,13 +2,13 @@
 
 #include "core/object/object.h"
 
-String RNObjectRegistry::register_object(int p_root_tag, ObjectID p_object, const String &p_capability, RNError &r_error) {
+String RNObjectRegistry::register_object(const RNBindingScope &p_scope, ObjectID p_object, const String &p_capability, RNError &r_error) {
 	if (!ObjectDB::get_instance(p_object)) {
 		r_error = RNError::make(RNErrorCode::OBJECT_GONE, "object no longer exists", "registerObject", "object");
 		return String();
 	}
 	for (const KeyValue<String, RNObjectRecord> &entry : objects) {
-		if (entry.value.root_tag == p_root_tag && entry.value.object_id == p_object && entry.value.capability == p_capability) {
+		if (entry.value.scope == p_scope && entry.value.object_id == p_object && entry.value.capability == p_capability) {
 			return entry.key;
 		}
 	}
@@ -28,14 +28,14 @@ String RNObjectRegistry::register_object(int p_root_tag, ObjectID p_object, cons
 		}
 	}
 	const String token = vformat("object-%016x", next_token++);
-	objects[token] = { p_root_tag, p_object, p_capability };
+	objects[token] = { p_scope, p_object, p_capability };
 	return token;
 }
 
-Object *RNObjectRegistry::resolve_object(const String &p_token, int p_root_tag, const String &p_capability, RNError &r_error) {
+Object *RNObjectRegistry::resolve_object(const String &p_token, const RNBindingScope &p_scope, const String &p_capability, RNError &r_error) {
 	const RNObjectRecord *record = objects.getptr(p_token);
-	if (!record || record->root_tag != p_root_tag) {
-		r_error = RNError::make(RNErrorCode::STALE_HANDLE, "object handle is stale or belongs to another root", "resolveObject", "target");
+	if (!record || !(record->scope == p_scope)) {
+		r_error = RNError::make(RNErrorCode::STALE_HANDLE, "object handle is stale or belongs to another root or module", "resolveObject", "target");
 		return nullptr;
 	}
 	if (record->capability != p_capability) {
@@ -63,10 +63,10 @@ void RNObjectRegistry::unregister_object(ObjectID p_object) {
 	}
 }
 
-void RNObjectRegistry::close_surface(int p_root_tag) {
+void RNObjectRegistry::close_scope(const RNBindingScope &p_scope) {
 	Vector<String> revoked;
 	for (const KeyValue<String, RNObjectRecord> &entry : objects) {
-		if (entry.value.root_tag == p_root_tag) {
+		if (entry.value.scope == p_scope) {
 			revoked.push_back(entry.key);
 		}
 	}

@@ -35,7 +35,7 @@ Build and stage the standalone demo under the workspace's `godotProjects` direct
 ```sh
 python3 -m pip install -r requirements-ci.txt
 npm --prefix samples/game-ui ci
-npm --prefix samples/game-ui run build:godot
+GODOT_EDITOR="${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" npm --prefix samples/game-ui run build:godot
 python3 scripts/stage_game_demo.py
 "${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" --editor --path ../godotProjects/Phase6BGame --import
 "${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" --path ../godotProjects/Phase6BGame
@@ -100,8 +100,10 @@ The JavaScript platform is the `react-native-godot` package in `packages/react-n
 Samples depend on it through `file:../../packages/react-native-godot` and use it as a
 consumer would: the sample's `build:godot` script runs `react-native build-godot`, which
 stages its bundle, source map, dependency evidence, and local asset variants under
-`samples/view-text/dist/`. Application resolution prefers `.godot.*`, then `.native.*`,
-then generic files; the supported graph does not select Android/iOS platform files.
+`samples/view-text/dist/`. `samples/game-ui` has component contracts, which the build
+regenerates with the editor in `GODOT_EDITOR`; the smoke and visual scripts set it.
+Application resolution prefers `.godot.*`, then `.native.*`, then generic files; the
+supported graph does not select Android/iOS platform files.
 
 Use `GODOT_SOURCE_DIR=/path/to/godot` to build against another checkout of the pinned
 commit. Extra arguments passed to `build_godot.sh` are forwarded to SCons, for example:

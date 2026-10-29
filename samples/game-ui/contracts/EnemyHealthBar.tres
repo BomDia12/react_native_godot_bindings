@@ -1,0 +1,35 @@
+[gd_resource type="RNComponentContract" format=3]
+
+[resource]
+component = "EnemyHealthBar"
+properties = [{
+"default": "",
+"name": "display_name",
+"value": {
+"type": "string"
+}
+}, {
+"default": 0,
+"name": "health",
+"value": {
+"type": "integer"
+}
+}, {
+"default": 1,
+"name": "max_health",
+"value": {
+"type": "integer"
+}
+}, {
+"default": false,
+"name": "marked",
+"value": {
+"type": "boolean"
+}
+}, {
+"default": Color(1, 1, 1, 1),
+"name": "tint",
+"value": {
+"type": "Color"
+}
+}]

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../input/rn_input_router.h"
+#include "../interop/rn_component_contract.h"
 #include "../interop/rn_scene_binding.h"
 #include "../mounting/rn_mounting_manager.h"
 
@@ -39,6 +40,11 @@ private:
 	Size2 content_size;
 	bool editor_preview = true;
 	RNRootState reported_state;
+	Ref<RNComponentContract> contract_resource;
+	std::shared_ptr<const RNCompiledContract> contract;
+	Dictionary contract_values;
+	Vector<StringName> contract_signals;
+	bool contract_flush_pending = false;
 	facebook::react::SurfaceId surface_id = 0;
 	Control *container = nullptr;
 	std::unique_ptr<RNRootComponentView> root_component;
@@ -68,10 +74,18 @@ private:
 	void _connect_window(bool p_connect);
 	bool _is_running() const;
 	void _draw_placeholder();
+	void _load_contract();
+	void _apply_contract();
+	void _fit_contract_values();
+	void _contract_values_changed();
+	void _flush_contract();
 
 protected:
 	static void _bind_methods();
 	void _notification(int p_what);
+	bool _set(const StringName &p_name, const Variant &p_value);
+	bool _get(const StringName &p_name, Variant &r_value) const;
+	void _get_property_list(List<PropertyInfo> *p_list) const;
 	void input(const Ref<InputEvent> &p_event) override;
 
 public:
@@ -91,6 +105,12 @@ public:
 	Size2 get_minimum_size() const override;
 	RNRootState get_state() const;
 	Node *get_native_node(const String &p_native_id) const;
+	void set_contract_values(const Dictionary &p_values);
+	Dictionary get_contract_values() const { return contract_values; }
+	bool has_contract() const { return contract != nullptr; }
+	// A contract component starts with its contract values as props.
+	Dictionary get_surface_properties() const { return contract ? contract_values : initial_properties; }
+	void post_message(const String &p_name, const Variant &p_payload);
 	int get_root_tag() const { return surface_id; }
 	void reload();
 	void set_alert_handler(const Callable &p_handler) { alert_handler = p_handler; }

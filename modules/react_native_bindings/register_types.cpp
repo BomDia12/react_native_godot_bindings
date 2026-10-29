@@ -17,6 +17,7 @@
 #include "host/rn_feature_flags.h"
 #include "host/rn_logging.h"
 #include "host/rn_service_settings.h"
+#include "interop/rn_component_contract.h"
 #include "interop/rn_scene_binding.h"
 #include "native_modules/rn_http_service.h"
 #include "native_modules/rn_image_service.h"
@@ -89,6 +90,7 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		ClassDB::register_internal_class<RNExampleMeterControl>();
 		ClassDB::register_class<RNTextInputControl>();
 		ClassDB::register_class<RNSceneBinding>();
+		ClassDB::register_class<RNComponentContract>();
 		ClassDB::register_class<ReactNativeRootView>();
 		ClassDB::register_class<RNExampleCounter>();
 		return;
