@@ -45,9 +45,9 @@ Play offline with **1/2/3** to damage enemies and **P** to pick up a potion. An 
 HTTP endpoint and explicit Refresh button demonstrate remote inventory/icons. Service
 limits use ordinary `react_native/*` Project Settings. Prefer uncontrolled TextInput
 `defaultValue` for native editing; controlled `value` with `onChangeText` is retained.
-The [platform](documentation/godot-platform.md), [extensions](documentation/extensions.md),
-[interop](documentation/interop.md), [compatibility matrices](documentation/compatibility/)
-and [validation](documentation/phase6b_validation.md) describe the tested boundary.
+The [platform](documentation/godot-platform.md), [editor](documentation/editor.md),
+[extensions](documentation/extensions.md), [interop](documentation/interop.md),
+[compatibility matrices](documentation/compatibility/) and [validation](documentation/phase6b_validation.md) describe the tested boundary.
 
 ## Build and test
 
@@ -139,14 +139,15 @@ npm --prefix samples/view-text run start:godot
 
 `start:godot` runs the package's `react-native-godot-start`, which serves the project's
 `metro.config.js` with React Native's dev middleware; `npx react-native run-godot` starts it
-for you. `react_native/dev_server/host`
+for you, and so does the Godot editor's **React Native** panel. `react_native/dev_server/host`
 and `react_native/dev_server/port` (default `localhost:8081`) locate Metro, and
 `react_native/dev_server/entry` (default `index`) names the entry file without its
 extension, for example `godot.entry` in `samples/view-text`. The runtime downloads its bundle from Metro and falls back to
 `react_native/bundle/path` when Metro can't serve it. Exported games always load the
 bundle file.
 
-Saved edits apply through Fast Refresh, and errors open LogBox above the game. Press **r**
+Saved edits apply through Fast Refresh, unless `react_native/dev_server/fast_refresh` is
+off, and errors open LogBox above the game. Press **r**
 in Metro, reload from DevTools or call `DevSettings.reload()` to reload every root through
 `ReactNativeHost.reload()`. Press **j** in Metro or call `ReactNativeHost.open_debugger()`
 to open React Native DevTools.

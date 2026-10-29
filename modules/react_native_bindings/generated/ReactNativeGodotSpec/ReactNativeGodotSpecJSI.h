@@ -593,7 +593,7 @@ private:
 
 #pragma mark - NativeGodotPlatformConstantsPlatformConstants
 
-template <typename P0, typename P1, typename P2, typename P3, typename P4, typename P5, typename P6>
+template <typename P0, typename P1, typename P2, typename P3, typename P4, typename P5, typename P6, typename P7>
 struct NativeGodotPlatformConstantsPlatformConstants {
   P0 isTesting{};
   P1 isDisableAnimations{};
@@ -601,9 +601,10 @@ struct NativeGodotPlatformConstantsPlatformConstants {
   P3 Version{};
   P4 godotVersion{};
   P5 hostOS{};
-  P6 assetScale;
+  P6 assetScale{};
+  P7 fastRefresh;
   bool operator==(const NativeGodotPlatformConstantsPlatformConstants &other) const {
-    return isTesting == other.isTesting && isDisableAnimations == other.isDisableAnimations && reactNativeVersion == other.reactNativeVersion && Version == other.Version && godotVersion == other.godotVersion && hostOS == other.hostOS && assetScale == other.assetScale;
+    return isTesting == other.isTesting && isDisableAnimations == other.isDisableAnimations && reactNativeVersion == other.reactNativeVersion && Version == other.Version && godotVersion == other.godotVersion && hostOS == other.hostOS && assetScale == other.assetScale && fastRefresh == other.fastRefresh;
   }
 };
 
@@ -622,7 +623,8 @@ struct NativeGodotPlatformConstantsPlatformConstantsBridging {
       bridging::fromJs<decltype(types.Version)>(rt, value.getProperty(rt, "Version"), jsInvoker),
       bridging::fromJs<decltype(types.godotVersion)>(rt, value.getProperty(rt, "godotVersion"), jsInvoker),
       bridging::fromJs<decltype(types.hostOS)>(rt, value.getProperty(rt, "hostOS"), jsInvoker),
-      bridging::fromJs<decltype(types.assetScale)>(rt, value.getProperty(rt, "assetScale"), jsInvoker)};
+      bridging::fromJs<decltype(types.assetScale)>(rt, value.getProperty(rt, "assetScale"), jsInvoker),
+      bridging::fromJs<decltype(types.fastRefresh)>(rt, value.getProperty(rt, "fastRefresh"), jsInvoker)};
     return result;
   }
 
@@ -648,6 +650,9 @@ struct NativeGodotPlatformConstantsPlatformConstantsBridging {
   static double assetScaleToJs(jsi::Runtime &rt, decltype(types.assetScale) value) {
     return bridging::toJs(rt, value);
   }
+  static bool fastRefreshToJs(jsi::Runtime &rt, decltype(types.fastRefresh) value) {
+    return bridging::toJs(rt, value);
+  }
 #endif
 
   static jsi::Object toJs(
@@ -664,6 +669,9 @@ struct NativeGodotPlatformConstantsPlatformConstantsBridging {
     result.setProperty(rt, "godotVersion", bridging::toJs(rt, value.godotVersion, jsInvoker));
     result.setProperty(rt, "hostOS", bridging::toJs(rt, value.hostOS, jsInvoker));
     result.setProperty(rt, "assetScale", bridging::toJs(rt, value.assetScale, jsInvoker));
+    if (value.fastRefresh) {
+      result.setProperty(rt, "fastRefresh", bridging::toJs(rt, value.fastRefresh.value(), jsInvoker));
+    }
     return result;
   }
 };

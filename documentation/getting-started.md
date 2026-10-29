@@ -68,8 +68,9 @@ DevTools. Press **r** in Metro to reload and **j** to open DevTools. `run-godot 
 builds the bundle file and runs the game from it instead. Arguments after `--` go to Godot,
 for example `npx react-native run-godot -- --headless`.
 
-Exported games always load `react_native/bundle/path`, so build it before exporting. Export
-templates that include this module are not published yet.
+Exported games always load `react_native/bundle/path`; the editor builds it when it exports.
+Export templates that include this module are not published yet. The [editor](editor.md)
+describes the inspector, the **React Native** panel, debugging and exports.
 
 Add a `ReactNativeRootView` anywhere in a scene and set its `application_key` to a
 registered component. All roots share one runtime. [Godot platform](godot-platform.md)

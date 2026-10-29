@@ -43,6 +43,7 @@ private:
 	Ref<RNComponentContract> contract_resource;
 	std::shared_ptr<const RNCompiledContract> contract;
 	Dictionary contract_values;
+	String contract_error;
 	// The argument names of each event signal the contract added.
 	HashMap<StringName, Vector<StringName>> contract_signals;
 	bool contract_flush_pending = false;
@@ -107,6 +108,7 @@ public:
 	Size2 get_minimum_size() const override;
 	RNRootState get_state() const;
 	Node *get_native_node(const String &p_native_id) const;
+	PackedStringArray get_configuration_warnings() const override;
 	void set_contract_values(const Dictionary &p_values);
 	Dictionary get_contract_values() const { return contract_values; }
 	bool has_contract() const { return contract != nullptr; }

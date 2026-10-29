@@ -17,9 +17,11 @@ struct RNApplicationModuleContext {
 };
 
 class RNPlatformConstantsModule : public NativeGodotPlatformConstantsCxxSpec<RNPlatformConstantsModule> {
+	bool fast_refresh;
+
 public:
-	explicit RNPlatformConstantsModule(std::shared_ptr<CallInvoker> jsInvoker) :
-			NativeGodotPlatformConstantsCxxSpec(std::move(jsInvoker)) {}
+	RNPlatformConstantsModule(std::shared_ptr<CallInvoker> jsInvoker, bool p_fast_refresh) :
+			NativeGodotPlatformConstantsCxxSpec(std::move(jsInvoker)), fast_refresh(p_fast_refresh) {}
 	jsi::Object getConstants(jsi::Runtime &rt);
 };
 

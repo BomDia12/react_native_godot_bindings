@@ -45,6 +45,7 @@ struct RNTurboModuleContext {
 	std::shared_ptr<IImageLoader> image_loader;
 	std::map<std::string, RNTurboModuleFactory> extensions;
 	std::shared_ptr<RNSourceURL> source_url = std::make_shared<RNSourceURL>();
+	bool fast_refresh = true;
 };
 
 // Godot's modules take precedence over the ReactCxxPlatform defaults that ReactHost falls back to.

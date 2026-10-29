@@ -2,6 +2,7 @@
 
 #include "../native_modules/rn_http_service.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
@@ -27,7 +28,10 @@ RNDevServer::RNDevServer(const RNDevServerSettings &p_settings) :
 			id += name[i];
 		}
 	}
-	app_id = (id.is_empty() ? String("godot") : id).utf8().get_data();
+	// The editor previews the scene in a runtime of its own, which DevTools
+	// lists apart from the game's.
+	const String suffix = Engine::get_singleton()->is_editor_hint() ? "-editor" : "";
+	app_id = ((id.is_empty() ? String("godot") : id) + suffix).utf8().get_data();
 }
 
 RNDevServer::~RNDevServer() = default;

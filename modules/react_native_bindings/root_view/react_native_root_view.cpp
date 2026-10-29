@@ -7,6 +7,7 @@
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/core_string_names.h"
+#include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/object/script_language.h"
@@ -223,6 +224,18 @@ void ReactNativeRootView::set_editor_preview(bool p_preview) {
 	}
 }
 
+PackedStringArray ReactNativeRootView::get_configuration_warnings() const {
+	PackedStringArray warnings = Control::get_configuration_warnings();
+	if (!contract_error.is_empty()) {
+		warnings.push_back(vformat("The contract of '%s' is invalid: %s", application_key, contract_error));
+	}
+	const String generated = String(GLOBAL_GET("react_native/project/root")).path_join("godot/contracts.ts");
+	if (contract_resource.is_valid() && (!FileAccess::exists(generated) || FileAccess::get_modified_time(generated) < FileAccess::get_modified_time(contract_resource->get_path()))) {
+		warnings.push_back("The generated contract TypeScript is older than this contract; save the contract or build the bundle to regenerate it.");
+	}
+	return warnings;
+}
+
 Node *ReactNativeRootView::get_native_node(const String &p_native_id) const {
 	RNComponentView *view = views ? views->find_by_native_id(p_native_id.utf8().get_data()) : nullptr;
 	return view ? view->get_native_node() : nullptr;
@@ -322,13 +335,16 @@ void ReactNativeRootView::_apply_contract() {
 	contract.reset();
 	RNCompiledContract compiled;
 	RNError error;
+	contract_error = String();
 	if (contract_resource.is_valid()) {
 		if (contract_resource->compile(compiled, error) && _contract_events_free(compiled, error)) {
 			contract = std::make_shared<const RNCompiledContract>(std::move(compiled));
 		} else {
-			ERR_PRINT(vformat("The contract of '%s' is invalid: %s", application_key, error.describe()));
+			contract_error = error.describe();
+			ERR_PRINT(vformat("The contract of '%s' is invalid: %s", application_key, contract_error));
 		}
 	}
+	update_configuration_warnings();
 	HashMap<StringName, ::Vector<StringName>> signals;
 	for (const RNContractEvent &event : contract ? contract->events : ::Vector<RNContractEvent>()) {
 		::Vector<StringName> arguments;

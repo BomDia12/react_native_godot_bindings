@@ -13,6 +13,12 @@ if (__DEV__) {
   const server = bundleLoadedFromServer && /^(https?):\/\/([^/:]+)(?::(\d+))?\/([^?]+)/.exec(fullBundleUrl);
   if (server) {
     const [, scheme, host, port = '', bundleEntry] = server;
-    require('react-native/Libraries/Utilities/HMRClient').default.setup('godot', bundleEntry, host, port, true, scheme);
+    const HMRClient = require('react-native/Libraries/Utilities/HMRClient').default;
+    const Platform = require('react-native/Libraries/Utilities/Platform').default;
+    HMRClient.setup('godot', bundleEntry, host, port, Platform.constants.fastRefresh !== false, scheme);
+    // The editor turns react_native/dev_server/fast_refresh on and off without a reload.
+    require('react-native/Libraries/EventEmitter/RCTDeviceEventEmitter').default.addListener('godotFastRefreshChanged', ({enabled}) =>
+      enabled ? HMRClient.enable() : HMRClient.disable(),
+    );
   }
 }

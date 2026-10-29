@@ -68,6 +68,7 @@
     "specs",
     "types",
     "scripts/start.cjs",
+    "scripts/build.cjs",
     "asset-scale.cjs",
     "assets.cjs",
     "babel.cjs",

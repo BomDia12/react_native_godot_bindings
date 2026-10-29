@@ -230,15 +230,20 @@ bundle and reloads the runtime in place. Godot instead reuses upstream's pieces:
 
 - The `SourceCode` module reports the Metro URL, so LogBox symbolication and Fast Refresh
   find Metro. `react-native-godot/setup` starts upstream's Fast Refresh client for a
-  bundle Metro served.
+  bundle Metro served. `react_native/dev_server/fast_refresh` turns Fast Refresh off for
+  the whole project, as the dev menu's toggle does; the editor's runtime follows changes
+  at once, and a game reads the setting when it starts.
 - Upstream's packager connection listens on Metro's `/message` socket. Its reload request
   goes to `ReactNativeHost.reload()`; Godot has no developer menu.
 - Upstream's inspector registers the runtime with Metro's DevTools proxy. Godot's
   DevTools socket answers DevTools page reloads itself and reloads through
   `ReactNativeHost.reload()`. Each reload registers a new inspector page, so DevTools
-  reconnects to it.
+  reconnects to it. The editor's runtime registers as `<project>-editor`, so its page
+  and the game's stay apart.
 - `react-native-godot-start` also answers `GET /status` with `packager-status:running`, as
   React Native's own server does, and `POST /reload` with the reload its `r` key sends.
+- A game the editor runs also sends its JavaScript errors and console output to the
+  editor's debugger, as the [editor](editor.md#debugging) describes.
 - LogBox opens its inspector in its own `ReactNativeRootView` with the `LogBox`
   application key, on a `CanvasLayer` above every other layer. A reload closes it.
 

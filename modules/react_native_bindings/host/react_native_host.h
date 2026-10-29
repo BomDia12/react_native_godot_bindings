@@ -83,6 +83,7 @@ class ReactNativeHost : public Object {
 	void _finish_evaluation(uint64_t p_id, const Variant &p_result);
 	bool _defer(std::function<void()> p_task);
 	void _update_suspension();
+	void _settings_changed();
 
 protected:
 	static void _bind_methods();
