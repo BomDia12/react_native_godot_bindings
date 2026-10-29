@@ -3,7 +3,7 @@
   "project_dir": "samples/game-ui",
   "scene": "res://smoke/tests/contract_props/SmokeMain.tscn",
   "timeout_seconds": 90,
-  "allowlist": "documentation/expected-warnings.txt",
+  "allowlist": "documentation/expected-warnings-contract-props.txt",
   "bundle": {
     "mode": "shared",
     "package_dir": "samples/game-ui",
@@ -12,6 +12,7 @@
   },
   "inputs": [
     "documentation/expected-warnings.txt",
+    "documentation/expected-warnings-contract-props.txt",
     "samples/game-ui/assets/LICENSE.OpenSans.txt",
     "samples/game-ui/assets/OpenSans.woff2",
     "samples/game-ui/assets/item.png",

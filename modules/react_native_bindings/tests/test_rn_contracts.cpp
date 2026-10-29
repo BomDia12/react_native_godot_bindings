@@ -120,14 +120,20 @@ TEST_CASE("[ReactNativeBindings][Contracts] invalid names, defaults and types ar
 	contract->set_properties({ property("tree", child, Dictionary()) });
 	CHECK(compile_error(contract).contains("Node"));
 
-	for (const char *type : { "int64", "Object" }) {
+	contract = roster_contract();
+	Dictionary camel = schema("record");
+	camel["fields"] = Dictionary({ { "phaseOne", schema("integer") } });
+	contract->set_properties({ property("phase", camel, Dictionary({ { "phaseOne", 0 } })) });
+	CHECK(compile_error(contract).contains("phaseOne"));
+
+	for (const char *type : { "int64", "Uint8Array", "Object" }) {
 		contract = roster_contract();
 		Dictionary value = schema(type);
 		if (String(type) == "Object") {
 			value["capability"] = "Enemy";
 		}
 		contract->set_properties({ property("value", value, Variant()) });
-		CHECK_MESSAGE(compile_error(contract).contains("int64 or Object"), type);
+		CHECK_MESSAGE(compile_error(contract).contains("Uint8Array or Object"), type);
 	}
 }
 

@@ -53,3 +53,18 @@ func run() -> void:
 		return
 	if heals[0][0] != "e1" or typeof(heals[0][1]) != TYPE_INT or heals[0][1] != 4:
 		fail("the heal signal arguments were %s" % [heals[0]])
+		return
+
+	var shadowing := GDScript.new()
+	shadowing.source_code = "extends ReactNativeRootView\nsignal mark(amount: int)\n"
+	shadowing.reload()
+	roster.set_script(shadowing)
+	if roster.get("enemies") != null:
+		fail("a script signal that shadows a contract event kept the contract")
+		return
+	roster.set_script(null)
+	if roster.get("enemies") == null:
+		fail("removing the shadowing script did not restore the contract")
+		return
+	roster.set("marked", "e1")
+	await wait_until(func(): return (await props("EnemyRoster")).get("marked") == "e1", "the restored contract")

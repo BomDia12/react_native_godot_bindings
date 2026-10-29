@@ -30,10 +30,11 @@ properties = [
 events = [{"name": "mark", "arguments": [{"name": "enemy_id", "value": {"type": "string"}}]}]
 ```
 
-Property, event and argument names are snake_case. They must be unique and can't reuse a
-property, method or signal of `ReactNativeRootView`. Every property needs a default that
+Property, event, argument and record field names are snake_case. Property and event names
+must be unique and can't reuse a property, method or signal of `ReactNativeRootView`, nor
+a signal of the root's script. Every property needs a default that
 fits its schema. Contract values start the surface as plain props, so they can't use
-`int64` or `Object` schemas; pass objects through a scene binding or an
+`int64`, `Uint8Array` or `Object` schemas; pass objects through a scene binding or an
 [application module](interop.md#application-modules). Named types can't contain
 themselves, directly or through fields and arrays. A contract file is named after its
 component: `contracts/EnemyRoster.tres` must declare `component = "EnemyRoster"`. An invalid contract reports why when its root loads it, and the root then

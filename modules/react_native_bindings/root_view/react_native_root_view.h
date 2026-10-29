@@ -78,6 +78,7 @@ private:
 	void _load_contract();
 	void _apply_contract();
 	void _fit_contract_values();
+	bool _contract_events_free(const RNCompiledContract &p_contract, RNError &r_error) const;
 	void _contract_values_changed();
 	void _flush_contract();
 

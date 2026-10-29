@@ -39,9 +39,9 @@ bool is_member_name(const String &p_name) {
 // Contract names become properties and signals of the root, so they can't
 // reuse a name the root already has.
 // Contract values start a surface as plain props, which can't carry int64
-// wrappers or Object handles; scene bindings and modules carry those.
+// wrappers, byte arrays or Object handles; scene bindings and modules carry those.
 bool carries_plain_values(const RNValueSchema &p_schema) {
-	if (p_schema.type == RNValueType::INT64 || p_schema.type == RNValueType::OBJECT) {
+	if (p_schema.type == RNValueType::INT64 || p_schema.type == RNValueType::BYTES || p_schema.type == RNValueType::OBJECT) {
 		return false;
 	}
 	if (p_schema.element && !carries_plain_values(*p_schema.element)) {
@@ -132,6 +132,9 @@ bool RNComponentContract::resolve_schema(const Dictionary &p_definition, Diction
 	if (resolved.get("fields", Variant()).get_type() == Variant::DICTIONARY) {
 		Dictionary fields = Dictionary(resolved["fields"]).duplicate();
 		for (const KeyValue<Variant, Variant> &entry : Dictionary(resolved["fields"])) {
+			if (!is_member_name(entry.key)) {
+				return invalid(r_error, vformat("record field '%s' must be a snake_case name", entry.key), p_path);
+			}
 			Dictionary field;
 			if (entry.value.get_type() != Variant::DICTIONARY || !resolve_schema(entry.value, field, r_error, p_path + "." + String(entry.key), enclosing)) {
 				return r_error.is_set() ? false : invalid(r_error, "record field must be a schema", p_path);
@@ -165,7 +168,7 @@ bool RNComponentContract::compile(RNCompiledContract &r_contract, RNError &r_err
 			return r_error.is_set() ? false : invalid(r_error, "property requires a value schema", path + ".value");
 		}
 		if (!carries_plain_values(property.schema)) {
-			return invalid(r_error, "contract values can't be int64 or Object", path + ".value");
+			return invalid(r_error, "contract values can't be int64, Uint8Array or Object", path + ".value");
 		}
 		if (!definition.has("default") || !rn_validate_native_value(definition["default"], property.schema, r_error, path + ".default")) {
 			return r_error.is_set() ? false : invalid(r_error, "property requires a default", path + ".default");

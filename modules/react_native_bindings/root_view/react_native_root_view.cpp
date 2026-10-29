@@ -9,6 +9,7 @@
 #include "core/core_string_names.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/object/script_language.h"
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
 #include "scene/resources/font.h"
@@ -24,6 +25,7 @@ ReactNativeRootView::ReactNativeRootView() {
 	set_mouse_filter(MOUSE_FILTER_PASS);
 	set_process_input(true);
 	set_notify_transform(true);
+	connect(CoreStringName(script_changed), callable_mp(this, &ReactNativeRootView::_apply_contract));
 }
 
 ReactNativeRootView::~ReactNativeRootView() {
@@ -321,7 +323,7 @@ void ReactNativeRootView::_apply_contract() {
 	RNCompiledContract compiled;
 	RNError error;
 	if (contract_resource.is_valid()) {
-		if (contract_resource->compile(compiled, error)) {
+		if (contract_resource->compile(compiled, error) && _contract_events_free(compiled, error)) {
 			contract = std::make_shared<const RNCompiledContract>(std::move(compiled));
 		} else {
 			ERR_PRINT(vformat("The contract of '%s' is invalid: %s", application_key, error.describe()));
@@ -383,6 +385,18 @@ void ReactNativeRootView::_apply_contract() {
 	scene_attachment = attachment;
 	_scene_target_changed(true);
 	notify_property_list_changed();
+}
+
+// A script signal would receive the event's emissions in place of the contract's.
+bool ReactNativeRootView::_contract_events_free(const RNCompiledContract &p_contract, RNError &r_error) const {
+	const Ref<Script> script = get_script();
+	for (const RNContractEvent &event : p_contract.events) {
+		if (script.is_valid() && script->has_script_signal(event.name)) {
+			r_error = RNError::make(RNErrorCode::VALIDATION, vformat("event '%s' conflicts with a signal of the root's script", event.name), "contract.apply");
+			return false;
+		}
+	}
+	return true;
 }
 
 // Keeps the values that still match the contract and fills the rest with defaults.
