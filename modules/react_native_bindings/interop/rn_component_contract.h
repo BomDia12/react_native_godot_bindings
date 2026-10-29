@@ -52,8 +52,9 @@ public:
 	Dictionary get_types() const { return types; }
 
 	// The value schema of p_definition with named record types replaced by
-	// their definitions.
-	bool resolve_schema(const Dictionary &p_definition, Dictionary &r_resolved, RNError &r_error, const String &p_path) const;
+	// their definitions. p_enclosing lists the named types being resolved
+	// around it, which it can't contain again.
+	bool resolve_schema(const Dictionary &p_definition, Dictionary &r_resolved, RNError &r_error, const String &p_path, const Vector<String> &p_enclosing = Vector<String>()) const;
 	bool compile(RNCompiledContract &r_contract, RNError &r_error) const;
 };
 

@@ -4,8 +4,9 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {callAsync, getBinding, onChanged, read} from './scene';
 
 // Contracts name things in snake_case, as Godot does; components receive
-// camelCase props, as React does.
-const camelCase = name => name.replace(/_([a-z0-9])/g, (_match, letter) => letter.toUpperCase());
+// camelCase props, as React does. An underscore before a digit stays, so names
+// convert back unchanged.
+const camelCase = name => name.replace(/_([a-z])/g, (_match, letter) => letter.toUpperCase());
 const snakeCase = name => name.replace(/[A-Z]/g, letter => '_' + letter.toLowerCase());
 
 function renameKeys(value, rename) {

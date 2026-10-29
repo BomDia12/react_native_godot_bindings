@@ -38,6 +38,23 @@ bool is_member_name(const String &p_name) {
 
 // Contract names become properties and signals of the root, so they can't
 // reuse a name the root already has.
+// Contract values start a surface as plain props, which can't carry int64
+// wrappers or Object handles; scene bindings and modules carry those.
+bool carries_plain_values(const RNValueSchema &p_schema) {
+	if (p_schema.type == RNValueType::INT64 || p_schema.type == RNValueType::OBJECT) {
+		return false;
+	}
+	if (p_schema.element && !carries_plain_values(*p_schema.element)) {
+		return false;
+	}
+	for (const RNRecordFieldSchema &field : p_schema.fields) {
+		if (!carries_plain_values(*field.value)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool is_free_on_root(const StringName &p_name) {
 	return !ClassDB::has_property("ReactNativeRootView", p_name) && !ClassDB::has_signal("ReactNativeRootView", p_name) && !ClassDB::has_method("ReactNativeRootView", p_name);
 }
@@ -88,14 +105,15 @@ void RNComponentContract::set_types(const Dictionary &p_types) {
 	emit_changed();
 }
 
-bool RNComponentContract::resolve_schema(const Dictionary &p_definition, Dictionary &r_resolved, RNError &r_error, const String &p_path) const {
+bool RNComponentContract::resolve_schema(const Dictionary &p_definition, Dictionary &r_resolved, RNError &r_error, const String &p_path, const Vector<String> &p_enclosing) const {
 	Dictionary resolved = p_definition.duplicate();
-	// Named types can't refer to themselves, so 32 levels of nesting means a cycle.
-	for (int depth = 0; String(resolved.get("type", "")) == "named"; ++depth) {
+	Vector<String> enclosing = p_enclosing;
+	while (String(resolved.get("type", "")) == "named") {
 		const String type_name = resolved.get("name", "");
-		if (depth >= 32 || types.get(type_name, Variant()).get_type() != Variant::DICTIONARY) {
-			return invalid(r_error, vformat("named type '%s' is not declared or refers to itself", type_name), p_path);
+		if (enclosing.has(type_name) || types.get(type_name, Variant()).get_type() != Variant::DICTIONARY) {
+			return invalid(r_error, vformat("named type '%s' is not declared or contains itself", type_name), p_path);
 		}
+		enclosing.push_back(type_name);
 		Dictionary named = Dictionary(types[type_name]).duplicate();
 		for (const KeyValue<Variant, Variant> &entry : resolved) {
 			if (entry.key != "type" && entry.key != "name") {
@@ -106,7 +124,7 @@ bool RNComponentContract::resolve_schema(const Dictionary &p_definition, Diction
 	}
 	if (resolved.get("element", Variant()).get_type() == Variant::DICTIONARY) {
 		Dictionary element;
-		if (!resolve_schema(resolved["element"], element, r_error, p_path + ".element")) {
+		if (!resolve_schema(resolved["element"], element, r_error, p_path + ".element", enclosing)) {
 			return false;
 		}
 		resolved["element"] = element;
@@ -115,7 +133,7 @@ bool RNComponentContract::resolve_schema(const Dictionary &p_definition, Diction
 		Dictionary fields = Dictionary(resolved["fields"]).duplicate();
 		for (const KeyValue<Variant, Variant> &entry : Dictionary(resolved["fields"])) {
 			Dictionary field;
-			if (entry.value.get_type() != Variant::DICTIONARY || !resolve_schema(entry.value, field, r_error, p_path + "." + String(entry.key))) {
+			if (entry.value.get_type() != Variant::DICTIONARY || !resolve_schema(entry.value, field, r_error, p_path + "." + String(entry.key), enclosing)) {
 				return r_error.is_set() ? false : invalid(r_error, "record field must be a schema", p_path);
 			}
 			fields[entry.key] = field;
@@ -145,6 +163,9 @@ bool RNComponentContract::compile(RNCompiledContract &r_contract, RNError &r_err
 		Dictionary schema;
 		if (definition.get("value", Variant()).get_type() != Variant::DICTIONARY || !resolve_schema(definition["value"], schema, r_error, path + ".value") || !rn_parse_value_schema(schema, property.schema, r_error, path + ".value")) {
 			return r_error.is_set() ? false : invalid(r_error, "property requires a value schema", path + ".value");
+		}
+		if (!carries_plain_values(property.schema)) {
+			return invalid(r_error, "contract values can't be int64 or Object", path + ".value");
 		}
 		if (!definition.has("default") || !rn_validate_native_value(definition["default"], property.schema, r_error, path + ".default")) {
 			return r_error.is_set() ? false : invalid(r_error, "property requires a default", path + ".default");
@@ -181,6 +202,9 @@ bool RNComponentContract::compile(RNCompiledContract &r_contract, RNError &r_err
 			if (argument_definition.get("value", Variant()).get_type() != Variant::DICTIONARY || !resolve_schema(argument_definition["value"], schema, r_error, argument_path + ".value") || !rn_parse_value_schema(schema, argument.value, r_error, argument_path + ".value")) {
 				return r_error.is_set() ? false : invalid(r_error, "argument requires a value schema", argument_path + ".value");
 			}
+			if (!carries_plain_values(argument.value)) {
+				return invalid(r_error, "contract values can't be int64 or Object", argument_path + ".value");
+			}
 			argument.nullable = argument.value.nullable;
 			argument_names.insert(argument.name);
 			event.arguments.push_back(argument);
@@ -202,5 +226,13 @@ String rn_contracts_directory() {
 
 Ref<RNComponentContract> rn_load_contract(const String &p_component) {
 	const String path = rn_contracts_directory().path_join(p_component + ".tres");
-	return p_component.is_empty() || !ResourceLoader::exists(path) ? Ref<RNComponentContract>() : Ref<RNComponentContract>(ResourceLoader::load(path, "RNComponentContract"));
+	if (p_component.is_empty() || !ResourceLoader::exists(path)) {
+		return Ref<RNComponentContract>();
+	}
+	Ref<RNComponentContract> contract = ResourceLoader::load(path, "RNComponentContract");
+	if (contract.is_valid() && contract->get_component() != p_component) {
+		ERR_PRINT(vformat("%s declares the component '%s'; a contract file is named after its component.", path, contract->get_component()));
+		return Ref<RNComponentContract>();
+	}
+	return contract;
 }

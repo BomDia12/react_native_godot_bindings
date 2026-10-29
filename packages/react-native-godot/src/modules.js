@@ -3,12 +3,17 @@
 import {useEffect, useState} from 'react';
 import NativeGodotScene from '../specs/NativeGodotScene';
 
-export const onModuleChanged = (name, callback) =>
-  NativeGodotScene.onChanged(change => {
+// Godot connects to a module's signals once JavaScript first asks for the
+// module, so subscribing asks for it.
+export function onModuleChanged(name, callback) {
+  const subscription = NativeGodotScene.onChanged(change => {
     if (change.module === name) {
       callback(change);
     }
   });
+  NativeGodotScene.getModule(name);
+  return subscription;
+}
 
 // The GDScript object registered with ReactNativeHost.register_module(name).
 // A module registered again later needs a fresh getGodotModule().

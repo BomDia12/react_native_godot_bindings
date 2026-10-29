@@ -108,6 +108,27 @@ TEST_CASE("[ReactNativeBindings][Contracts] invalid names, defaults and types ar
 	contract->set_types(types);
 	contract->set_properties({ property("loop", itself, Dictionary()) });
 	CHECK(compile_error(contract).contains("Loop"));
+
+	contract = roster_contract();
+	Dictionary child = schema("named");
+	child["name"] = "Node";
+	Dictionary children = schema("array");
+	children["element"] = child;
+	Dictionary node = schema("record");
+	node["fields"] = Dictionary({ { "children", children } });
+	contract->set_types(Dictionary({ { "Node", node } }));
+	contract->set_properties({ property("tree", child, Dictionary()) });
+	CHECK(compile_error(contract).contains("Node"));
+
+	for (const char *type : { "int64", "Object" }) {
+		contract = roster_contract();
+		Dictionary value = schema(type);
+		if (String(type) == "Object") {
+			value["capability"] = "Enemy";
+		}
+		contract->set_properties({ property("value", value, Variant()) });
+		CHECK_MESSAGE(compile_error(contract).contains("int64 or Object"), type);
+	}
 }
 
 TEST_CASE("[ReactNativeBindings][Contracts] TypeScript mirrors contracts in React's naming") {
@@ -159,6 +180,23 @@ TEST_CASE("[ReactNativeBindings][Contracts] a root shows its contract as typed p
 	CHECK(Color(root->get("tint")) == Color(0, 0, 1));
 	MessageQueue::get_singleton()->flush();
 	CHECK(contract_changes == 1);
+
+	Ref<RNComponentContract> changed = roster_contract();
+	Array events = changed->get_events();
+	Dictionary mark = events[0];
+	Dictionary amount;
+	amount["name"] = "amount";
+	amount["value"] = schema("integer");
+	mark["arguments"] = Array({ amount });
+	changed->set_events(events);
+	REQUIRE(ResourceSaver::save(changed, "user://rn_contract_test/contracts/EnemyRoster.tres") == OK);
+	List<MethodInfo> signals;
+	root->get_signal_list(&signals);
+	for (const MethodInfo &signal : signals) {
+		if (signal.name == StringName("mark")) {
+			CHECK(signal.arguments.size() == 1);
+		}
+	}
 
 	root->set_application_key("GodotApp");
 	CHECK_FALSE(root->has_contract());

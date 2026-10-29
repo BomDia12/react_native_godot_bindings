@@ -327,20 +327,22 @@ void ReactNativeRootView::_apply_contract() {
 			ERR_PRINT(vformat("The contract of '%s' is invalid: %s", application_key, error.describe()));
 		}
 	}
-	const auto kept = [this](const StringName &p_signal) {
-		for (const RNContractEvent &event : contract ? contract->events : ::Vector<RNContractEvent>()) {
-			if (event.name == p_signal) {
-				return true;
-			}
+	HashMap<StringName, ::Vector<StringName>> signals;
+	for (const RNContractEvent &event : contract ? contract->events : ::Vector<RNContractEvent>()) {
+		::Vector<StringName> arguments;
+		for (const RNArgumentSchema &argument : event.arguments) {
+			arguments.push_back(argument.name);
 		}
-		return false;
-	};
-	for (const StringName &signal : contract_signals) {
-		if (!kept(signal)) {
-			call(SNAME("remove_user_signal"), signal);
+		signals[event.name] = arguments;
+	}
+	// A signal whose arguments changed is added again, which drops its connections.
+	for (const KeyValue<StringName, ::Vector<StringName>> &signal : contract_signals) {
+		const ::Vector<StringName> *arguments = signals.getptr(signal.key);
+		if (!arguments || *arguments != signal.value) {
+			call(SNAME("remove_user_signal"), signal.key);
 		}
 	}
-	contract_signals.clear();
+	contract_signals = signals;
 	if (!contract) {
 		if (had_contract) {
 			scene_attachment.reset();
@@ -368,7 +370,6 @@ void ReactNativeRootView::_apply_contract() {
 			// Only signals added through the bound method can be removed again.
 			call(SNAME("add_user_signal"), event.name, arguments);
 		}
-		contract_signals.push_back(event.name);
 		RNSceneCommand command;
 		command.method = event.name;
 		command.kind = RNSceneCommand::SIGNAL;

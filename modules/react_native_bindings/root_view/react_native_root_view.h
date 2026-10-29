@@ -43,7 +43,8 @@ private:
 	Ref<RNComponentContract> contract_resource;
 	std::shared_ptr<const RNCompiledContract> contract;
 	Dictionary contract_values;
-	Vector<StringName> contract_signals;
+	// The argument names of each event signal the contract added.
+	HashMap<StringName, Vector<StringName>> contract_signals;
 	bool contract_flush_pending = false;
 	facebook::react::SurfaceId surface_id = 0;
 	Control *container = nullptr;

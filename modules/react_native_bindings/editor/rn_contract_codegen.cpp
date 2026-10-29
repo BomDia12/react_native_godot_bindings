@@ -3,22 +3,21 @@
 #include "core/config/project_settings.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
-#include "core/io/resource_loader.h"
 
 namespace {
 
 const char *HEADER = "// Generated from the Godot component contracts in %s. Do not edit.\n";
 
+// An underscore before a letter becomes its capital; one before a digit stays,
+// so the name converts back to the same snake_case.
 String camel_case(const String &p_name) {
 	String result;
-	bool upper = false;
 	for (int i = 0; i < p_name.length(); ++i) {
-		if (p_name[i] == '_') {
-			upper = true;
-			continue;
+		if (p_name[i] == '_' && i + 1 < p_name.length() && is_ascii_lower_case(p_name[i + 1])) {
+			result += String::chr(p_name[++i]).to_upper();
+		} else {
+			result += String::chr(p_name[i]);
 		}
-		result += upper ? String::chr(p_name[i]).to_upper() : String::chr(p_name[i]);
-		upper = false;
 	}
 	return result;
 }
@@ -55,7 +54,7 @@ class TypeScriptWriter {
 		if (type == "record") {
 			return record(p_definition.get("fields", Dictionary()));
 		}
-		const HashMap<String, String> wrappers = { { "Color", "GodotColor" }, { "Vector2", "GodotVector2" }, { "Vector3", "GodotVector3" }, { "Rect2", "GodotRect2" }, { "int64", "GodotInt64" }, { "Object", "GodotObject" } };
+		const HashMap<String, String> wrappers = { { "Color", "GodotColor" }, { "Vector2", "GodotVector2" }, { "Vector3", "GodotVector3" }, { "Rect2", "GodotRect2" } };
 		if (wrappers.has(type)) {
 			godot_types.insert(wrappers[type]);
 			return wrappers[type];
@@ -168,10 +167,12 @@ bool rn_generate_contracts(RNError &r_error) {
 	files.sort();
 	for (const String &file : files) {
 		if (file.get_extension() == "tres") {
-			Ref<RNComponentContract> contract = ResourceLoader::load(directory.path_join(file), "RNComponentContract");
-			if (contract.is_valid()) {
-				contracts.push_back(contract);
+			Ref<RNComponentContract> contract = rn_load_contract(file.get_basename());
+			if (contract.is_null()) {
+				r_error = RNError::make(RNErrorCode::VALIDATION, vformat("%s is not a contract for the component '%s'", directory.path_join(file), file.get_basename()), "contracts.generate");
+				return false;
 			}
+			contracts.push_back(contract);
 		}
 	}
 	RNContractSources sources;

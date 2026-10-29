@@ -130,7 +130,9 @@ use them, and they are revoked when the module is replaced or unregistered.
 `{ready, read(), call(command, ...args), callAsync(command, ...args), onChanged(callback)}`,
 `onModuleChanged(name, callback)`, and `useGodotModule(name)`, which returns
 `{module, value, sequence}` or `null` while the module isn't registered. Module changes carry
-`module` instead of `rootTag`. A module registered again needs a fresh `getGodotModule()`.
+`module` instead of `rootTag`. Subscribing with `onModuleChanged` connects Godot to the
+module's signals, as asking for the module does. A module registered again needs a fresh
+`getGodotModule()`.
 
 ## Messages
 
