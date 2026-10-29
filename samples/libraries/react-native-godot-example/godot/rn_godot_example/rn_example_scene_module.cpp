@@ -1,8 +1,8 @@
 #include "rn_example_scene_module.h"
 
-#include "../host/rn_main_thread_queue.h"
-#include "../interop/rn_error.h"
-#include "../turbomodules/rn_js_promise.h"
+#include "react_native_bindings/host/rn_main_thread_queue.h"
+#include "react_native_bindings/interop/rn_error.h"
+#include "react_native_bindings/turbomodules/rn_js_promise.h"
 
 #include "core/object/class_db.h"
 

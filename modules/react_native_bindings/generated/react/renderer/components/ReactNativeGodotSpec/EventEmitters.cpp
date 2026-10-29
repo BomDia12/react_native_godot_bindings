@@ -67,13 +67,4 @@ payload.setProperty(runtime, "height", event.height);
   });
 }
 
-
-void RNExampleMeterEventEmitter::onValueChanged(OnValueChanged event) const {
-  dispatchEvent("valueChanged", [event=std::move(event)](jsi::Runtime &runtime) {
-    auto payload = jsi::Object(runtime);
-    payload.setProperty(runtime, "value", event.value);
-    return payload;
-  });
-}
-
 } // namespace facebook::react

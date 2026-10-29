@@ -1,9 +1,21 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const {createRequire} = require('module');
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 const {createGodotResolver} = require('./resolver.cjs');
+
+// Dependencies installed from local paths are symlinks to directories outside
+// the project, which Metro only reads through its watch folders.
+function linkedDependencyRoots(projectRoot) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+  return Object.keys(manifest.dependencies ?? {})
+    .map(name => path.join(projectRoot, 'node_modules', name))
+    .filter(installed => fs.existsSync(installed))
+    .map(installed => fs.realpathSync(installed))
+    .filter(root => path.relative(projectRoot, root).startsWith('..'));
+}
 
 function createGodotMetroConfig(projectRoot) {
   const resolvedProjectRoot = path.resolve(projectRoot);
@@ -15,7 +27,7 @@ function createGodotMetroConfig(projectRoot) {
   const defaults = getDefaultConfig(resolvedProjectRoot);
   return mergeConfig(defaults, {
     projectRoot: resolvedProjectRoot,
-    watchFolders: [resolvedProjectRoot, packageRoot],
+    watchFolders: Array.from(new Set([resolvedProjectRoot, packageRoot, ...linkedDependencyRoots(resolvedProjectRoot)])),
     resolver: {
       assetExts: Array.from(new Set([...(defaults.resolver.assetExts ?? []), 'woff', 'woff2'])),
       platforms: Array.from(

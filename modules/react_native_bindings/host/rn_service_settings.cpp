@@ -104,3 +104,22 @@ bool RNServiceSettings::snapshot(RNServiceSettings &r_settings, RNError &r_error
 	r_settings = snapshot;
 	return true;
 }
+
+bool rn_is_tooling_run() {
+	for (const String &argument : OS::get_singleton()->get_cmdline_args()) {
+		if (argument == "--react-native-generate-contracts" || argument.begins_with("--react-native-enable-plugins=") || argument.begins_with("--react-native-disable-plugins=")) {
+			return true;
+		}
+	}
+	return false;
+}
+
+PackedStringArray rn_tooling_values(const String &p_flag) {
+	const String prefix = "--" + p_flag + "=";
+	for (const String &argument : OS::get_singleton()->get_cmdline_args()) {
+		if (argument.begins_with(prefix)) {
+			return argument.substr(prefix.length()).split(",", false);
+		}
+	}
+	return PackedStringArray();
+}

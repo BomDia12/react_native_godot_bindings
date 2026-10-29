@@ -8,6 +8,7 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
+const {autolink, dependencyConfig, readManifest} = require('../cli/autolink.cjs');
 const {buildBundle, findEntry} = require('../cli/build.cjs');
 const {downloadEditor, hostPlatform, resolveEditor} = require('../cli/editor.cjs');
 const {addMainScene, packageName, writeTemplate} = require('../cli/init.cjs');
@@ -147,4 +148,70 @@ test('a bundle cannot share its directory with the JavaScript project', async ()
   for (const out of [path.join(root, 'game.bundle.js'), 'index.bundle.js']) {
     await assert.rejects(buildBundle({projectRoot: jsRoot, entry: 'index', out}), /must be in a directory of its own/);
   }
+});
+
+function library(root, name, platform) {
+  const directory = path.join(root, 'libraries', name);
+  fs.mkdirSync(path.join(directory, 'godot', 'rn_module'), {recursive: true});
+  fs.writeFileSync(path.join(directory, 'godot', 'rn_module', 'config.py'), 'def can_build(env, platform):\n    return True\n');
+  fs.mkdirSync(path.join(directory, 'godot', 'addons', name), {recursive: true});
+  fs.writeFileSync(path.join(directory, 'godot', 'addons', name, 'plugin.cfg'), '[plugin]\n');
+  fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({name, version: '1.0.0'}));
+  return {platforms: {godot: dependencyConfig(directory, platform)}};
+}
+
+// Stands in for the editor: records its arguments and enables or disables the
+// plugins in project.godot as Godot would.
+function fakeEditor(root) {
+  const editor = path.join(root, 'godot');
+  fs.writeFileSync(
+    editor,
+    `#!/usr/bin/env node
+const fs = require('fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(path.join(root, 'editor-args'))}, args.join(' ') + '\\n');
+const file = args[args.indexOf('--path') + 1] + '/project.godot';
+const value = flag => (args.find(arg => arg.startsWith(flag + '=')) ?? '=').split('=')[1].split(',').filter(Boolean);
+const text = fs.readFileSync(file, 'utf8');
+let enabled = [...text.matchAll(/res:\\/\\/addons\\/([^/]+)\\/plugin\\.cfg/g)].map(match => match[1]);
+enabled = [...enabled.filter(name => !value('--react-native-disable-plugins').includes(name)), ...value('--react-native-enable-plugins')];
+const list = 'enabled=PackedStringArray(' + enabled.map(name => '"res://addons/' + name + '/plugin.cfg"').join(', ') + ')';
+fs.writeFileSync(file, text.replace(/\\n\\[editor_plugins\\]\\n\\nenabled=.*\\n/, '\\n') + '\\n[editor_plugins]\\n\\n' + list + '\\n');
+`,
+    {mode: 0o755},
+  );
+  return editor;
+}
+
+test('autolinking writes the native manifest and owns the addons it copies', async () => {
+  const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
+  const godot = fakeEditor(root);
+  const project = loadGodotProject(root);
+  const config = {root, dependencies: {'lib-a': library(root, 'lib_a', {module: 'godot/rn_module', addon: 'godot/addons/lib_a'}), plain: {platforms: {godot: null}}}};
+
+  assert.deepEqual(await autolink(project, config, {godot}), []);
+  const manifest = readManifest(root);
+  assert.match(manifest.hash, /^[0-9a-f]{64}$/);
+  assert.deepEqual(manifest.modules, [path.join(root, 'libraries', 'lib_a', 'godot', 'rn_module')]);
+  assert.deepEqual(manifest.codegen, []);
+  assert.ok(fs.existsSync(path.join(root, 'addons', 'lib_a', 'plugin.cfg')));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'godot-autolinking.lock.json'), 'utf8')), {addons: {lib_a: 'lib-a'}});
+  assert.match(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /--react-native-enable-plugins=lib_a/);
+
+  fs.writeFileSync(path.join(root, 'addons', 'lib_a', 'plugin.cfg.uid'), 'uid://kept');
+  assert.deepEqual(await autolink(project, config, {check: true, godot}), []);
+  fs.appendFileSync(path.join(root, 'libraries', 'lib_a', 'godot', 'rn_module', 'config.py'), '# changed\n');
+  assert.deepEqual(await autolink(project, config, {check: true, godot}), ['the native module manifest is out of date']);
+  await autolink(project, config, {godot});
+  assert.notEqual(readManifest(root).hash, manifest.hash);
+
+  fs.mkdirSync(path.join(root, 'addons', 'lib_b'));
+  const withB = {root, dependencies: {...config.dependencies, 'lib-b': library(root, 'lib_b', {addon: 'godot/addons/lib_b'})}};
+  await assert.rejects(autolink(project, withB, {godot}), /res:\/\/addons\/lib_b already exists and was not linked/);
+
+  await autolink(project, {root, dependencies: {}}, {godot});
+  assert.ok(!fs.existsSync(path.join(root, 'addons', 'lib_a')));
+  assert.ok(fs.existsSync(path.join(root, 'addons', 'lib_b')));
+  assert.match(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /--react-native-disable-plugins=lib_a/);
+  assert.deepEqual(readManifest(root), {hash: null, modules: [], codegen: []});
 });

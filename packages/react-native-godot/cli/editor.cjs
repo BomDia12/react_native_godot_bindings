@@ -87,15 +87,25 @@ async function downloadEditor(platform) {
   return binary;
 }
 
-// The editor a command runs: one named explicitly, then the prebuilt editor of
-// this package version.
-async function resolveEditor({godot} = {}) {
+// The editor a command runs: one named explicitly, then the editor built for
+// the project's linked native modules, then the prebuilt editor of this
+// package version.
+async function resolveEditor({godot, project} = {}) {
   const explicit = godot ?? process.env.GODOT_EDITOR;
   if (explicit) {
     if (!fs.existsSync(explicit)) {
       throw new Error('Godot editor not found: ' + explicit);
     }
     return path.resolve(explicit);
+  }
+  const {linkedEditor, readManifest} = require('./autolink.cjs');
+  const manifest = project ? readManifest(project.jsRoot) : null;
+  if (manifest?.hash != null) {
+    const editor = linkedEditor(manifest);
+    if (editor == null) {
+      throw new Error('This project links native Godot modules. Run react-native build-godot-editor, or pass --godot <editor>.');
+    }
+    return editor;
   }
   const platform = readPlatform();
   if (platform == null) {

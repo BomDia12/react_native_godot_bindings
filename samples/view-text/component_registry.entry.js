@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {AppRegistry, StyleSheet, Text, View} from 'react-native';
 import * as NativeComponentRegistry from 'react-native/Libraries/NativeComponent/NativeComponentRegistry';
-import RNExampleMeter, {Commands} from 'react-native-godot/specs/RNExampleMeterNativeComponent';
+import {RNExampleMeter, RNExampleMeterCommands as Commands} from 'react-native-godot-example';
 
 const MissingFixture = NativeComponentRegistry.get('RNMissingFixture', () => ({
   uiViewClassName: 'RNMissingFixture',

@@ -59,12 +59,13 @@ git clone --recurse-submodules https://github.com/BomDia12/react_native_godot_bi
 cd react_native_godot_bindings
 scripts/bootstrap.sh
 scripts/build_hermes.sh
-scripts/build_godot.sh
 npm --prefix packages/react-native-godot ci
+npm --prefix samples/view-text ci
+(cd samples/view-text && npx react-native autolink-godot)
+RN_AUTOLINKING=samples/view-text/node_modules/.cache/react-native-godot/autolinking/autolinking.json scripts/build_godot.sh
 node packages/react-native-godot/scripts/codegen.cjs
 node packages/react-native-godot/scripts/check-overrides.cjs
 npm --prefix packages/react-native-godot test
-npm --prefix samples/view-text ci
 scripts/run_baseline.sh
 scripts/run_component_display.sh
 scripts/run_visual_regression.sh
@@ -78,7 +79,9 @@ downloads the Boost headers, and installs the AccessKit SDK that the pinned engi
 `misc/scripts/install_accesskit.py` selects, reinstalling it when that version changes. `build_hermes.sh` builds the pinned Hermes submodule
 against React Native's JSI. `codegen.cjs` regenerates the committed React Native codegen
 output in `modules/react_native_bindings/generated/`. `build_godot.sh` attaches `modules/` through
-Godot's `custom_modules` option. `run_baseline.sh` discovers the restricted manifests at
+Godot's `custom_modules` option, and with `RN_AUTOLINKING` the native modules of the
+[autolinked](documentation/autolinking.md) libraries too. The samples' smoke tests need
+`samples/libraries/react-native-godot-example`, which `samples/view-text` links. `run_baseline.sh` discovers the restricted manifests at
 `samples/*/smoke/tests/*/smoke_test.json`, creates fresh Metro bundles, and runs every
 declared headless smoke test. Shared manifests with the same package, npm script, and
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the

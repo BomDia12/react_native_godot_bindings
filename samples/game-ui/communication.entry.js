@@ -1,9 +1,11 @@
-import React, {useEffect} from 'react';
+import React, {useContext, useEffect} from 'react';
 import {AppRegistry, View} from 'react-native';
+import {RootTagContext} from 'react-native/Libraries/ReactNative/RootTag';
 import {onGodotMessage, postGodotMessage, useGodotMessage, usePostGodotMessage} from 'react-native-godot/messages';
-import {getGodotModule, useGodotModule} from 'react-native-godot/modules';
+import {getGodotModule} from 'react-native-godot/modules';
+import {useScoreboard} from 'react-native-godot-script-example';
 
-const communication = (global.__communication = {rootMessages: [], applicationMessages: [], moduleSnapshots: []});
+const communication = (global.__communication = {rootMessages: [], applicationMessages: [], scores: [], scoreboards: {}, asyncScores: []});
 
 // Application messages come back with the same payload under another name.
 onGodotMessage('broadcast', payload => {
@@ -24,15 +26,19 @@ function MessagesApp() {
 }
 
 function ModuleApp() {
-  const module = useGodotModule('Scoreboard');
-  if (module) {
-    communication.moduleSnapshots.push(module.value);
+  const rootTag = useContext(RootTagContext);
+  const scoreboard = useScoreboard();
+  if (scoreboard) {
+    communication.scores.push(scoreboard.score);
+    communication.scoreboards[rootTag] = scoreboard;
   }
   return <View style={{flex: 1, backgroundColor: '#223344'}} />;
 }
 
-global.__moduleCall = (name, command, args) => getGodotModule(name).call(command, ...args);
-global.__moduleCallAsync = (name, command, args) => getGodotModule(name).callAsync(command, ...args);
+global.__scoreboardAdd = (rootTag, points) => communication.scoreboards[rootTag].add(points);
+global.__scoreboardAddLater = (rootTag, points) => {
+  communication.scoreboards[rootTag].addLater(points).then(score => communication.asyncScores.push(score));
+};
 global.__moduleReady = name => getGodotModule(name).ready;
 
 AppRegistry.registerComponent('GodotMessagesApp', () => MessagesApp);

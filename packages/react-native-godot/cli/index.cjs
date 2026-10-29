@@ -31,7 +31,7 @@ const commands = [
       const {generateContracts} = require('./contracts.cjs');
       const {resolveEditor} = require('./editor.cjs');
       if (fs.existsSync(path.join(project.jsRoot, 'contracts'))) {
-        generateContracts(project, await resolveEditor({godot: args.godot}));
+        generateContracts(project, await resolveEditor({godot: args.godot, project}));
       }
       const output = await buildBundle({
         projectRoot: config.root,
@@ -56,14 +56,39 @@ const commands = [
       await runGodot(requireProject(config), {...args, godotArgs});
     },
   },
+  {
+    name: 'autolink-godot',
+    description: 'Links the native modules and addons of installed React Native Godot libraries into the project',
+    options: [
+      {name: '--check', description: 'Exit with an error when the linked outputs are out of date, without changing them'},
+      {name: '--godot <editor>', description: 'Godot editor that enables linked plugins; defaults to GODOT_EDITOR, then the prebuilt editor'},
+    ],
+    func: async (_argv, config, args) => {
+      const {autolink} = require('./autolink.cjs');
+      const problems = await autolink(requireProject(config), config, args);
+      if (problems.length > 0) {
+        console.error('Autolinking is out of date. Run react-native autolink-godot.\n- ' + problems.join('\n- '));
+        process.exitCode = 1;
+      }
+    },
+  },
+  {
+    name: 'build-godot-editor',
+    description: 'Builds a Linux Godot editor with the native modules that autolink-godot linked',
+    options: [{name: '--source <checkout>', description: 'React Native Godot bindings checkout to build from; defaults to the commit this package was released from'}],
+    func: async (_argv, config, args) => {
+      const {buildGodotEditor} = require('./build-editor.cjs');
+      console.info('Built ' + buildGodotEditor(requireProject(config), args));
+    },
+  },
 ];
 
 function projectConfig(projectRoot) {
   return loadGodotProject(projectRoot) ?? undefined;
 }
 
-function dependencyConfig() {
-  return undefined;
+function dependencyConfig(root, userConfig) {
+  return require('./autolink.cjs').dependencyConfig(root, userConfig);
 }
 
 module.exports = {commands, dependencyConfig, projectConfig};

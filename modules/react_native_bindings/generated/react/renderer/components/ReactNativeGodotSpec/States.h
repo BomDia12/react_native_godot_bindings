@@ -17,6 +17,4 @@ namespace facebook::react {
 
 using GodotSceneState = StateData;
 
-using RNExampleMeterState = StateData;
-
 } // namespace facebook::react

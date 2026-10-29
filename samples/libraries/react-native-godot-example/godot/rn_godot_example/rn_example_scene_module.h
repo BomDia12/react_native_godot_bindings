@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../turbomodules/rn_host_module_context.h"
+#include "react_native_bindings/turbomodules/rn_host_module_context.h"
 
 #include "scene/main/node.h"
 
-#include <ReactNativeGodotSpec/ReactNativeGodotSpecJSI.h>
+#include <RNGodotExampleSpec/RNGodotExampleSpecJSI.h>
 
 #include <functional>
 #include <memory>

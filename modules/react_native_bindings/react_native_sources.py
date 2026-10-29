@@ -157,10 +157,12 @@ def react_native_sources():
     )
 
 
+def cpp_sources(root):
+    return sorted(os.path.join(directory, name) for directory, _, files in os.walk(root) for name in files if name.endswith(".cpp"))
+
+
 def generated_sources():
-    return sorted(
-        os.path.join(directory, name) for directory, _, files in os.walk(GENERATED_DIR) for name in files if name.endswith(".cpp")
-    )
+    return cpp_sources(GENERATED_DIR)
 
 
 def react_platform_sources():

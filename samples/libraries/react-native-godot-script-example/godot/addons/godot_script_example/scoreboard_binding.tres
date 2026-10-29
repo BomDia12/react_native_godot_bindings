@@ -1,0 +1,55 @@
+[gd_resource type="RNSceneBinding" format=3]
+
+[resource]
+capability = "Scoreboard"
+snapshot_method = &"snapshot"
+snapshot_schema = {
+"fields": {
+"score": {
+"type": "integer"
+}
+},
+"type": "record"
+}
+commands = {
+"add": {
+"arguments": [{
+"name": "points",
+"value": {
+"type": "integer"
+}
+}],
+"method": "add",
+"mode": "sync",
+"result": {
+"type": "integer"
+}
+},
+"add_later": {
+"arguments": [{
+"name": "points",
+"value": {
+"type": "integer"
+}
+}],
+"method": "add",
+"mode": "queued",
+"result": {
+"type": "integer"
+}
+}
+}
+signals = {
+"score_changed": {
+"arguments": ["score"],
+"event": "changed",
+"payload": {
+"fields": {
+"score": {
+"type": "integer"
+}
+},
+"type": "record"
+}
+}
+}

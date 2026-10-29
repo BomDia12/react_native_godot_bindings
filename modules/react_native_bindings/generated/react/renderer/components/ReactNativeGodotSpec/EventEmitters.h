@@ -56,13 +56,4 @@ class GodotWindowEventEmitter : public ViewEventEmitter {
 
   void onResize(OnResize value) const;
 };
-class RNExampleMeterEventEmitter : public ViewEventEmitter {
- public:
-  using ViewEventEmitter::ViewEventEmitter;
-
-  struct OnValueChanged {
-      double value;
-    };
-  void onValueChanged(OnValueChanged value) const;
-};
 } // namespace facebook::react

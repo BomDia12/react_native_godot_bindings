@@ -24,6 +24,7 @@ class ReactNativeEditorPlugin : public EditorPlugin {
 
 	void _ignore_node_modules();
 	void _generate_contracts_and_quit();
+	void _set_plugins_and_quit();
 	void _update_monitored_path();
 	void _check_file_status(bool p_force_refresh = false);
 	void _on_filesystem_changed();

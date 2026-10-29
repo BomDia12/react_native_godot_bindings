@@ -18,6 +18,8 @@ __pycache__/
 /samples/game-ui/dist/
 /samples/game-ui/.godot/
 /samples/game-ui/**/*.uid
+# Autoloads refer to linked addons' scripts by UID.
+!/samples/game-ui/addons/**/*.uid
 
 /packages/react-native-godot/node_modules/
 /modules/react_native_bindings/thirdparty/boost/

@@ -2,7 +2,8 @@ extends SceneTree
 
 # Runs a consumer project's main scene and checks that its React root mounted,
 # from Metro when RN_CONSUMER_EXPECT_METRO is set and from the bundle file
-# otherwise, and that JavaScript sees where its bundle came from.
+# otherwise, that JavaScript sees where its bundle came from, and that the
+# autolinked script library's module answers JavaScript.
 
 const TEST_ID := "consumer"
 const WAIT_MSEC := 60000
@@ -20,6 +21,7 @@ func _check() -> void:
 	var development: Variant = await ReactNativeHost.evaluate("__DEV__")
 	var script_url: Variant = await ReactNativeHost.evaluate("nativeModuleProxy.SourceCode.getConstants().scriptURL")
 	var expected_source: bool = String(script_url).begins_with("http://") if expect_metro else script_url == ProjectSettings.get_setting("react_native/bundle/path")
+	var score: Variant = await ReactNativeHost.evaluate("__consumerScore()")
 	var error := ReactNativeHost.get_last_error()
 	if not _mounted():
 		print("RN_SMOKE_FAILED: the template root did not mount")
@@ -29,6 +31,8 @@ func _check() -> void:
 		print("RN_SMOKE_FAILED: expected the %s bundle" % ("Metro" if expect_metro else "file"))
 	elif not expected_source:
 		print("RN_SMOKE_FAILED: SourceCode.scriptURL is %s" % script_url)
+	elif score != 1:
+		print("RN_SMOKE_FAILED: the linked Scoreboard module answered %s" % score)
 	else:
 		print("RN_SMOKE_OK: %s" % TEST_ID)
 	quit()

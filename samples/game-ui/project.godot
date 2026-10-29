@@ -1,18 +1,37 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
 config_version=5
 
 [application]
+
 config/name="React Native Godot Game"
 run/main_scene="res://game/GameDemo.tscn"
 config/features=PackedStringArray("4.7")
 
+[autoload]
+
+ScriptExampleScoreboard="*uid://bv4awg6f70wmm"
+
 [display]
+
 window/size/viewport_width=1024
 window/size/viewport_height=768
 
-[rendering]
-renderer/rendering_method="gl_compatibility"
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_script_example/plugin.cfg")
 
 [react_native]
 
-project/root="res://"
 network/tls/trusted_certificates="res://fixtures/tls/ca.pem"
+project/root="res://"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"

@@ -55,7 +55,7 @@ function runEditor(editor, args) {
 // developer server and against a fresh bundle file otherwise.
 async function runGodot(project, {packager = true, editor: openEditor = false, godot, godotArgs = []}) {
   ignoreNodeModules(project.jsRoot);
-  const editor = await resolveEditor({godot});
+  const editor = await resolveEditor({godot, project});
   generateContracts(project, editor);
   const usesMetro = packager && project.devServer.enabled;
   let metro = null;

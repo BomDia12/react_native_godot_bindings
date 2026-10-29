@@ -1,0 +1,19 @@
+{
+  "name": "react-native-godot-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example React Native Godot library with a native component and a TurboModule",
+  "license": "MIT",
+  "main": "src/index.js",
+  "files": ["godot", "specs", "src", "react-native.config.js"],
+  "codegenConfig": {
+    "name": "RNGodotExampleSpec",
+    "type": "all",
+    "jsSrcsDir": "specs"
+  },
+  "peerDependencies": {
+    "react": "19.2.3",
+    "react-native": "0.87.1",
+    "react-native-godot": "*"
+  }
+}

@@ -40,6 +40,23 @@
     "samples/game-ui/godot/registry.ts",
     "samples/game-ui/smoke/communication_case.gd",
     "samples/game-ui/smoke/tests/script_modules/case.gd",
-    "samples/game-ui/smoke/tests/script_modules/SmokeMain.tscn"
+    "samples/game-ui/smoke/tests/script_modules/SmokeMain.tscn",
+    "samples/libraries/react-native-godot-script-example/package.json",
+    "samples/libraries/react-native-godot-script-example/react-native.config.js",
+    "samples/libraries/react-native-godot-script-example/src/index.js",
+    "samples/libraries/react-native-godot-script-example/src/index.d.ts",
+    "samples/libraries/react-native-godot-script-example/godot/addons/godot_script_example/plugin.cfg",
+    "samples/libraries/react-native-godot-script-example/godot/addons/godot_script_example/plugin.gd",
+    "samples/libraries/react-native-godot-script-example/godot/addons/godot_script_example/plugin.gd.uid",
+    "samples/libraries/react-native-godot-script-example/godot/addons/godot_script_example/scoreboard.gd",
+    "samples/libraries/react-native-godot-script-example/godot/addons/godot_script_example/scoreboard.gd.uid",
+    "samples/libraries/react-native-godot-script-example/godot/addons/godot_script_example/scoreboard_binding.tres",
+    "samples/game-ui/addons/godot_script_example/plugin.cfg",
+    "samples/game-ui/addons/godot_script_example/plugin.gd",
+    "samples/game-ui/addons/godot_script_example/plugin.gd.uid",
+    "samples/game-ui/addons/godot_script_example/scoreboard.gd",
+    "samples/game-ui/addons/godot_script_example/scoreboard.gd.uid",
+    "samples/game-ui/addons/godot_script_example/scoreboard_binding.tres",
+    "samples/game-ui/godot-autolinking.lock.json"
   ]
 }
