@@ -206,9 +206,11 @@ RNComponentPicker::RNComponentPicker() {
 }
 
 // The editor's runtime knows which keys the bundle registers; reading them
-// starts it, as previewing a root does.
+// starts it, as previewing a root does, so a root that doesn't preview lists
+// only its contracts.
 void RNComponentPicker::_notification(int p_what) {
-	if (p_what == NOTIFICATION_ENTER_TREE && ReactNativeHost::get_singleton()) {
+	const ReactNativeRootView *root = Object::cast_to<ReactNativeRootView>(get_edited_object());
+	if (p_what == NOTIFICATION_ENTER_TREE && ReactNativeHost::get_singleton() && root && root->is_editor_preview()) {
 		const Signal completed = ReactNativeHost::get_singleton()->evaluate("RN$AppRegistry.getAppKeys()");
 		completed.get_object()->connect(completed.get_name(), callable_mp(this, &RNComponentPicker::_keys_received), CONNECT_ONE_SHOT);
 	}

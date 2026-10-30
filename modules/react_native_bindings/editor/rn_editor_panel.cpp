@@ -123,10 +123,14 @@ void RNEditorPanel::_probe() {
 void RNEditorPanel::_probe_completed(int p_result, int p_code, const PackedStringArray &, const PackedByteArray &p_body) {
 	const bool running = p_result == HTTPRequest::RESULT_SUCCESS && p_code == 200 && String::utf8(reinterpret_cast<const char *>(p_body.ptr()), p_body.size()) == "packager-status:running";
 	if (state == METRO_PROBING) {
+		// A server that answers slowly may still be Metro, so only one that
+		// refuses connections, or isn't Metro, makes the panel start its own.
 		if (running) {
 			state = METRO_ATTACHED;
-		} else {
+		} else if (p_result == HTTPRequest::RESULT_CANT_CONNECT || p_result == HTTPRequest::RESULT_SUCCESS) {
 			_start_metro();
+		} else {
+			_probe();
 		}
 	} else if (state == METRO_STARTING && running) {
 		state = METRO_RUNNING;

@@ -20,7 +20,7 @@ class RNDebuggerTab : public VBoxContainer {
 	GDCLASS(RNDebuggerTab, VBoxContainer);
 
 	struct CachedSourceMap {
-		uint64_t modified_time = 0;
+		String content_hash;
 		std::shared_ptr<RNSourceMap> map;
 	};
 

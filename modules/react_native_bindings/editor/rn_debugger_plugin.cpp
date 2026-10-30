@@ -77,17 +77,18 @@ void RNDebuggerTab::_show_frame(TreeItem *p_item, const String &p_method, const 
 	p_item->set_metadata(0, Dictionary({ { "file", p_file }, { "line", p_line }, { "column", p_column } }));
 }
 
-// Bundle files carry their source map beside them, as builds write it.
+// Bundle files carry their source map beside them, as builds write it. A
+// rebuild can keep the map's modified time, so its content tells them apart.
 std::shared_ptr<RNSourceMap> RNDebuggerTab::_source_map(const String &p_bundle) {
 	const String path = p_bundle + ".map";
-	const uint64_t modified_time = FileAccess::exists(path) ? FileAccess::get_modified_time(path) : 0;
+	const String content_hash = FileAccess::exists(path) ? FileAccess::get_md5(path) : String();
 	CachedSourceMap &cached = source_maps[p_bundle];
-	if (cached.modified_time == modified_time) {
+	if (cached.content_hash == content_hash) {
 		return cached.map;
 	}
-	cached.modified_time = modified_time;
+	cached.content_hash = content_hash;
 	cached.map = std::make_shared<RNSourceMap>();
-	if (modified_time == 0 || !cached.map->parse(FileAccess::get_file_as_string(path))) {
+	if (content_hash.is_empty() || !cached.map->parse(FileAccess::get_file_as_string(path))) {
 		cached.map = nullptr;
 	}
 	return cached.map;
@@ -97,7 +98,8 @@ void RNDebuggerTab::_symbolicate_with_metro(TreeItem *p_error, const Array &p_fr
 	Array stack;
 	for (const Variant &entry : p_frames) {
 		const Array frame = entry;
-		stack.push_back(Dictionary({ { "methodName", frame[0] }, { "file", frame[1] }, { "lineNumber", frame[2] }, { "column", frame[3] } }));
+		// Metro counts columns from 0, and JavaScript stack frames from 1.
+		stack.push_back(Dictionary({ { "methodName", frame[0] }, { "file", frame[1] }, { "lineNumber", frame[2] }, { "column", int(frame[3]) - 1 } }));
 	}
 	HTTPRequest *request = memnew(HTTPRequest);
 	add_child(request);
@@ -117,7 +119,7 @@ void RNDebuggerTab::_metro_symbolicated(int p_result, int p_code, const PackedSt
 	TreeItem *item = error->get_first_child();
 	for (int i = 0; i < stack.size() && item; ++i, item = item->get_next()) {
 		const Dictionary frame = stack[i];
-		_show_frame(item, frame.get("methodName", ""), frame.get("file", ""), frame.get("lineNumber", 0), frame.get("column", 0));
+		_show_frame(item, frame.get("methodName", ""), frame.get("file", ""), frame.get("lineNumber", 0), int(frame.get("column", 0)) + 1);
 	}
 }
 

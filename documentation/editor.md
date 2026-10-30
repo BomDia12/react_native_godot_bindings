@@ -19,7 +19,7 @@ registers (a "no contract" tooltip marks those), then:
   defaults and named record types are edited too.
 
 Saving a contract regenerates the TypeScript. A root warns when its contract is invalid,
-and when the generated TypeScript is older than the contract.
+and when the generated TypeScript differs from what the contracts generate.
 
 `fit_content`, `initial_properties` and `editor_preview` are described in
 [Roots in a scene](godot-platform.md#roots-in-a-scene).
@@ -60,7 +60,7 @@ A game the editor runs sends its JavaScript errors and console output to a **Rea
 tab in the debugger. Error stacks are symbolicated: through Metro's `/symbolicate` for a
 bundle Metro served, and from the `.map` file beside the bundle otherwise. Frames whose
 sources are inside the project open in the script editor; others, such as
-`node_modules`, are listed without a link. A `.map` file is read again when it changes. The
+`node_modules`, are listed without a link. A `.map` file is read again when its content changes. The
 tab clears when a new session starts.
 
 ## Exporting
@@ -69,6 +69,11 @@ Exports build a release bundle first, minified, with `react-native-godot/scripts
 and the project's `node`, after regenerating contracts. New assets are imported before the
 export collects its files, and the bundle is added to the export because a `.js` file is not
 a resource. Source maps, `.dependencies.json`, `assets-manifest.json` and the JavaScript
-project's `package.json`, `package-lock.json` and `tsconfig.json` stay out. A failed build
-is reported as an export error, and the export then has no bundle. Export templates ignore
-the developer server.
+project's `package.json`, `package-lock.json` and `tsconfig.json` stay out. Debug exports
+get the same release bundle; debug JavaScript in a game the editor runs. Export templates
+ignore the developer server.
+
+A failed build is reported as an export error, and the export then has no bundle. Godot
+doesn't let an export plugin stop an export: the export dialog shows it as failed, but
+`--export-release`, `--export-debug` and `--export-pack` print "completed with warnings"
+and exit successfully, so scripts that export should treat that message as a failure.

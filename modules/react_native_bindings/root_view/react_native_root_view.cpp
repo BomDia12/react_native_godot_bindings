@@ -1,6 +1,7 @@
 #include "react_native_root_view.h"
 
 #include "../components/rn_clip.h"
+#include "../editor/rn_contract_codegen.h"
 #include "../host/react_native_host.h"
 #include "../turbomodules/rn_godot_alerts.h"
 
@@ -229,9 +230,8 @@ PackedStringArray ReactNativeRootView::get_configuration_warnings() const {
 	if (!contract_error.is_empty()) {
 		warnings.push_back(vformat("The contract of '%s' is invalid: %s", application_key, contract_error));
 	}
-	const String generated = String(GLOBAL_GET("react_native/project/root")).path_join("godot/contracts.ts");
-	if (contract_resource.is_valid() && (!FileAccess::exists(generated) || FileAccess::get_modified_time(generated) < FileAccess::get_modified_time(contract_resource->get_path()))) {
-		warnings.push_back("The generated contract TypeScript is older than this contract; save the contract or build the bundle to regenerate it.");
+	if (contract_resource.is_valid() && !rn_generated_contracts_current()) {
+		warnings.push_back("The generated contract TypeScript differs from the contracts; save the contract or build the bundle to regenerate it.");
 	}
 	return warnings;
 }

@@ -160,8 +160,9 @@ String rn_contract_component_source(const Ref<RNComponentContract> &p_contract) 
 	return vformat("import {View} from 'react-native';\nimport type {%sProps} from '../godot/contracts';\n\nexport default function %s(props: %sProps) {\n  return <View />;\n}\n", component, component, component);
 }
 
-bool rn_generate_contracts(RNError &r_error) {
-	Vector<Ref<RNComponentContract>> contracts;
+namespace {
+
+bool load_contracts(Vector<Ref<RNComponentContract>> &r_contracts, RNError &r_error) {
 	const String directory = rn_contracts_directory();
 	PackedStringArray files = DirAccess::exists(directory) ? DirAccess::get_files_at(directory) : PackedStringArray();
 	files.sort();
@@ -172,11 +173,34 @@ bool rn_generate_contracts(RNError &r_error) {
 				r_error = RNError::make(RNErrorCode::VALIDATION, vformat("%s is not a contract for the component '%s'", directory.path_join(file), file.get_basename()), "contracts.generate");
 				return false;
 			}
-			contracts.push_back(contract);
+			r_contracts.push_back(contract);
 		}
 	}
+	return true;
+}
+
+bool file_holds(const String &p_path, const String &p_content) {
+	return FileAccess::exists(p_path) && FileAccess::get_file_as_string(p_path) == p_content;
+}
+
+} // namespace
+
+bool rn_generated_contracts_current() {
+	Vector<Ref<RNComponentContract>> contracts;
 	RNContractSources sources;
-	if (!rn_contract_sources(contracts, sources, r_error)) {
+	RNError error;
+	// An invalid contract has a warning of its own.
+	if (!load_contracts(contracts, error) || !rn_contract_sources(contracts, sources, error)) {
+		return true;
+	}
+	const String root = GLOBAL_GET("react_native/project/root");
+	return file_holds(root.path_join("godot/contracts.ts"), sources.contracts) && file_holds(root.path_join("godot/registry.ts"), sources.registry);
+}
+
+bool rn_generate_contracts(RNError &r_error) {
+	Vector<Ref<RNComponentContract>> contracts;
+	RNContractSources sources;
+	if (!load_contracts(contracts, r_error) || !rn_contract_sources(contracts, sources, r_error)) {
 		return false;
 	}
 	const String root = GLOBAL_GET("react_native/project/root");
