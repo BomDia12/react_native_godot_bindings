@@ -337,7 +337,7 @@ void ReactNativeRootView::_apply_contract() {
 	RNError error;
 	contract_error = String();
 	if (contract_resource.is_valid()) {
-		if (contract_resource->compile(compiled, error) && _contract_events_free(compiled, error)) {
+		if (contract_resource->compile(compiled, error) && _contract_free_on_script(compiled, error)) {
 			contract = std::make_shared<const RNCompiledContract>(std::move(compiled));
 		} else {
 			contract_error = error.describe();
@@ -403,11 +403,25 @@ void ReactNativeRootView::_apply_contract() {
 	notify_property_list_changed();
 }
 
-// A script signal would receive the event's emissions in place of the contract's.
-bool ReactNativeRootView::_contract_events_free(const RNCompiledContract &p_contract, RNError &r_error) const {
+// A script property or signal with a contract name would take the contract's
+// writes or emissions in its place.
+bool ReactNativeRootView::_contract_free_on_script(const RNCompiledContract &p_contract, RNError &r_error) const {
 	const Ref<Script> script = get_script();
+	if (script.is_null()) {
+		return true;
+	}
+	List<PropertyInfo> script_properties;
+	script->get_script_property_list(&script_properties);
+	for (const RNContractProperty &property : p_contract.properties) {
+		for (const PropertyInfo &info : script_properties) {
+			if (info.name == property.name) {
+				r_error = RNError::make(RNErrorCode::VALIDATION, vformat("property '%s' conflicts with a property of the root's script", property.name), "contract.apply");
+				return false;
+			}
+		}
+	}
 	for (const RNContractEvent &event : p_contract.events) {
-		if (script.is_valid() && script->has_script_signal(event.name)) {
+		if (script->has_script_signal(event.name)) {
 			r_error = RNError::make(RNErrorCode::VALIDATION, vformat("event '%s' conflicts with a signal of the root's script", event.name), "contract.apply");
 			return false;
 		}
@@ -545,9 +559,9 @@ void ReactNativeRootView::_begin_input(const Ref<InputEvent> &p_event, ObjectID 
 		return;
 	}
 	ReactNativeHost *host = ReactNativeHost::get_singleton();
-	if (host && host->handles_back_press() && p_event->is_action_pressed(SNAME("ui_cancel"))) {
+	if (host && host->handles_back_press() && p_event->is_action_pressed(SNAME("ui_cancel")) && !host->is_default_back_press(p_event)) {
 		get_viewport()->set_input_as_handled();
-		host->back_pressed();
+		host->back_pressed(false);
 		return;
 	}
 	const RNInputRouter::Target target = RNInputRouter::target_for(focused, Point2());

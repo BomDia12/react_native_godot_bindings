@@ -75,6 +75,10 @@ folly::dynamic rn_dynamic_from_variant(const Variant &p_value) {
 			const Rect2 rect = p_value;
 			return folly::dynamic::object("$godot", "Rect2")("x", rect.position.x)("y", rect.position.y)("width", rect.size.x)("height", rect.size.y);
 		}
+		case Variant::TRANSFORM2D: {
+			const Transform2D transform = p_value;
+			return folly::dynamic::object("$godot", "Transform2D")("xx", transform.columns[0].x)("xy", transform.columns[0].y)("yx", transform.columns[1].x)("yy", transform.columns[1].y)("ox", transform.columns[2].x)("oy", transform.columns[2].y);
+		}
 		default:
 			return nullptr;
 	}

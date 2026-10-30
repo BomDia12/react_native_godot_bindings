@@ -7,7 +7,8 @@ import {unsupported} from '../../src/unsupported';
 
 // Godot's ui_cancel action, a gamepad's B button by default, is the back
 // button. Godot can't wait for JavaScript to decide whether a press was
-// handled, so roots take ui_cancel from the game only while listeners exist.
+// handled, so roots take ui_cancel from the game only while listeners exist,
+// and give it back, as upstream's default handler does, when none handles it.
 const subscriptions = [];
 
 RCTDeviceEventEmitter.addListener('hardwareBackPress', () => {
@@ -17,6 +18,7 @@ RCTDeviceEventEmitter.addListener('hardwareBackPress', () => {
       return;
     }
   }
+  NativeGodotHost.invokeDefaultBackPressHandler();
 });
 
 function setSubscriptionCount(count) {

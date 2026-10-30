@@ -54,7 +54,7 @@ class TypeScriptWriter {
 		if (type == "record") {
 			return record(p_definition.get("fields", Dictionary()));
 		}
-		const HashMap<String, String> wrappers = { { "Color", "GodotColor" }, { "Vector2", "GodotVector2" }, { "Vector3", "GodotVector3" }, { "Rect2", "GodotRect2" } };
+		const HashMap<String, String> wrappers = { { "Color", "GodotColor" }, { "Vector2", "GodotVector2" }, { "Vector3", "GodotVector3" }, { "Rect2", "GodotRect2" }, { "Transform2D", "GodotTransform2D" } };
 		if (wrappers.has(type)) {
 			godot_types.insert(wrappers[type]);
 			return wrappers[type];

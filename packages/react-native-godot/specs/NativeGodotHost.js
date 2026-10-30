@@ -32,6 +32,7 @@ export interface Spec extends TurboModule {
   +getRootState: (rootTag: RootTag) => RootState;
   +setBackHandlerEnabled: (enabled: boolean) => void;
   +postMessage: (rootTag: ?number, name: string, payload: UnsafeMixed) => void;
+  +invokeDefaultBackPressHandler: () => void;
   +onRootStateChanged: EventEmitter<RootStateChange>;
   +onMessage: EventEmitter<GodotMessage>;
 }

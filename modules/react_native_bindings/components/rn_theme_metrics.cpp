@@ -40,16 +40,23 @@ RNThemeMetrics RNThemeMetrics::capture(Control *p_theme_owner, uint64_t p_revisi
 	return metrics;
 }
 
+bool RNThemeMetrics::same_theme_as(const RNThemeMetrics &p_other) const {
+	return text_font == p_other.text_font && text_font_size == p_other.text_font_size && text_color == p_other.text_color && editor_font == p_other.editor_font && editor_font_size == p_other.editor_font_size && line_edit_margins == p_other.line_edit_margins && text_edit_margins == p_other.text_edit_margins && switch_size == p_other.switch_size && progress_bar_size == p_other.progress_bar_size;
+}
+
 void RNThemeMetricsStore::publish(RNThemeMetrics p_metrics) {
-	auto published = std::make_shared<const RNThemeMetrics>(std::move(p_metrics));
 	std::lock_guard lock(mutex);
-	fallback = std::move(published);
+	if (!fallback->same_theme_as(p_metrics)) {
+		fallback = std::make_shared<const RNThemeMetrics>(std::move(p_metrics));
+	}
 }
 
 void RNThemeMetricsStore::publish(int p_surface, RNThemeMetrics p_metrics) {
-	auto published = std::make_shared<const RNThemeMetrics>(std::move(p_metrics));
 	std::lock_guard lock(mutex);
-	surfaces[p_surface] = std::move(published);
+	auto found = surfaces.find(p_surface);
+	if (found == surfaces.end() || !found->second->same_theme_as(p_metrics)) {
+		surfaces[p_surface] = std::make_shared<const RNThemeMetrics>(std::move(p_metrics));
+	}
 }
 
 void RNThemeMetricsStore::forget(int p_surface) {

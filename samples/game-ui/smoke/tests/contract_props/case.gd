@@ -62,6 +62,13 @@ func run() -> void:
 	if roster.get("enemies") != null:
 		fail("a script signal that shadows a contract event kept the contract")
 		return
+	var shadowing_property := GDScript.new()
+	shadowing_property.source_code = "extends ReactNativeRootView\nvar marked := 0\n"
+	shadowing_property.reload()
+	roster.set_script(shadowing_property)
+	if roster.get("enemies") != null:
+		fail("a script property that shadows a contract property kept the contract")
+		return
 	roster.set_script(null)
 	if roster.get("enemies") == null:
 		fail("removing the shadowing script did not restore the contract")

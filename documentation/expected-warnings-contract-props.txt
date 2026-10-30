@@ -1,2 +1,3 @@
-# The fixture intentionally gives a contract root a script whose signal shadows a contract event.
+# The fixture intentionally gives a contract root scripts whose signal or property shadows the contract.
 ^ERROR: The contract of 'EnemyRoster' is invalid: .*event 'mark' conflicts with a signal of the root's script.*$
+^ERROR: The contract of 'EnemyRoster' is invalid: .*property 'marked' conflicts with a property of the root's script.*$

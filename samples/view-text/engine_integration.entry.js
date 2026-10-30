@@ -7,7 +7,7 @@ global.__godotEmbedding = {};
 global.__godotRootStates = {};
 global.__godotTimers = {fired: 0};
 global.__godotScenes = {loads: [], errors: []};
-global.__godotGamepad = {presses: [], backPresses: 0};
+global.__godotGamepad = {presses: [], backPresses: 0, handlesBack: true};
 
 global.__godotStartTimer = delay => {
   global.__godotTimers.fired = 0;
@@ -76,7 +76,7 @@ function GodotSceneNestedApp() {
 
 const backListener = () => {
   global.__godotGamepad.backPresses += 1;
-  return true;
+  return global.__godotGamepad.handlesBack;
 };
 let backSubscription = null;
 global.__godotListenForBack = listening => {
