@@ -5,6 +5,7 @@
 #include "../singletons/react_native_file_singleton.h"
 #include "rn_host_instance.h"
 
+#include "core/input/input.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/main/scene_tree.h"
@@ -22,7 +23,7 @@ void RNHostLifecycle::_notification(int p_what) {
 	if (p_what == NOTIFICATION_APPLICATION_PAUSED || p_what == NOTIFICATION_APPLICATION_RESUMED) {
 		host->set_application_paused(p_what == NOTIFICATION_APPLICATION_PAUSED);
 	} else if (p_what == NOTIFICATION_WM_GO_BACK_REQUEST && host->handles_back_press()) {
-		host->back_pressed();
+		host->back_pressed(true);
 	}
 }
 
@@ -275,9 +276,46 @@ bool ReactNativeHost::handles_back_press() const {
 	return instance && instance->handles_back_press();
 }
 
-void ReactNativeHost::back_pressed() {
+void ReactNativeHost::back_pressed(bool p_go_back_request) {
 	if (instance) {
+		back_press_quits = p_go_back_request && project_quits_on_go_back;
 		instance->back_pressed();
+	}
+}
+
+// No BackHandler listener handled the last back press, so Godot gets what it
+// would have had without them: Android's back quits when the project says
+// so, and ui_cancel reaches the game.
+void ReactNativeHost::invoke_default_back_press() {
+	if (back_press_quits) {
+		SceneTree::get_singleton()->quit();
+		return;
+	}
+	default_back_press.instantiate();
+	default_back_press->set_action(SNAME("ui_cancel"));
+	default_back_press->set_pressed(true);
+	Input::get_singleton()->parse_input_event(default_back_press);
+	Ref<InputEventAction> release = default_back_press->duplicate();
+	release->set_pressed(false);
+	Input::get_singleton()->parse_input_event(release);
+}
+
+// SceneTree quits on Android's back button by itself, before JavaScript can
+// handle it, so it doesn't while BackHandler has listeners.
+void ReactNativeHost::_sync_back_press() {
+	if (handles_back_press() == takes_back_press) {
+		return;
+	}
+	SceneTree *tree = SceneTree::get_singleton();
+	if (!tree) {
+		return;
+	}
+	takes_back_press = !takes_back_press;
+	if (takes_back_press) {
+		project_quits_on_go_back = tree->is_quit_on_go_back();
+		tree->set_quit_on_go_back(false);
+	} else {
+		tree->set_quit_on_go_back(project_quits_on_go_back);
 	}
 }
 
@@ -330,6 +368,7 @@ void ReactNativeHost::_process_frame() {
 		instance->process_frame();
 	}
 	_finish_retired();
+	_sync_back_press();
 	processing_frame = false;
 }
 
@@ -359,6 +398,7 @@ void ReactNativeHost::_finish_evaluation(uint64_t p_id, const Variant &p_result)
 
 void ReactNativeHost::shutdown() {
 	_retire();
+	_sync_back_press();
 	for (const std::shared_ptr<RNHostInstance> &retired : retiring) {
 		retired->finish();
 	}

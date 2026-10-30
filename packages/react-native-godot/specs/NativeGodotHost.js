@@ -24,6 +24,7 @@ export type RootStateChange = {
 export interface Spec extends TurboModule {
   +getRootState: (rootTag: RootTag) => RootState;
   +setBackHandlerEnabled: (enabled: boolean) => void;
+  +invokeDefaultBackPressHandler: () => void;
   +onRootStateChanged: EventEmitter<RootStateChange>;
 }
 

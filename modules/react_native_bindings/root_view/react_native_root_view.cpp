@@ -289,9 +289,9 @@ void ReactNativeRootView::_begin_input(const Ref<InputEvent> &p_event, ObjectID 
 		return;
 	}
 	ReactNativeHost *host = ReactNativeHost::get_singleton();
-	if (host && host->handles_back_press() && p_event->is_action_pressed(SNAME("ui_cancel"))) {
+	if (host && host->handles_back_press() && p_event->is_action_pressed(SNAME("ui_cancel")) && !host->is_default_back_press(p_event)) {
 		get_viewport()->set_input_as_handled();
-		host->back_pressed();
+		host->back_pressed(false);
 		return;
 	}
 	const RNInputRouter::Target target = RNInputRouter::target_for(focused, Point2());

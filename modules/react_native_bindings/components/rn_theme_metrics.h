@@ -22,12 +22,14 @@ struct RNThemeMetrics {
 	uint64_t revision = 0;
 
 	static RNThemeMetrics capture(Control *p_theme_owner, uint64_t p_revision);
+	bool same_theme_as(const RNThemeMetrics &p_other) const;
 };
 
 // The theme each surface measures and draws with, captured from its root, so
 // roots under differently themed controls look like their surroundings.
 // Surfaces without metrics of their own, and readers without a surface, use
-// the fallback.
+// the fallback. Publishing the theme a surface already has keeps its revision,
+// so text measured with it stays cached while its root moves or resizes.
 class RNThemeMetricsStore {
 	mutable std::mutex mutex;
 	std::shared_ptr<const RNThemeMetrics> fallback = std::make_shared<RNThemeMetrics>();

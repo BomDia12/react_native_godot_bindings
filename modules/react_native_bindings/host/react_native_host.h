@@ -2,6 +2,7 @@
 
 #include "rn_service_settings.h"
 
+#include "core/input/input_event.h"
 #include "core/object/object.h"
 #include "core/object/ref_counted.h"
 #include "core/templates/hash_map.h"
@@ -61,6 +62,10 @@ class ReactNativeHost : public Object {
 	std::deque<std::function<void()>> deferred;
 	HashMap<uint64_t, Ref<RNEvaluation>> evaluations;
 	uint64_t next_evaluation = 1;
+	bool takes_back_press = false;
+	bool project_quits_on_go_back = true;
+	bool back_press_quits = false;
+	Ref<InputEventAction> default_back_press;
 
 	mutable std::mutex error_mutex;
 	String last_error;
@@ -68,6 +73,7 @@ class ReactNativeHost : public Object {
 
 	bool _start();
 	void _retire();
+	void _sync_back_press();
 	void _finish_retired();
 	void _start_surface(ReactNativeRootView *p_root);
 	void _publish_theme(ReactNativeRootView *p_root, facebook::react::SurfaceId p_surface);
@@ -103,7 +109,9 @@ public:
 	void scene_binding_changed(facebook::react::SurfaceId p_surface);
 	void root_state_changed(ReactNativeRootView *p_root);
 	bool handles_back_press() const;
-	void back_pressed();
+	void back_pressed(bool p_go_back_request);
+	void invoke_default_back_press();
+	bool is_default_back_press(const Ref<InputEvent> &p_event) const { return p_event.ptr() == default_back_press.ptr(); }
 	ReactNativeRootView *find_root(facebook::react::SurfaceId p_surface) const;
 	void shutdown();
 };

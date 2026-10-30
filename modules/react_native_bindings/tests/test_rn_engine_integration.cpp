@@ -194,9 +194,18 @@ TEST_CASE("[ReactNativeBindings][EngineIntegration][SceneTree] GodotScene fills 
 	CHECK(Object::cast_to<SubViewportContainer>(node_instance->get_parent()->get_parent())->is_stretch_enabled());
 	CHECK(host->get_instance() == node_instance);
 	CHECK(host->get_child_count(true) == 1);
+	CHECK(Object::cast_to<SubViewport>(node_instance->get_parent())->is_using_own_world_3d());
 
+	// The game owns the instance it receives and can free it.
+	memdelete(node_instance);
+	CHECK(host->get_instance() == nullptr);
 	host->set_source(String());
 	CHECK(host->get_instance() == nullptr);
+
+	Node *control_again = load_scene(host, memnew(Control), "user://rn_test_control_scene.tscn");
+	memdelete(control_again);
+	host->set_source(String());
+	CHECK(host->get_child_count(true) == 0);
 	host->set_callbacks(nullptr, nullptr);
 	memdelete(host);
 }

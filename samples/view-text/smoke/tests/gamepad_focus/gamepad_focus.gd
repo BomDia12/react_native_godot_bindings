@@ -2,7 +2,8 @@ extends Node
 
 # A gamepad drives React views through Godot's ui_* actions: D-pad focus
 # follows nextFocus* props, A presses the focused view, and B reaches
-# BackHandler only while JavaScript listens for it.
+# BackHandler only while JavaScript listens for it, and reaches the game when
+# no listener handles it.
 
 const WAIT_MSEC := 20000
 
@@ -80,10 +81,14 @@ func _run() -> void:
 	if unhandled_cancels != 0:
 		fail("a handled back press also reached the game")
 		return
+	await js("__godotGamepad.handlesBack = false")
+	press(JOY_BUTTON_B)
+	if not await wait_until(func(): return await back_presses() == 2 and unhandled_cancels == 1, "an unhandled back press to reach the game"):
+		return
 	await js("__godotListenForBack(false)")
 	press(JOY_BUTTON_B)
 	await get_tree().process_frame
-	if unhandled_cancels != 1 or await back_presses() != 1:
+	if unhandled_cancels != 2 or await back_presses() != 2:
 		fail("without listeners, B did not stay with the game (%d unhandled, %d back presses)" % [unhandled_cancels, await back_presses()])
 		return
 	print("RN_SMOKE_OK: gamepad-focus")

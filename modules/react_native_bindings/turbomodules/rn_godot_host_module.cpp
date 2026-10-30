@@ -1,5 +1,6 @@
 #include "rn_godot_host_module.h"
 
+#include "../host/react_native_host.h"
 #include "../host/rn_main_thread_queue.h"
 #include "rn_js_promise.h"
 
@@ -50,6 +51,14 @@ jsi::Object RNGodotHostModule::getRootState(jsi::Runtime &rt, double rootTag) {
 
 void RNGodotHostModule::setBackHandlerEnabled(jsi::Runtime &, bool enabled) {
 	events->set_back_handler_enabled(enabled);
+}
+
+void RNGodotHostModule::invokeDefaultBackPressHandler(jsi::Runtime &) {
+	host.main_thread->post([] {
+		if (ReactNativeHost *host_singleton = ReactNativeHost::get_singleton()) {
+			host_singleton->invoke_default_back_press();
+		}
+	});
 }
 
 void RNGodotHostModule::emit_root_state(int p_root_tag, const RNRootState &p_state) {

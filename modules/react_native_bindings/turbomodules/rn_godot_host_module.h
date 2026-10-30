@@ -35,6 +35,7 @@ public:
 	RNGodotHostModule(std::shared_ptr<CallInvoker> jsInvoker, RNHostModuleContext p_host, std::shared_ptr<RNGodotHostEvents> p_events);
 	jsi::Object getRootState(jsi::Runtime &rt, double rootTag);
 	void setBackHandlerEnabled(jsi::Runtime &rt, bool enabled);
+	void invokeDefaultBackPressHandler(jsi::Runtime &rt);
 	void emit_root_state(int p_root_tag, const RNRootState &p_state);
 };
 
