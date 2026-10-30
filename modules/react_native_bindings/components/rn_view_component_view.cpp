@@ -208,7 +208,7 @@ void RNViewComponentView::resolve_focus_references(const std::function<Control *
 	view->set_focus_neighbor(SIDE_LEFT, path_to(props->nextFocusLeft));
 	view->set_focus_neighbor(SIDE_RIGHT, path_to(props->nextFocusRight));
 	view->set_focus_next(path_to(props->nextFocusForward));
-	if (preferred_focus_pending && view->is_inside_tree() && view->get_focus_mode() != Control::FOCUS_NONE) {
+	if (preferred_focus_pending && view->is_visible_in_tree() && view->get_focus_mode() != Control::FOCUS_NONE) {
 		preferred_focus_pending = false;
 		view->call_deferred("grab_focus");
 	}

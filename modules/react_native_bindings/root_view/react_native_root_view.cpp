@@ -533,6 +533,12 @@ void ReactNativeRootView::input(const Ref<InputEvent> &p_event) {
 // controls inside a GodotScene keep theirs.
 void ReactNativeRootView::_begin_input(const Ref<InputEvent> &p_event, ObjectID p_viewport_id) {
 	++input_serial;
+	// The release of a back press the root took goes with it, wherever focus is now.
+	if (took_back_press && p_event->is_action_released(SNAME("ui_cancel"))) {
+		took_back_press = false;
+		get_viewport()->set_input_as_handled();
+		return;
+	}
 	if (Ref<InputEventMouseMotion>(p_event).is_valid()) {
 		callable_mp(this, &ReactNativeRootView::_route_unclaimed_motion).call_deferred(p_event, input_serial, p_viewport_id);
 		return;
@@ -545,6 +551,7 @@ void ReactNativeRootView::_begin_input(const Ref<InputEvent> &p_event, ObjectID 
 	ReactNativeHost *host = ReactNativeHost::get_singleton();
 	if (host && host->handles_back_press() && p_event->is_action_pressed(SNAME("ui_cancel")) && !host->is_default_back_press(p_event)) {
 		get_viewport()->set_input_as_handled();
+		took_back_press = true;
 		host->back_pressed(false);
 		return;
 	}
