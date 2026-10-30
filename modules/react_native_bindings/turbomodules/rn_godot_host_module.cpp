@@ -91,7 +91,7 @@ void RNGodotHostModule::postMessage(jsi::Runtime &rt, std::optional<double> root
 	host.main_thread->post([find_root = host.find_root, root_tag, message, value = decoded.value] {
 		Object *target = root_tag ? find_root(*root_tag) : ReactNativeHost::get_singleton();
 		if (!target) {
-			WARN_PRINT(vformat("The message '%s' was dropped because root %d is not running.", message, *root_tag));
+			WARN_PRINT(root_tag ? vformat("The message '%s' was dropped because root %d is not running.", message, *root_tag) : vformat("The message '%s' was dropped because React Native is shutting down.", message));
 			return;
 		}
 		target->emit_signal("message_received", message, value);

@@ -126,7 +126,7 @@ TEST_CASE("[ReactNativeBindings][Contracts] invalid names, defaults and types ar
 	contract->set_properties({ property("phase", camel, Dictionary({ { "phaseOne", 0 } })) });
 	CHECK(compile_error(contract).contains("phaseOne"));
 
-	for (const char *type : { "int64", "Uint8Array", "Object" }) {
+	for (const char *type : { "dynamic", "int64", "Uint8Array", "Object" }) {
 		contract = roster_contract();
 		Dictionary value = schema(type);
 		if (String(type) == "Object") {

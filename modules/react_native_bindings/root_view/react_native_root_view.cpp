@@ -323,7 +323,7 @@ void ReactNativeRootView::_apply_contract() {
 	RNCompiledContract compiled;
 	RNError error;
 	if (contract_resource.is_valid()) {
-		if (contract_resource->compile(compiled, error) && _contract_events_free(compiled, error)) {
+		if (contract_resource->compile(compiled, error) && _contract_free_on_script(compiled, error)) {
 			contract = std::make_shared<const RNCompiledContract>(std::move(compiled));
 		} else {
 			ERR_PRINT(vformat("The contract of '%s' is invalid: %s", application_key, error.describe()));
@@ -387,11 +387,25 @@ void ReactNativeRootView::_apply_contract() {
 	notify_property_list_changed();
 }
 
-// A script signal would receive the event's emissions in place of the contract's.
-bool ReactNativeRootView::_contract_events_free(const RNCompiledContract &p_contract, RNError &r_error) const {
+// A script property or signal with a contract name would take the contract's
+// writes or emissions in its place.
+bool ReactNativeRootView::_contract_free_on_script(const RNCompiledContract &p_contract, RNError &r_error) const {
 	const Ref<Script> script = get_script();
+	if (script.is_null()) {
+		return true;
+	}
+	List<PropertyInfo> script_properties;
+	script->get_script_property_list(&script_properties);
+	for (const RNContractProperty &property : p_contract.properties) {
+		for (const PropertyInfo &info : script_properties) {
+			if (info.name == property.name) {
+				r_error = RNError::make(RNErrorCode::VALIDATION, vformat("property '%s' conflicts with a property of the root's script", property.name), "contract.apply");
+				return false;
+			}
+		}
+	}
 	for (const RNContractEvent &event : p_contract.events) {
-		if (script.is_valid() && script->has_script_signal(event.name)) {
+		if (script->has_script_signal(event.name)) {
 			r_error = RNError::make(RNErrorCode::VALIDATION, vformat("event '%s' conflicts with a signal of the root's script", event.name), "contract.apply");
 			return false;
 		}

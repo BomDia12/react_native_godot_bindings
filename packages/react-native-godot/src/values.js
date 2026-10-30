@@ -11,3 +11,5 @@ export const rect2 = (x, y, width, height) => ({
   width,
   height,
 });
+// The columns of a Godot Transform2D: the x axis, the y axis and the origin.
+export const transform2d = (xx, xy, yx, yy, ox, oy) => ({$godot: 'Transform2D', xx, xy, yx, yy, ox, oy});

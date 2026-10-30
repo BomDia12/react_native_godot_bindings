@@ -292,10 +292,23 @@ Dictionary ReactNativeHost::register_module(const String &p_name, Object *p_targ
 	}
 	attachment->identity = next_module_identity++;
 	modules[p_name] = attachment;
+	// A node outside the tree is no module target, so readiness follows the node.
+	if (Node *node = Object::cast_to<Node>(p_target)) {
+		const Callable moved = callable_mp(this, &ReactNativeHost::_module_node_moved).bind(p_name, attachment->identity);
+		node->connect(SNAME("tree_entered"), moved);
+		node->connect(SNAME("tree_exited"), moved);
+	}
 	if (instance) {
 		instance->module_changed(p_name);
 	}
 	return Dictionary();
+}
+
+void ReactNativeHost::_module_node_moved(const String &p_name, uint64_t p_identity) {
+	const std::shared_ptr<const RNSceneAttachment> *module = modules.getptr(p_name);
+	if (module && (*module)->identity == p_identity && instance) {
+		instance->module_changed(p_name);
+	}
 }
 
 void ReactNativeHost::unregister_module(const String &p_name) {

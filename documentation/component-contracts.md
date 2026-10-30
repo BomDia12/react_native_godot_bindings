@@ -32,13 +32,16 @@ events = [{"name": "mark", "arguments": [{"name": "enemy_id", "value": {"type": 
 
 Property, event, argument and record field names are snake_case. Property and event names
 must be unique and can't reuse a property, method or signal of `ReactNativeRootView`, nor
-a signal of the root's script. Every property needs a default that
-fits its schema. Contract values start the surface as plain props, so they can't use
-`int64`, `Uint8Array` or `Object` schemas; pass objects through a scene binding or an
-[application module](interop.md#application-modules). Named types can't contain
-themselves, directly or through fields and arrays. A contract file is named after its
-component: `contracts/EnemyRoster.tres` must declare `component = "EnemyRoster"`. An invalid contract reports why when its root loads it, and the root then
-behaves as if the component had no contract.
+a property or signal of the root's script. Every property needs a default that fits its
+schema. Contract values start the surface as plain props, so they can't use `int64`,
+`Uint8Array` or `Object` schemas; pass objects through a scene binding or an
+[application module](interop.md#application-modules). Field names convert between
+snake_case and camelCase by the schema, so values can't be `dynamic` either; send
+free-form values as [messages](interop.md#messages). Named types can't contain themselves,
+directly or through fields and arrays. A contract file is named after its component:
+`contracts/EnemyRoster.tres` must declare `component = "EnemyRoster"`. An invalid contract
+reports why when its root loads it, and the root then behaves as if the component had no
+contract.
 
 ## From Godot
 
@@ -91,7 +94,7 @@ export default function EnemyHealthBar({displayName, health, onMark}: EnemyHealt
 |---|---|
 | `boolean`, `string` | `boolean`, `string` |
 | `integer`, `number` | `number` |
-| `Color`, `Vector2`, `Vector3`, `Rect2` | `GodotColor`, `GodotVector2`, `GodotVector3`, `GodotRect2` |
+| `Color`, `Vector2`, `Vector3`, `Rect2`, `Transform2D` | `GodotColor`, `GodotVector2`, `GodotVector3`, `GodotRect2`, `GodotTransform2D` |
 | `array` | `readonly T[]` |
 | `record`, named record | an object type with camelCase fields |
 | `nullable` | `T \| null` |

@@ -1,7 +1,8 @@
 extends "res://smoke/communication_case.gd"
 
 # A GDScript object registered as an application module answers every root,
-# survives a hard reload, and is gone once unregistered.
+# survives a hard reload, and is gone once unregistered. A module's node
+# outside the tree becomes ready when it enters.
 
 signal score_changed(score: int)
 
@@ -56,3 +57,22 @@ func run() -> void:
 	ReactNativeHost.unregister_module("Scoreboard")
 	if await js("__moduleReady('Scoreboard')"):
 		fail("an unregistered module stayed ready")
+		return
+
+	# A module whose node isn't in the tree yet becomes ready when it enters.
+	var scoreboard := GDScript.new()
+	scoreboard.source_code = "extends Node\nsignal score_changed(score: int)\nfunc snapshot() -> Dictionary:\n\treturn {\"score\": 0}\nfunc add(points: int) -> int:\n\treturn points\n"
+	scoreboard.reload()
+	var later := Node.new()
+	later.set_script(scoreboard)
+	if not ReactNativeHost.register_module("Later", later, binding()).is_empty():
+		fail("registering a module for a node outside the tree failed")
+		return
+	if await js("__moduleReady('Later')"):
+		fail("a module whose node is outside the tree was ready")
+		return
+	add_child(later)
+	if not await wait_until(func(): return await js("__moduleReady('Later')"), "the module once its node entered the tree"):
+		return
+	ReactNativeHost.unregister_module("Later")
+	later.queue_free()
