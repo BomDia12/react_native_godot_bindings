@@ -77,8 +77,13 @@ const commands = [
     description: 'Builds a Linux Godot editor with the native modules that autolink-godot linked',
     options: [{name: '--source <checkout>', description: 'React Native Godot bindings checkout to build from; defaults to the commit this package was released from'}],
     func: async (_argv, config, args) => {
+      const {autolink} = require('./autolink.cjs');
       const {buildGodotEditor} = require('./build-editor.cjs');
-      console.info('Built ' + buildGodotEditor(requireProject(config), args));
+      const project = requireProject(config);
+      const editor = buildGodotEditor(project, args);
+      // Plugins of native libraries wait for this editor to be enabled.
+      await autolink(project, config, {godot: editor});
+      console.info('Built ' + editor);
     },
   },
 ];

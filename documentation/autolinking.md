@@ -103,12 +103,16 @@ The command reads the libraries the React Native CLI finds in `node_modules`:
 - It copies each addon to `res://addons/<directory>` and enables its plugin through the
   Godot editor, as Project Settings does, so `_enable_plugin` runs. A removed library's
   plugin is disabled and its copy deleted. `godot-autolinking.lock.json` records the
-  copies the command owns: it never replaces an `addons/` directory it didn't create.
-  Copies keep the `.uid` and `.import` files Godot adds to them.
+  copies the command owns: it never replaces an `addons/` directory it didn't create, and
+  two libraries can't link addons with the same directory name. Copies keep the `.uid` and
+  `.import` files Godot adds to them.
+- The plugin of a library that also has a native module may use the module's classes, so
+  it is enabled once an editor with the module exists: `build-godot-editor` enables it.
 
 Commit the addon copies, the lock file and `project.godot`. `--check` changes nothing
-and exits with an error when the outputs are out of date, or when native modules are
-linked and no editor is built for them. Enabling plugins uses the editor in `--godot` or
+and exits with an error when the manifest, the codegen, the addon copies, the lock file or
+the enabled plugins are out of date, or when native modules are linked and no editor is
+built for them. Enabling plugins uses the editor in `--godot` or
 `GODOT_EDITOR`, then the one built for the linked modules, then the prebuilt editor.
 
 ## Building the editor
@@ -120,6 +124,8 @@ into `~/.cache/react-native-godot/source/<commit>/`, and runs `bootstrap.sh`,
 `autolinking.json`. It keeps the editor, `libhermesvm.so` and `libjsi.so` in
 `~/.cache/react-native-godot/editors/<hash>/`. `--source <checkout>` builds from another
 bindings checkout. The command builds Linux editors only, and warnings don't fail it.
+Afterwards it links the project again with the new editor, which enables the plugins that
+waited for it.
 
 `run-godot`, `build-godot` and the other commands use the editor built for the project's
 current hash, and ask for `build-godot-editor` when there is none. Projects without native

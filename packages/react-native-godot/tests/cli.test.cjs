@@ -201,7 +201,7 @@ test('autolinking writes the native manifest and owns the addons it copies', asy
   fs.writeFileSync(path.join(root, 'addons', 'lib_a', 'plugin.cfg.uid'), 'uid://kept');
   assert.deepEqual(await autolink(project, config, {check: true, godot}), []);
   fs.appendFileSync(path.join(root, 'libraries', 'lib_a', 'godot', 'rn_module', 'config.py'), '# changed\n');
-  assert.deepEqual(await autolink(project, config, {check: true, godot}), ['the native module manifest is out of date']);
+  assert.deepEqual(await autolink(project, config, {check: true, godot}), ['the native module manifest or its codegen is out of date']);
   await autolink(project, config, {godot});
   assert.notEqual(readManifest(root).hash, manifest.hash);
 
@@ -214,4 +214,28 @@ test('autolinking writes the native manifest and owns the addons it copies', asy
   assert.ok(fs.existsSync(path.join(root, 'addons', 'lib_b')));
   assert.match(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /--react-native-disable-plugins=lib_a/);
   assert.deepEqual(readManifest(root), {hash: null, modules: [], codegen: []});
+});
+
+test('autolinking checks addon ownership, rejects colliding addons and waits for native editors', async t => {
+  const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
+  const godot = fakeEditor(root);
+  const project = loadGodotProject(root);
+  const scriptOnly = library(root, 'scores', {addon: 'godot/addons/scores'});
+  await autolink(project, {root, dependencies: {scores: scriptOnly}}, {godot});
+  fs.rmSync(path.join(root, 'godot-autolinking.lock.json'));
+  assert.deepEqual(await autolink(project, {root, dependencies: {scores: scriptOnly}}, {check: true, godot}), ["godot-autolinking.lock.json doesn't record the linked addons"]);
+
+  const twin = library(path.join(root, 'other'), 'scores', {addon: 'godot/addons/scores'});
+  await assert.rejects(autolink(project, {root, dependencies: {scores: scriptOnly, twin}}, {godot}), /scores and twin both link an addon named scores/);
+
+  const editorVariable = process.env.GODOT_EDITOR;
+  delete process.env.GODOT_EDITOR;
+  t.after(() => editorVariable != null && (process.env.GODOT_EDITOR = editorVariable));
+  t.mock.method(console, 'info', () => {});
+  const native = library(root, 'meter', {module: 'godot/rn_module', addon: 'godot/addons/meter'});
+  fs.rmSync(path.join(root, 'addons', 'scores'), {recursive: true});
+  await autolink(project, {root, dependencies: {meter: native}});
+  assert.ok(fs.existsSync(path.join(root, 'addons', 'meter', 'plugin.cfg')));
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /enable-plugins=meter/);
+  assert.match(console.info.mock.calls.at(-1).arguments[0], /build-godot-editor to enable meter/);
 });

@@ -78,6 +78,14 @@ function hashTree(hash, root) {
   }
 }
 
+function sameFiles(a, b, files) {
+  return files.every(file => fs.readFileSync(path.join(a, file)).equals(fs.readFileSync(path.join(b, file))));
+}
+
+function sameTree(a, b) {
+  return fs.existsSync(a) && fs.existsSync(b) && JSON.stringify(treeFiles(a)) === JSON.stringify(treeFiles(b)) && sameFiles(a, b, treeFiles(a));
+}
+
 // Godot writes .uid and .import files beside an addon's files. Linked copies
 // keep them, so the project's references to the addon stay valid.
 function addonFiles(root, source) {
@@ -89,7 +97,7 @@ function sameAddon(source, copy) {
     return false;
   }
   const files = treeFiles(source);
-  return JSON.stringify(files) === JSON.stringify(addonFiles(copy, source)) && files.every(file => fs.readFileSync(path.join(source, file)).equals(fs.readFileSync(path.join(copy, file))));
+  return JSON.stringify(files) === JSON.stringify(addonFiles(copy, source)) && sameFiles(source, copy, files);
 }
 
 function copyAddon(source, copy) {
@@ -151,14 +159,34 @@ function addonDirectory(library) {
   return path.basename(library.addon);
 }
 
+// The addons the libraries copy, by the directory each one owns.
+function addonOwners(libraries) {
+  const owners = {};
+  for (const library of libraries.filter(candidate => candidate.addon != null)) {
+    const directory = addonDirectory(library);
+    if (directory in owners) {
+      throw new Error(`${owners[directory]} and ${library.name} both link an addon named ${directory}.`);
+    }
+    owners[directory] = library.name;
+  }
+  return owners;
+}
+
+function codegenCurrent(manifest, staging) {
+  return manifest.codegen.every(directory => sameTree(path.join(staging, path.basename(directory)), directory));
+}
+
 // Lists what differs from a fresh autolink, without changing anything.
-function staleOutputs(project, jsRoot, libraries, manifest) {
+function staleOutputs(project, jsRoot, libraries, manifest, staging) {
   const problems = [];
-  if (JSON.stringify(readManifest(jsRoot)) !== JSON.stringify(manifest)) {
-    problems.push('the native module manifest is out of date');
+  if (JSON.stringify(readManifest(jsRoot)) !== JSON.stringify(manifest) || !codegenCurrent(manifest, staging)) {
+    problems.push('the native module manifest or its codegen is out of date');
   }
   const addons = libraries.filter(library => library.addon != null);
   const locked = readJson(path.join(jsRoot, LOCK_FILE), {addons: {}}).addons;
+  if (addons.length > 0 && JSON.stringify(locked) !== JSON.stringify(addonOwners(libraries))) {
+    problems.push(`${LOCK_FILE} doesn't record the linked addons`);
+  }
   const enabled = enabledPlugins(project.godotRoot);
   for (const library of addons) {
     const directory = addonDirectory(library);
@@ -188,33 +216,40 @@ async function autolink(project, config, {check = false, godot} = {}) {
   try {
     const manifest = nativeManifest(libraries, outputDir, staging);
     if (check) {
-      const problems = staleOutputs(project, jsRoot, libraries, manifest);
+      const problems = staleOutputs(project, jsRoot, libraries, manifest, staging);
       if (manifest.hash != null && godot == null && process.env.GODOT_EDITOR == null && linkedEditor(manifest) == null) {
         problems.push('no editor is built for the linked native modules; run react-native build-godot-editor');
       }
       return problems;
     }
-    if (JSON.stringify(readManifest(jsRoot)) !== JSON.stringify(manifest)) {
+    if (JSON.stringify(readManifest(jsRoot)) !== JSON.stringify(manifest) || !codegenCurrent(manifest, staging)) {
       fs.rmSync(path.join(outputDir, 'codegen'), {recursive: true, force: true});
       fs.mkdirSync(outputDir, {recursive: true});
       fs.cpSync(staging, path.join(outputDir, 'codegen'), {recursive: true});
       fs.writeFileSync(manifestPath(jsRoot), JSON.stringify(manifest, null, 2) + '\n');
     }
-    await linkAddons(project, jsRoot, libraries, godot);
+    await linkAddons(project, jsRoot, libraries, manifest, godot);
     return [];
   } finally {
     fs.rmSync(staging, {recursive: true, force: true});
   }
 }
 
-async function linkAddons(project, jsRoot, libraries, godot) {
+async function linkAddons(project, jsRoot, libraries, manifest, godot) {
   const lockPath = path.join(jsRoot, LOCK_FILE);
   const locked = readJson(lockPath, {addons: {}}).addons;
   const addons = libraries.filter(library => library.addon != null);
-  const current = Object.fromEntries(addons.map(library => [addonDirectory(library), library.name]));
+  const current = addonOwners(libraries);
   const removed = Object.keys(locked).filter(directory => !(directory in current));
   const enabled = enabledPlugins(project.godotRoot);
-  const toEnable = Object.keys(current).filter(directory => !enabled.includes(directory));
+  // A plugin of a library with a native module may use the module's classes,
+  // so it waits for the editor built with them; build-godot-editor enables it.
+  const editorPending = manifest.hash != null && godot == null && process.env.GODOT_EDITOR == null && linkedEditor(manifest) == null;
+  const waiting = addons.filter(library => editorPending && library.module != null).map(addonDirectory);
+  const toEnable = Object.keys(current).filter(directory => !enabled.includes(directory) && !waiting.includes(directory));
+  if (waiting.some(directory => !enabled.includes(directory))) {
+    console.info(`Run react-native build-godot-editor to enable ${waiting.join(', ')}.`);
+  }
   const toDisable = removed.filter(directory => enabled.includes(directory));
   for (const directory of Object.keys(current)) {
     if (!(directory in locked) && fs.existsSync(path.join(project.godotRoot, 'addons', directory))) {
