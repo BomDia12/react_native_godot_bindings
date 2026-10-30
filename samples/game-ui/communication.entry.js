@@ -40,6 +40,14 @@ global.__scoreboardAddLater = (rootTag, points) => {
   communication.scoreboards[rootTag].addLater(points).then(score => communication.asyncScores.push(score));
 };
 global.__moduleReady = name => getGodotModule(name).ready;
+global.__postObjectMessage = () => {
+  try {
+    postGodotMessage('object', {node: {$godot: 'Object', handle: '1'}});
+    return null;
+  } catch (error) {
+    return error.code;
+  }
+};
 
 AppRegistry.registerComponent('GodotMessagesApp', () => MessagesApp);
 AppRegistry.registerComponent('GodotModuleApp', () => ModuleApp);

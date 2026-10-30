@@ -39,6 +39,7 @@ private:
 	FitContent fit_content = FIT_CONTENT_NONE;
 	Size2 content_size;
 	bool editor_preview = true;
+	bool took_back_press = false;
 	RNRootState reported_state;
 	Ref<RNComponentContract> contract_resource;
 	std::shared_ptr<const RNCompiledContract> contract;

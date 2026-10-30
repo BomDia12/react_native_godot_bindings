@@ -63,3 +63,9 @@ Ref<RNComponentContract> rn_load_contract(const String &p_component);
 String rn_contracts_directory();
 // Whether this process only generates the contracts' TypeScript and quits.
 bool rn_is_generating_contracts();
+// The React prop a contract property or event becomes.
+String rn_contract_prop_name(const String &p_name);
+String rn_contract_event_prop(const String &p_event);
+// The value with the record fields it leaves out filled with their schema
+// defaults, as binding snapshots send it.
+Variant rn_contract_value_with_defaults(const Variant &p_value, const RNValueSchema &p_schema);

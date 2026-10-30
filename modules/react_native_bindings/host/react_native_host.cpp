@@ -7,6 +7,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/input/input.h"
+#include "core/io/resource_loader.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/main/scene_tree.h"
@@ -299,17 +300,30 @@ Dictionary ReactNativeHost::register_module(const String &p_name, Object *p_targ
 		return error.to_dictionary();
 	}
 	attachment->identity = next_module_identity++;
+	_follow_module_node(p_name, false);
 	modules[p_name] = attachment;
-	// A node outside the tree is no module target, so readiness follows the node.
-	if (Node *node = Object::cast_to<Node>(p_target)) {
-		const Callable moved = callable_mp(this, &ReactNativeHost::_module_node_moved).bind(p_name, attachment->identity);
-		node->connect(SNAME("tree_entered"), moved);
-		node->connect(SNAME("tree_exited"), moved);
-	}
+	_follow_module_node(p_name, true);
 	if (instance) {
 		instance->module_changed(p_name);
 	}
 	return Dictionary();
+}
+
+// A node outside the tree is no module target, so readiness follows the node.
+void ReactNativeHost::_follow_module_node(const String &p_name, bool p_follow) {
+	const std::shared_ptr<const RNSceneAttachment> *module = modules.getptr(p_name);
+	Node *node = module ? Object::cast_to<Node>(ObjectDB::get_instance((*module)->target)) : nullptr;
+	if (!node) {
+		return;
+	}
+	const Callable moved = callable_mp(this, &ReactNativeHost::_module_node_moved).bind(p_name, (*module)->identity);
+	for (const StringName &signal : { SNAME("tree_entered"), SNAME("tree_exited") }) {
+		if (p_follow) {
+			node->connect(signal, moved);
+		} else if (node->is_connected(signal, moved)) {
+			node->disconnect(signal, moved);
+		}
+	}
 }
 
 void ReactNativeHost::_module_node_moved(const String &p_name, uint64_t p_identity) {
@@ -320,6 +334,7 @@ void ReactNativeHost::_module_node_moved(const String &p_name, uint64_t p_identi
 }
 
 void ReactNativeHost::unregister_module(const String &p_name) {
+	_follow_module_node(p_name, false);
 	if (modules.erase(p_name) && instance) {
 		instance->module_changed(p_name);
 	}
@@ -447,6 +462,12 @@ void ReactNativeHost::_process_frame() {
 	}
 	_finish_retired();
 	_sync_back_press();
+	for (int i = scene_loads.size() - 1; i >= 0; --i) {
+		if (ResourceLoader::load_threaded_get_status(scene_loads[i]) != ResourceLoader::THREAD_LOAD_IN_PROGRESS) {
+			ResourceLoader::load_threaded_get(scene_loads[i]);
+			scene_loads.remove_at(i);
+		}
+	}
 	processing_frame = false;
 }
 
@@ -498,6 +519,10 @@ void ReactNativeHost::_finish_evaluation(uint64_t p_id, const Variant &p_result)
 void ReactNativeHost::shutdown() {
 	_retire();
 	_sync_back_press();
+	for (const String &path : scene_loads) {
+		ResourceLoader::load_threaded_get(path);
+	}
+	scene_loads.clear();
 	for (const std::shared_ptr<RNHostInstance> &retired : retiring) {
 		retired->finish();
 	}

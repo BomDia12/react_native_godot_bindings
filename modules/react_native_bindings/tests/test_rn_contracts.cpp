@@ -31,7 +31,9 @@ Ref<RNComponentContract> roster_contract() {
 	contract->set_component("EnemyRoster");
 	Dictionary fields;
 	fields["id"] = schema("string");
-	fields["max_health"] = schema("integer");
+	Dictionary max_health = schema("integer");
+	max_health["default"] = 10;
+	fields["max_health"] = max_health;
 	Dictionary enemy = schema("record");
 	enemy["fields"] = fields;
 	Dictionary types;
@@ -126,6 +128,17 @@ TEST_CASE("[ReactNativeBindings][Contracts] invalid names, defaults and types ar
 	contract->set_properties({ property("phase", camel, Dictionary({ { "phaseOne", 0 } })) });
 	CHECK(compile_error(contract).contains("phaseOne"));
 
+	for (const char *name : { "key", "ref", "on_mark" }) {
+		contract = roster_contract();
+		Array properties = contract->get_properties();
+		properties.push_back(property(name, schema("string"), ""));
+		contract->set_properties(properties);
+		CHECK_MESSAGE(compile_error(contract).contains("React prop"), name);
+	}
+	contract = roster_contract();
+	contract->set_properties({ property("root_tag", schema("integer"), 0) });
+	CHECK(compile_error(contract).contains("rootTag"));
+
 	for (const char *type : { "dynamic", "int64", "Uint8Array", "Object" }) {
 		contract = roster_contract();
 		Dictionary value = schema(type);
@@ -172,6 +185,8 @@ TEST_CASE("[ReactNativeBindings][Contracts] a root shows its contract as typed p
 	}
 	CHECK(listed);
 	CHECK(Color(root->get("tint")) == Color(1, 0, 0));
+	root->set("enemies", Array({ Dictionary({ { "id", "e1" } }) }));
+	CHECK(int(Dictionary(Array(root->get("enemies"))[0])["max_health"]) == 10);
 	CHECK(root->get("marked").get_type() == Variant::NIL);
 	CHECK(root->has_signal("mark"));
 	CHECK(Dictionary(root->attach_scene_binding(root, Ref<RNSceneBinding>())).get("code", "") == "E_VALIDATION");
