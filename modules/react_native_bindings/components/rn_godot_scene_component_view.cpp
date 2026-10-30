@@ -1,5 +1,6 @@
 #include "rn_godot_scene_component_view.h"
 
+#include "../host/react_native_host.h"
 #include "../root_view/react_native_root_view.h"
 
 #include "core/io/resource_loader.h"
@@ -47,10 +48,15 @@ void RNGodotSceneHost::_notification(int p_what) {
 	}
 }
 
-// The loader keeps a request's task and resource until they are collected.
+// The loader keeps a request's task and resource until they are collected,
+// which the host does once the load finishes, so nothing waits for it here.
 void RNGodotSceneHost::_cancel_load() {
 	if (!loading.is_empty()) {
-		ResourceLoader::load_threaded_get(loading);
+		if (ReactNativeHost *host_singleton = ReactNativeHost::get_singleton()) {
+			host_singleton->collect_scene_load(loading);
+		} else {
+			ResourceLoader::load_threaded_get(loading);
+		}
 		loading = String();
 	}
 	set_process_internal(false);
@@ -82,6 +88,7 @@ void RNGodotSceneHost::_show(Node *p_instance) {
 		return;
 	}
 	SubViewportContainer *container = memnew(SubViewportContainer);
+	container->set_mouse_filter(MOUSE_FILTER_PASS);
 	container->set_stretch(true);
 	container->set_anchors_and_offsets_preset(PRESET_FULL_RECT);
 	SubViewport *viewport = memnew(SubViewport);

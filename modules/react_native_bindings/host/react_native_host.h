@@ -66,6 +66,7 @@ class ReactNativeHost : public Object {
 	bool project_quits_on_go_back = true;
 	bool back_press_quits = false;
 	Ref<InputEventAction> default_back_press;
+	Vector<String> scene_loads;
 
 	mutable std::mutex error_mutex;
 	String last_error;
@@ -112,6 +113,8 @@ public:
 	void back_pressed(bool p_go_back_request);
 	void invoke_default_back_press();
 	bool is_default_back_press(const Ref<InputEvent> &p_event) const { return p_event.ptr() == default_back_press.ptr(); }
+	// Collects a threaded scene load once it finishes, after its view gave up on it.
+	void collect_scene_load(const String &p_path) { scene_loads.push_back(p_path); }
 	ReactNativeRootView *find_root(facebook::react::SurfaceId p_surface) const;
 	void shutdown();
 };

@@ -38,6 +38,7 @@ private:
 	FitContent fit_content = FIT_CONTENT_NONE;
 	Size2 content_size;
 	bool editor_preview = true;
+	bool took_back_press = false;
 	RNRootState reported_state;
 	facebook::react::SurfaceId surface_id = 0;
 	Control *container = nullptr;

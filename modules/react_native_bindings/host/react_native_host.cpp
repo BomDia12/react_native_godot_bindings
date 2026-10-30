@@ -6,6 +6,7 @@
 #include "rn_host_instance.h"
 
 #include "core/input/input.h"
+#include "core/io/resource_loader.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/main/scene_tree.h"
@@ -369,6 +370,12 @@ void ReactNativeHost::_process_frame() {
 	}
 	_finish_retired();
 	_sync_back_press();
+	for (int i = scene_loads.size() - 1; i >= 0; --i) {
+		if (ResourceLoader::load_threaded_get_status(scene_loads[i]) != ResourceLoader::THREAD_LOAD_IN_PROGRESS) {
+			ResourceLoader::load_threaded_get(scene_loads[i]);
+			scene_loads.remove_at(i);
+		}
+	}
 	processing_frame = false;
 }
 
@@ -399,6 +406,10 @@ void ReactNativeHost::_finish_evaluation(uint64_t p_id, const Variant &p_result)
 void ReactNativeHost::shutdown() {
 	_retire();
 	_sync_back_press();
+	for (const String &path : scene_loads) {
+		ResourceLoader::load_threaded_get(path);
+	}
+	scene_loads.clear();
 	for (const std::shared_ptr<RNHostInstance> &retired : retiring) {
 		retired->finish();
 	}
