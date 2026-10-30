@@ -121,7 +121,8 @@ void initialize_rn_godot_example_module(ModuleInitializationLevel p_level) {
 ```
 
 A component's view factory is keyed by its descriptor's name. A TurboModule registered
-under a built-in module's name replaces it.
+under a built-in module's name replaces it. A name another library already registered
+keeps its first registration, with an error naming it.
 
 `RNImageTransport` connects the image service to a transport. Start, completion and cancel run on the main thread.
 Transport must enforce the encoded ceiling before growing response buffers, honor

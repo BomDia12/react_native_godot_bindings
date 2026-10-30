@@ -189,7 +189,9 @@ running. The editor never pauses.
 
 The scene loads on a resource-loader thread. A `Control` scene fills the component. Other
 scenes, such as `Node2D` or `Node3D` ones, render through a stretched `SubViewport`, with a
-world of their own for 3D. A new `source` frees the previous instance. Once an instance is
+world of their own for 3D. A `Control` scene shares its root's world, as it would anywhere
+in a Godot scene, so 3D content belongs in a scene whose root isn't a `Control`. A new
+`source` frees the previous instance. Once an instance is
 added, the root emits `scene_loaded(native_id, instance)`, and
 `root.get_native_node(native_id)` returns it later; for other views `get_native_node`
 returns the view's control. The scene's controls receive Godot input directly. Pointer

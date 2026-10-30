@@ -273,3 +273,16 @@ test('autolinking re-enables updated plugins and rejects colliding native module
   const second = library(path.join(root, 'b'), 'second', {module: 'godot/rn_module'});
   await assert.rejects(autolink(project, {root, dependencies: {first, second}}, {godot}), /first and second both link a native module named rn_module/);
 });
+
+test('autolinking rejects colliding or reserved codegen names and incomplete codegen configs', async () => {
+  const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
+  const project = loadGodotProject(root);
+  const native = (name, module, codegen) => ({platforms: {godot: {root, version: '1.0.0', module: path.join(root, module), addon: null, codegen: {name: codegen, sources: root}}}});
+  await assert.rejects(autolink(project, {root, dependencies: {spec: native('spec', 'a/rn_a', 'ReactNativeGodotSpec')}}), /react-native-godot and spec both use the codegen name ReactNativeGodotSpec/);
+  await assert.rejects(autolink(project, {root, dependencies: {one: native('one', 'a/rn_a', 'Shared'), two: native('two', 'b/rn_b', 'Shared')}}), /one and two both use the codegen name Shared/);
+
+  const library = path.join(root, 'incomplete');
+  fs.mkdirSync(library);
+  fs.writeFileSync(path.join(library, 'package.json'), JSON.stringify({name: 'incomplete', version: '1.0.0', codegenConfig: {name: 'Incomplete'}}));
+  assert.throws(() => dependencyConfig(library, {module: 'godot/rn_incomplete'}), /incomplete has a codegenConfig without jsSrcsDir/);
+});

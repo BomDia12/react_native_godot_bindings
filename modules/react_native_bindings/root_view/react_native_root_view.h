@@ -116,6 +116,7 @@ public:
 	// A contract component starts with its contract values as props.
 	Dictionary get_surface_properties() const { return contract ? contract_values : initial_properties; }
 	void post_message(const String &p_name, const Variant &p_payload);
+	void theme_metrics_changed();
 	int get_root_tag() const { return surface_id; }
 	void reload();
 	void set_alert_handler(const Callable &p_handler) { alert_handler = p_handler; }

@@ -15,6 +15,8 @@ class RNExportPlugin : public EditorExportPlugin {
 
 	bool _build(String &r_output);
 
+	void _check_native_templates(bool p_debug);
+
 protected:
 	void _export_begin(const HashSet<String> &p_features, bool p_debug, const String &p_path, int p_flags) override;
 	void _export_file(const String &p_path, const String &p_type, const HashSet<String> &p_features) override;

@@ -9,6 +9,7 @@
 #include "core/config/project_settings.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/io/json.h"
 #include "core/os/os.h"
 #include "editor/file_system/editor_file_system.h"
 
@@ -82,7 +83,28 @@ void RNExportPlugin::_export_begin(const HashSet<String> &p_features, bool p_deb
 	add_file(bundle, FileAccess::get_file_as_bytes(bundle), false);
 	for (const String &entry : PackedStringArray(GLOBAL_GET("react_native/bundle/segments"))) {
 		const String segment = output_directory.path_join(entry.get_file() + ".segment.js");
+		if (!FileAccess::exists(segment)) {
+			const String message = vformat("The React Native segment %s was not built.", segment);
+			ERR_PRINT(message);
+			if (get_export_platform().is_valid()) {
+				get_export_platform()->add_message(EditorExportPlatform::EXPORT_MESSAGE_ERROR, "React Native", message);
+			}
+			continue;
+		}
 		add_file(segment, FileAccess::get_file_as_bytes(segment), false);
+	}
+	_check_native_templates(p_debug);
+}
+
+// Export templates hold the engine a game runs on, so a library's native
+// module reaches exported games only through templates built with it.
+void RNExportPlugin::_check_native_templates(bool p_debug) {
+	const String manifest = project_root.path_join("node_modules/.cache/react-native-godot/autolinking/autolinking.json");
+	const Dictionary linked = FileAccess::exists(manifest) ? Dictionary(JSON::parse_string(FileAccess::get_file_as_string(manifest))) : Dictionary();
+	const bool native = !Array(linked.get("modules", Array())).is_empty();
+	const Ref<EditorExportPreset> preset = get_export_preset();
+	if (native && preset.is_valid() && String(preset->get(p_debug ? "custom_template/debug" : "custom_template/release")).is_empty() && get_export_platform().is_valid()) {
+		get_export_platform()->add_message(EditorExportPlatform::EXPORT_MESSAGE_WARNING, "React Native", "The project links native Godot modules, which the default export templates lack. Use export templates built with RN_AUTOLINKING, as autolinking.md describes.");
 	}
 }
 

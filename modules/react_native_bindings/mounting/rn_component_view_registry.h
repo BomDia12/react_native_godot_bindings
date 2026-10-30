@@ -58,4 +58,5 @@ public:
 	void update(const facebook::react::ShadowView &p_old, const facebook::react::ShadowView &p_new);
 	void apply(const facebook::react::ShadowViewMutationList &p_mutations);
 	void clear();
+	void theme_changed();
 };

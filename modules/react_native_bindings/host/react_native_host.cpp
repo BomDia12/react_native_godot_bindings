@@ -181,9 +181,13 @@ void ReactNativeHost::_start_surface(ReactNativeRootView *p_root) {
 	instance->start_surface(p_root, surface);
 }
 
-// Each revision is new, so text measured with an earlier theme is measured again.
+// A new revision means a different theme, so text measured with an earlier one
+// is measured again and views apply it.
 void ReactNativeHost::_publish_theme(ReactNativeRootView *p_root, SurfaceId p_surface) {
 	theme->publish(p_surface, RNThemeMetrics::capture(p_root, ++theme_revision));
+	if (theme->get(p_surface)->revision == theme_revision) {
+		p_root->theme_metrics_changed();
+	}
 }
 
 void ReactNativeHost::_stop_surface(ReactNativeRootView *p_root, bool p_stop_react) {
