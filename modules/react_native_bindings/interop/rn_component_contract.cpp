@@ -43,7 +43,7 @@ bool is_member_name(const String &p_name) {
 // those. Field names convert between snake_case and camelCase by the schema,
 // which dynamic values don't have.
 bool carries_plain_values(const RNValueSchema &p_schema) {
-	if (p_schema.type == RNValueType::INT64 || p_schema.type == RNValueType::BYTES || p_schema.type == RNValueType::OBJECT || p_schema.type == RNValueType::DYNAMIC) {
+	if (p_schema.type == RNValueType::INT64 || p_schema.type == RNValueType::BYTES || p_schema.type == RNValueType::OBJECT || p_schema.type == RNValueType::DYNAMIC || p_schema.type == RNValueType::VOID) {
 		return false;
 	}
 	if (p_schema.element && !carries_plain_values(*p_schema.element)) {
@@ -116,10 +116,15 @@ bool RNComponentContract::resolve_schema(const Dictionary &p_definition, Diction
 			return invalid(r_error, vformat("named type '%s' is not declared or contains itself", type_name), p_path);
 		}
 		enclosing.push_back(type_name);
+		// A reference can modify how the type is used, but not its shape, which
+		// the generated TypeScript names once.
 		Dictionary named = Dictionary(types[type_name]).duplicate();
 		for (const KeyValue<Variant, Variant> &entry : resolved) {
-			if (entry.key != "type" && entry.key != "name") {
-				named[entry.key] = entry.value;
+			const String key = entry.key;
+			if (key == "nullable" || key == "optional" || key == "default") {
+				named[key] = entry.value;
+			} else if (key != "type" && key != "name") {
+				return invalid(r_error, vformat("a reference to '%s' can't set '%s'", type_name, key), p_path);
 			}
 		}
 		resolved = named;
@@ -170,7 +175,7 @@ bool RNComponentContract::compile(RNCompiledContract &r_contract, RNError &r_err
 			return r_error.is_set() ? false : invalid(r_error, "property requires a value schema", path + ".value");
 		}
 		if (!carries_plain_values(property.schema)) {
-			return invalid(r_error, "contract values can't be dynamic, int64, Uint8Array or Object", path + ".value");
+			return invalid(r_error, "contract values can't be dynamic, void, int64, Uint8Array or Object", path + ".value");
 		}
 		if (!definition.has("default") || !rn_validate_native_value(definition["default"], property.schema, r_error, path + ".default")) {
 			return r_error.is_set() ? false : invalid(r_error, "property requires a default", path + ".default");
@@ -208,7 +213,7 @@ bool RNComponentContract::compile(RNCompiledContract &r_contract, RNError &r_err
 				return r_error.is_set() ? false : invalid(r_error, "argument requires a value schema", argument_path + ".value");
 			}
 			if (!carries_plain_values(argument.value)) {
-				return invalid(r_error, "contract values can't be int64 or Object", argument_path + ".value");
+				return invalid(r_error, "contract values can't be dynamic, void, int64, Uint8Array or Object", argument_path + ".value");
 			}
 			argument.nullable = argument.value.nullable;
 			argument_names.insert(argument.name);

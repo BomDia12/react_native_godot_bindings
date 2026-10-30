@@ -74,6 +74,9 @@ public:
 	virtual void remove_child(RNComponentView *p_child);
 	void finish_removal();
 	virtual void handle_command(const std::string &p_name, const folly::dynamic &p_args) {}
+	// The surface's theme metrics changed. Views that resolve fonts or colors
+	// from them outside of layout apply them again.
+	virtual void theme_changed() {}
 	virtual void synchronously_update_props(const facebook::react::ComponentDescriptor &p_descriptor, const facebook::react::PropsParserContext &p_context, const folly::dynamic &p_props);
 
 	// Controls besides get_control() whose gui_input belongs to this view.

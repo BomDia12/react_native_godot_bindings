@@ -236,6 +236,12 @@ PackedStringArray ReactNativeRootView::get_configuration_warnings() const {
 	return warnings;
 }
 
+void ReactNativeRootView::theme_metrics_changed() {
+	if (views) {
+		views->theme_changed();
+	}
+}
+
 Node *ReactNativeRootView::get_native_node(const String &p_native_id) const {
 	RNComponentView *view = views ? views->find_by_native_id(p_native_id.utf8().get_data()) : nullptr;
 	return view ? view->get_native_node() : nullptr;
