@@ -4,9 +4,25 @@ import {useCallback, useContext, useEffect, useRef} from 'react';
 import {RootTagContext} from 'react-native';
 import NativeGodotHost from '../specs/NativeGodotHost';
 
+function carriesObject(value) {
+  if (Array.isArray(value)) {
+    return value.some(carriesObject);
+  }
+  if (value != null && typeof value === 'object' && !ArrayBuffer.isView(value)) {
+    return value.$godot === 'Object' || Object.values(value).some(carriesObject);
+  }
+  return false;
+}
+
 // Without a root tag, messages go to and come from ReactNativeHost instead of
-// one root.
+// one root. Object handles belong to scene bindings and modules, which resolve
+// them; a message would hand Godot the bare handle.
 export function postGodotMessage(name, payload = null, rootTag = null) {
+  if (carriesObject(payload)) {
+    const error = new Error('Godot messages cannot carry Godot objects; pass them through a scene binding or module.');
+    error.code = 'E_VALIDATION';
+    throw error;
+  }
   NativeGodotHost.postMessage(rootTag, name, payload);
 }
 

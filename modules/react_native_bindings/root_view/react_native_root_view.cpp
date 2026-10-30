@@ -420,7 +420,7 @@ void ReactNativeRootView::_fit_contract_values() {
 		RNError error;
 		const Variant current = contract_values.get(property.name, Variant());
 		const bool fits = contract_values.has(property.name) && rn_validate_native_value(current, property.schema, error, "value");
-		values[property.name] = fits ? current : property.default_value.duplicate(true);
+		values[property.name] = rn_contract_value_with_defaults(fits ? current : property.default_value, property.schema);
 	}
 	contract_values = values;
 }
@@ -456,7 +456,7 @@ bool ReactNativeRootView::_set(const StringName &p_name, const Variant &p_value)
 		ERR_PRINT(vformat("%s cannot be set to %s: %s", p_name, p_value, error.describe()));
 		return true;
 	}
-	contract_values[p_name] = p_value;
+	contract_values[p_name] = rn_contract_value_with_defaults(p_value, property->schema);
 	_contract_values_changed();
 	return true;
 }

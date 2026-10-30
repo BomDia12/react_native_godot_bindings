@@ -8,25 +8,6 @@ namespace {
 
 const char *HEADER = "// Generated from the Godot component contracts in %s. Do not edit.\n";
 
-// An underscore before a letter becomes its capital; one before a digit stays,
-// so the name converts back to the same snake_case.
-String camel_case(const String &p_name) {
-	String result;
-	for (int i = 0; i < p_name.length(); ++i) {
-		if (p_name[i] == '_' && i + 1 < p_name.length() && is_ascii_lower_case(p_name[i + 1])) {
-			result += String::chr(p_name[++i]).to_upper();
-		} else {
-			result += String::chr(p_name[i]);
-		}
-	}
-	return result;
-}
-
-String event_prop(const String &p_event) {
-	const String name = camel_case(p_event);
-	return "on" + name.substr(0, 1).to_upper() + name.substr(1);
-}
-
 class TypeScriptWriter {
 	HashSet<String> godot_types;
 
@@ -72,7 +53,7 @@ public:
 		String result = "{";
 		for (const KeyValue<Variant, Variant> &field : p_fields) {
 			const Dictionary definition = field.value;
-			result += vformat(" %s%s: %s;", camel_case(field.key), bool(definition.get("optional", false)) ? "?" : "", type_of(definition));
+			result += vformat(" %s%s: %s;", rn_contract_prop_name(field.key), bool(definition.get("optional", false)) ? "?" : "", type_of(definition));
 		}
 		return result + (p_fields.is_empty() ? "}" : " }");
 	}
@@ -131,7 +112,7 @@ bool rn_contract_sources(const Vector<Ref<RNComponentContract>> &p_contracts, RN
 		props += vformat("export type %sProps = {\n", component);
 		for (const Variant &property : contract->get_properties()) {
 			const Dictionary definition = property;
-			props += vformat("  %s: %s;\n", camel_case(definition["name"]), writer.type_of(definition["value"]));
+			props += vformat("  %s: %s;\n", rn_contract_prop_name(definition["name"]), writer.type_of(definition["value"]));
 		}
 		String events;
 		for (const Variant &event : contract->get_events()) {
@@ -139,10 +120,10 @@ bool rn_contract_sources(const Vector<Ref<RNComponentContract>> &p_contracts, RN
 			Vector<String> arguments;
 			for (const Variant &argument : Array(definition.get("arguments", Array()))) {
 				const Dictionary argument_definition = argument;
-				arguments.push_back(vformat("%s: %s", camel_case(argument_definition["name"]), writer.type_of(argument_definition["value"])));
+				arguments.push_back(vformat("%s: %s", rn_contract_prop_name(argument_definition["name"]), writer.type_of(argument_definition["value"])));
 			}
-			props += vformat("  %s: (%s) => void;\n", event_prop(definition["name"]), String(", ").join(arguments));
-			events += vformat("%s%s: '%s'", events.is_empty() ? "" : ", ", definition["name"], event_prop(definition["name"]));
+			props += vformat("  %s: (%s) => void;\n", rn_contract_event_prop(definition["name"]), String(", ").join(arguments));
+			events += vformat("%s%s: '%s'", events.is_empty() ? "" : ", ", definition["name"], rn_contract_event_prop(definition["name"]));
 		}
 		props += "};\n\n";
 		map += vformat("  %s: %sProps;\n", component, component);

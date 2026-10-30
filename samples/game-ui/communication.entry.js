@@ -34,6 +34,14 @@ function ModuleApp() {
 global.__moduleCall = (name, command, args) => getGodotModule(name).call(command, ...args);
 global.__moduleCallAsync = (name, command, args) => getGodotModule(name).callAsync(command, ...args);
 global.__moduleReady = name => getGodotModule(name).ready;
+global.__postObjectMessage = () => {
+  try {
+    postGodotMessage('object', {node: {$godot: 'Object', handle: '1'}});
+    return null;
+  } catch (error) {
+    return error.code;
+  }
+};
 
 AppRegistry.registerComponent('GodotMessagesApp', () => MessagesApp);
 AppRegistry.registerComponent('GodotModuleApp', () => ModuleApp);

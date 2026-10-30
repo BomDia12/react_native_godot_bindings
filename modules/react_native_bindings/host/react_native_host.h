@@ -89,6 +89,7 @@ class ReactNativeHost : public Object {
 	void _record_error(uint64_t p_generation, const String &p_error);
 	void _finish_evaluation(uint64_t p_id, const Variant &p_result);
 	void _module_node_moved(const String &p_name, uint64_t p_identity);
+	void _follow_module_node(const String &p_name, bool p_follow);
 	bool _defer(std::function<void()> p_task);
 	void _update_suspension();
 
