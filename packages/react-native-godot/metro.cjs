@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const {createRequire} = require('module');
@@ -15,6 +16,15 @@ function linkedDependencyRoots(projectRoot) {
     .filter(installed => fs.existsSync(installed))
     .map(installed => fs.realpathSync(installed))
     .filter(root => path.relative(projectRoot, root).startsWith('..'));
+}
+
+// Module IDs hash the project-relative path, so a segment built on its own
+// refers to the modules of the bundle it extends by the same IDs.
+function stableModuleIds(projectRoot) {
+  return () => modulePath => {
+    const relative = path.relative(projectRoot, modulePath).split(path.sep).join('/');
+    return crypto.createHash('sha1').update(relative).digest().readUInt32BE(0) & 0x7fffffff;
+  };
 }
 
 function createGodotMetroConfig(projectRoot) {
@@ -37,6 +47,7 @@ function createGodotMetroConfig(projectRoot) {
       resolveRequest: createGodotResolver({projectRoot: resolvedProjectRoot, reactNativeRoot}),
     },
     serializer: {
+      createModuleIdFactory: stableModuleIds(resolvedProjectRoot),
       getModulesRunBeforeMainModule: () => [
         projectRequire.resolve('react-native/Libraries/Core/InitializeCore'),
         path.join(packageRoot, 'src/setup.js'),

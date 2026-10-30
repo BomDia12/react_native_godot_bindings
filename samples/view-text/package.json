@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "build:godot": "react-native build-godot --entry godot.entry.js --out dist/godot.bundle.js",
-    "start:godot": "react-native-godot-start"
+    "start:godot": "react-native-godot-start",
+    "build:segments": "react-native build-godot --entry segments.entry.js --out dist/segments/index.bundle.js && react-native build-godot --segment startup_segment --out dist/segments/index.bundle.js && react-native build-godot --segment runtime_segment --out dist/segments/index.bundle.js"
   },
   "dependencies": {
     "react": "19.2.3",

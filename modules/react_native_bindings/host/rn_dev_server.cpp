@@ -38,9 +38,21 @@ RNDevServer::~RNDevServer() = default;
 
 // The query is upstream DevServerHelper's, which always asks Metro for the
 // Android platform instead of Godot's.
-std::string RNDevServer::bundle_url() const {
-	const String url = vformat("http://%s:%d/%s.bundle?platform=godot&dev=true&lazy=true&minify=false&app=%s&modulesOnly=false&runModule=true&inlineSourceMap=false&excludeSource=true&sourcePaths=url-server", settings.host, settings.port, settings.entry, String::utf8(app_id.c_str()));
+namespace {
+
+std::string metro_url(const RNDevServerSettings &p_settings, const String &p_entry, const std::string &p_app_id, bool p_modules_only) {
+	const String url = vformat("http://%s:%d/%s.bundle?platform=godot&dev=true&lazy=true&minify=false&app=%s&modulesOnly=%s&runModule=true&inlineSourceMap=false&excludeSource=true&sourcePaths=url-server", p_settings.host, p_settings.port, p_entry, String::utf8(p_app_id.c_str()), p_modules_only ? "true" : "false");
 	return url.utf8().get_data();
+}
+
+} // namespace
+
+std::string RNDevServer::bundle_url() const {
+	return metro_url(settings, settings.entry, app_id, false);
+}
+
+std::string RNDevServer::segment_url(const String &p_entry) const {
+	return metro_url(settings, p_entry, app_id, true);
 }
 
 // The inspector registers the runtime with Metro's DevTools proxy. Dev mode
@@ -55,12 +67,11 @@ void RNDevServer::configure(ReactInstanceConfig &r_config) const {
 	r_config.enableInspector = true;
 }
 
-void RNDevServer::download_bundle(RNHTTPService &p_http, std::function<void(bool)> p_done) const {
-	const std::string url = bundle_url();
+void RNDevServer::download(RNHTTPService &p_http, const std::string &p_url, std::function<void(bool)> p_done) const {
 	RNHTTPRequest request;
-	request.url = String::utf8(url.c_str());
+	request.url = String::utf8(p_url.c_str());
 	RNError error;
-	auto completed = [url, p_done](RNHTTPResponse p_response) {
+	auto completed = [url = p_url, p_done](RNHTTPResponse p_response) {
 		if (p_response.error.is_set() || p_response.status != 200) {
 			WARN_PRINT(vformat("The Metro bundle at %s could not be downloaded (%s); loading the prebuilt bundle.", String::utf8(url.c_str()), p_response.error.is_set() ? p_response.error.describe() : vformat("HTTP %d", p_response.status)));
 			p_done(false);

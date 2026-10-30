@@ -54,20 +54,40 @@ function collectSources(sourceMap) {
   return sources;
 }
 
+// A segment holds only the modules its base bundle lacks, without Metro's
+// prelude and polyfills, and runs its entry when the base bundle's runtime
+// evaluates it.
+function segmentConfig(config, projectRoot, base) {
+  const dependenciesFile = base + '.dependencies.json';
+  if (!fs.existsSync(dependenciesFile)) {
+    throw new Error(`Build the bundle ${base} before its segments.`);
+  }
+  const inBase = new Set(JSON.parse(fs.readFileSync(dependenciesFile, 'utf8')).map(file => path.resolve(projectRoot, file)));
+  const {mergeConfig} = require('@react-native/metro-config');
+  return mergeConfig(config, {
+    serializer: {
+      getModulesRunBeforeMainModule: () => [],
+      processModuleFilter: module => module.path !== '__prelude__' && module.output.every(output => output.type !== 'js/script') && !inBase.has(module.path),
+    },
+  });
+}
+
 // Builds the bundle with its source map, the list of files it was built from,
 // and its assets staged beside it. Other files in the output directory, such
-// as other bundles, are kept.
-async function buildBundle({projectRoot, entry, out, dev = false, minify = false}) {
+// as other bundles, are kept. With a base bundle, it builds a segment of it.
+async function buildBundle({projectRoot, entry, out, dev = false, minify = false, base}) {
   const output = path.resolve(projectRoot, out);
   const outputDirectory = path.dirname(output);
   if (isWithin(outputDirectory, projectRoot)) {
     throw new Error(`The bundle ${output} must be in a directory of its own, such as dist/: a build replaces its whole directory, which here contains the JavaScript project ${projectRoot}.`);
   }
   const Metro = require('metro');
-  const config = require(path.join(projectRoot, 'metro.config.js'));
-  const cacheRoot = path.join(projectRoot, 'node_modules', '.cache', 'react-native-godot');
-  fs.mkdirSync(cacheRoot, {recursive: true});
-  const temporaryRoot = fs.mkdtempSync(path.join(cacheRoot, 'build-'));
+  const projectConfig = require(path.join(projectRoot, 'metro.config.js'));
+  const config = base ? segmentConfig(projectConfig, projectRoot, path.resolve(projectRoot, base)) : projectConfig;
+  // Staging beside the output keeps the final renames on one file system.
+  // Godot skips the hidden directory meanwhile.
+  fs.mkdirSync(path.dirname(outputDirectory), {recursive: true});
+  const temporaryRoot = fs.mkdtempSync(path.join(path.dirname(outputDirectory), `.${path.basename(outputDirectory)}-build-`));
   const temporaryBundle = path.join(temporaryRoot, path.basename(output));
   const sourceMap = temporaryBundle + '.map';
   try {
@@ -80,6 +100,8 @@ async function buildBundle({projectRoot, entry, out, dev = false, minify = false
       platform: 'godot',
       sourceMap: true,
       sourceMapOut: sourceMap,
+      // Without a URL, Metro also inlines the whole map into the bundle.
+      sourceMapUrl: path.basename(output) + '.map',
     });
     const map = JSON.parse(fs.readFileSync(sourceMap, 'utf8'));
     const dependencies = [...new Set(collectSources(map).map(source => path.resolve(projectRoot, source)))].sort();
@@ -101,7 +123,6 @@ async function buildBundle({projectRoot, entry, out, dev = false, minify = false
     );
     const manifest = stageAssets(result.assets ?? [], stagedOutput);
     fs.writeFileSync(path.join(stagedOutput, 'assets-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-    fs.mkdirSync(path.dirname(outputDirectory), {recursive: true});
     replaceDirectory(stagedOutput, outputDirectory);
   } finally {
     fs.rmSync(temporaryRoot, {recursive: true, force: true});
@@ -109,4 +130,20 @@ async function buildBundle({projectRoot, entry, out, dev = false, minify = false
   return output;
 }
 
-module.exports = {buildBundle, findEntry};
+// A segment's file sits beside the bundle it extends, named after its entry
+// as Project Settings names it, without a script extension.
+function segmentPath(bundlePath, entry) {
+  const name = path.basename(entry).replace(/\.(js|jsx|ts|tsx)$/, '');
+  return path.join(path.dirname(bundlePath), `${name}.segment.js`);
+}
+
+// Builds the project's bundle, then the segments it loads at startup.
+async function buildProject(project, {entry = project.entry, out = project.bundlePath, dev = false, minify = false} = {}) {
+  const output = await buildBundle({projectRoot: project.jsRoot, entry, out, dev, minify});
+  for (const segment of project.segments) {
+    await buildBundle({projectRoot: project.jsRoot, entry: segment, out: segmentPath(output, segment), dev, minify, base: output});
+  }
+  return output;
+}
+
+module.exports = {buildBundle, buildProject, findEntry, segmentConfig, segmentPath};

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const {spawn, spawnSync} = require('child_process');
-const {buildBundle} = require('./build.cjs');
+const {buildProject} = require('./build.cjs');
 const {generateContracts} = require('./contracts.cjs');
 const {resolveEditor} = require('./editor.cjs');
 const {ignoreNodeModules} = require('./project.cjs');
@@ -62,7 +62,7 @@ async function runGodot(project, {packager = true, editor: openEditor = false, g
   if (usesMetro && !(await isMetroRunning(project.devServer))) {
     metro = await startMetro(project);
   } else if (!usesMetro) {
-    await buildBundle({projectRoot: project.jsRoot, entry: project.entry, out: project.bundlePath});
+    await buildProject(project);
   }
   try {
     if (!fs.existsSync(path.join(project.godotRoot, '.godot'))) {

@@ -20,6 +20,8 @@ struct RNServiceSettings {
 	bool follow_system = false;
 	String trusted_certificates;
 	RNDevServerSettings dev_server;
+	// Entries of the segments every runtime evaluates after its bundle, in order.
+	PackedStringArray segments;
 	int64_t limit(const String &p_name) const {
 		const int64_t *value = limits.getptr(p_name);
 		return value ? *value : 0;

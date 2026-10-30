@@ -80,6 +80,10 @@ void RNExportPlugin::_export_begin(const HashSet<String> &p_features, bool p_deb
 	}
 	EditorFileSystem::get_singleton()->reimport_files(assets);
 	add_file(bundle, FileAccess::get_file_as_bytes(bundle), false);
+	for (const String &entry : PackedStringArray(GLOBAL_GET("react_native/bundle/segments"))) {
+		const String segment = output_directory.path_join(entry.get_file() + ".segment.js");
+		add_file(segment, FileAccess::get_file_as_bytes(segment), false);
+	}
 }
 
 void RNExportPlugin::_export_file(const String &p_path, const String &p_type, const HashSet<String> &p_features) {

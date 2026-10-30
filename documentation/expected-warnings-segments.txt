@@ -1,0 +1,2 @@
+# The fixture intentionally loads a segment that doesn't exist.
+^ERROR: React Native segment 'res://dist/segments/missing\.segment\.js' is missing\.$

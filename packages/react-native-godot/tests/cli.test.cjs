@@ -9,7 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
 const {autolink, dependencyConfig, readManifest} = require('../cli/autolink.cjs');
-const {buildBundle, findEntry} = require('../cli/build.cjs');
+const {buildBundle, findEntry, segmentConfig, segmentPath} = require('../cli/build.cjs');
 const {downloadEditor, hostPlatform, resolveEditor} = require('../cli/editor.cjs');
 const {addMainScene, packageName, writeTemplate} = require('../cli/init.cjs');
 const {addProjectSettings, ignoreNodeModules, loadGodotProject, readProjectSettings} = require('../cli/project.cjs');
@@ -238,4 +238,21 @@ test('autolinking checks addon ownership, rejects colliding addons and waits for
   assert.ok(fs.existsSync(path.join(root, 'addons', 'meter', 'plugin.cfg')));
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /enable-plugins=meter/);
   assert.match(console.info.mock.calls.at(-1).arguments[0], /build-godot-editor to enable meter/);
+});
+
+test('a segment leaves out its base bundle, the prelude and polyfills, but runs its entry', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-segment-'));
+  const base = path.join(root, 'dist', 'index.bundle.js');
+  assert.throws(() => segmentConfig({}, root, base), /Build the bundle .* before its segments/);
+  fs.mkdirSync(path.dirname(base));
+  fs.writeFileSync(base + '.dependencies.json', JSON.stringify(['node_modules/react/index.js']));
+  const {processModuleFilter, getModulesRunBeforeMainModule} = segmentConfig({}, root, base).serializer;
+  const module = (modulePath, type) => ({path: modulePath, output: [{type}]});
+  assert.ok(processModuleFilter(module(path.join(root, 'segment.js'), 'js/module')));
+  assert.ok(processModuleFilter(module('require-' + path.join(root, 'segment.js'), 'js/script/virtual')));
+  assert.ok(!processModuleFilter(module(path.join(root, 'node_modules/react/index.js'), 'js/module')));
+  assert.ok(!processModuleFilter(module('__prelude__', 'js/script/virtual')));
+  assert.ok(!processModuleFilter(module(path.join(root, 'polyfill.js'), 'js/script')));
+  assert.deepEqual(getModulesRunBeforeMainModule(), []);
+  assert.equal(segmentPath(base, 'shop.entry.tsx'), path.join(root, 'dist', 'shop.entry.segment.js'));
 });
