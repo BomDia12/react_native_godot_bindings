@@ -46,6 +46,9 @@ function dependencyConfig(root, userConfig) {
   }
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const resolve = relative => (relative ? path.resolve(root, relative) : null);
+  if (manifest.codegenConfig && manifest.codegenConfig.jsSrcsDir == null) {
+    throw new Error(`${manifest.name} has a codegenConfig without jsSrcsDir.`);
+  }
   return {
     root,
     version: manifest.version,
@@ -114,13 +117,22 @@ function copyAddon(source, copy) {
 function nativeManifest(libraries, outputDir, staging) {
   const native = libraries.filter(library => library.module != null);
   // Godot names a module after its directory and keeps one module per name.
+  // Codegen output shares include paths, where one library's headers would
+  // shadow another's of the same name, or the bindings' own.
   const moduleNames = {};
+  const codegenNames = {FBReactNativeSpec: 'React Native', ReactNativeGodotSpec: 'react-native-godot', rncore: 'React Native'};
   for (const library of native) {
     const name = path.basename(library.module);
     if (name in moduleNames) {
       throw new Error(`${moduleNames[name]} and ${library.name} both link a native module named ${name}.`);
     }
     moduleNames[name] = library.name;
+    if (library.codegen) {
+      if (library.codegen.name in codegenNames) {
+        throw new Error(`${codegenNames[library.codegen.name]} and ${library.name} both use the codegen name ${library.codegen.name}.`);
+      }
+      codegenNames[library.codegen.name] = library.name;
+    }
   }
   const hash = crypto.createHash('sha256');
   hash.update(readPlatform()?.bindingsCommit ?? 'development');

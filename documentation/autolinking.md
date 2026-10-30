@@ -101,6 +101,9 @@ The command reads the libraries the React Native CLI finds in `node_modules`:
   `node_modules/.cache/react-native-godot/autolinking/codegen/<library>/`, and writes
   `autolinking.json` there with the module directories, the codegen directories and a hash
   of the bindings commit, the library versions, the module sources and their codegen.
+  Module directory names and codegen names must be unique, and codegen names can't be
+  `FBReactNativeSpec`, `ReactNativeGodotSpec` or `rncore`, which React Native and the
+  bindings use.
 - It copies each addon to `res://addons/<directory>` and enables its plugin through the
   Godot editor, as Project Settings does, so `_enable_plugin` runs. When an update changes
   an enabled addon, its plugin is disabled before the copy and enabled after it, so the
@@ -141,3 +144,20 @@ In this repository, `build_godot.sh` reads `RN_AUTOLINKING` the same way:
 (cd samples/view-text && npx react-native autolink-godot)
 RN_AUTOLINKING=samples/view-text/node_modules/.cache/react-native-godot/autolinking/autolinking.json scripts/build_godot.sh
 ```
+
+## Exporting
+
+Exported games run on export templates, which hold the engine and its modules, so a
+library's native module reaches an exported game only through templates built with it.
+Build `template_debug` and `template_release` from the same bindings checkout, with the
+modules and option the editor build uses:
+
+```sh
+scons platform=linuxbsd target=template_release \
+	custom_modules=<bindings>/modules,<each directory in autolinking.json's "modules"> \
+	custom_modules_recursive=no react_native_autolinking=<path to autolinking.json>
+```
+
+Then set them as the export preset's custom templates. An export warns when the project
+links native modules and the preset uses the default templates. Libraries without native
+modules need nothing more: their addons are ordinary project files.
