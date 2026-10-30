@@ -123,6 +123,13 @@ TEST_CASE("[ReactNativeBindings][Contracts] invalid names, defaults and types ar
 	CHECK(compile_error(contract).contains("Node"));
 
 	contract = roster_contract();
+	Dictionary reshaped = schema("named");
+	reshaped["name"] = "RosterEnemy";
+	reshaped["fields"] = Dictionary();
+	contract->set_properties({ property("enemy", reshaped, Dictionary()) });
+	CHECK(compile_error(contract).contains("can't set 'fields'"));
+
+	contract = roster_contract();
 	Dictionary camel = schema("record");
 	camel["fields"] = Dictionary({ { "phaseOne", schema("integer") } });
 	contract->set_properties({ property("phase", camel, Dictionary({ { "phaseOne", 0 } })) });
@@ -139,7 +146,7 @@ TEST_CASE("[ReactNativeBindings][Contracts] invalid names, defaults and types ar
 	contract->set_properties({ property("root_tag", schema("integer"), 0) });
 	CHECK(compile_error(contract).contains("rootTag"));
 
-	for (const char *type : { "dynamic", "int64", "Uint8Array", "Object" }) {
+	for (const char *type : { "dynamic", "void", "int64", "Uint8Array", "Object" }) {
 		contract = roster_contract();
 		Dictionary value = schema(type);
 		if (String(type) == "Object") {
