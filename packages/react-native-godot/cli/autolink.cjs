@@ -113,6 +113,15 @@ function copyAddon(source, copy) {
 // build. The hash names the editor built for exactly this set.
 function nativeManifest(libraries, outputDir, staging) {
   const native = libraries.filter(library => library.module != null);
+  // Godot names a module after its directory and keeps one module per name.
+  const moduleNames = {};
+  for (const library of native) {
+    const name = path.basename(library.module);
+    if (name in moduleNames) {
+      throw new Error(`${moduleNames[name]} and ${library.name} both link a native module named ${name}.`);
+    }
+    moduleNames[name] = library.name;
+  }
   const hash = crypto.createHash('sha256');
   hash.update(readPlatform()?.bindingsCommit ?? 'development');
   const codegen = [];
@@ -172,14 +181,15 @@ function addonOwners(libraries) {
   return owners;
 }
 
-function codegenCurrent(manifest, staging) {
-  return manifest.codegen.every(directory => sameTree(path.join(staging, path.basename(directory)), directory));
+// Codegen output is named after its package, which may be scoped.
+function codegenCurrent(manifest, outputDir, staging) {
+  return manifest.codegen.every(directory => sameTree(path.join(staging, path.relative(path.join(outputDir, 'codegen'), directory)), directory));
 }
 
 // Lists what differs from a fresh autolink, without changing anything.
 function staleOutputs(project, jsRoot, libraries, manifest, staging) {
   const problems = [];
-  if (JSON.stringify(readManifest(jsRoot)) !== JSON.stringify(manifest) || !codegenCurrent(manifest, staging)) {
+  if (JSON.stringify(readManifest(jsRoot)) !== JSON.stringify(manifest) || !codegenCurrent(manifest, autolinkingDir(jsRoot), staging)) {
     problems.push('the native module manifest or its codegen is out of date');
   }
   const addons = libraries.filter(library => library.addon != null);
@@ -222,7 +232,7 @@ async function autolink(project, config, {check = false, godot} = {}) {
       }
       return problems;
     }
-    if (JSON.stringify(readManifest(jsRoot)) !== JSON.stringify(manifest) || !codegenCurrent(manifest, staging)) {
+    if (JSON.stringify(readManifest(jsRoot)) !== JSON.stringify(manifest) || !codegenCurrent(manifest, outputDir, staging)) {
       fs.rmSync(path.join(outputDir, 'codegen'), {recursive: true, force: true});
       fs.mkdirSync(outputDir, {recursive: true});
       fs.cpSync(staging, path.join(outputDir, 'codegen'), {recursive: true});
@@ -246,11 +256,19 @@ async function linkAddons(project, jsRoot, libraries, manifest, godot) {
   // so it waits for the editor built with them; build-godot-editor enables it.
   const editorPending = manifest.hash != null && godot == null && process.env.GODOT_EDITOR == null && linkedEditor(manifest) == null;
   const waiting = addons.filter(library => editorPending && library.module != null).map(addonDirectory);
-  const toEnable = Object.keys(current).filter(directory => !enabled.includes(directory) && !waiting.includes(directory));
+  // An updated addon goes through its plugin's lifecycle again, so changes to
+  // what _enable_plugin sets up, such as autoloads, apply.
+  const updated = addons
+    .filter(library => {
+      const directory = addonDirectory(library);
+      return directory in locked && enabled.includes(directory) && !waiting.includes(directory) && !sameAddon(library.addon, path.join(project.godotRoot, 'addons', directory));
+    })
+    .map(addonDirectory);
+  const toEnable = Object.keys(current).filter(directory => (!enabled.includes(directory) || updated.includes(directory)) && !waiting.includes(directory));
   if (waiting.some(directory => !enabled.includes(directory))) {
     console.info(`Run react-native build-godot-editor to enable ${waiting.join(', ')}.`);
   }
-  const toDisable = removed.filter(directory => enabled.includes(directory));
+  const toDisable = [...removed.filter(directory => enabled.includes(directory)), ...updated];
   for (const directory of Object.keys(current)) {
     if (!(directory in locked) && fs.existsSync(path.join(project.godotRoot, 'addons', directory))) {
       throw new Error(`res://addons/${directory} already exists and was not linked by autolink-godot. Remove it to link ${current[directory]}.`);

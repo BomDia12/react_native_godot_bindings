@@ -43,7 +43,8 @@ module](interop.md#application-modules).
 ### Native modules
 
 A native module is a Godot module that depends on `react_native_bindings`. Its directory
-name is the module name, which must be unique among the project's libraries.
+name is the module name, which must be unique among the project's libraries; autolinking
+rejects two modules with the same name.
 
 ```python
 # config.py
@@ -101,8 +102,10 @@ The command reads the libraries the React Native CLI finds in `node_modules`:
   `autolinking.json` there with the module directories, the codegen directories and a hash
   of the bindings commit, the library versions, the module sources and their codegen.
 - It copies each addon to `res://addons/<directory>` and enables its plugin through the
-  Godot editor, as Project Settings does, so `_enable_plugin` runs. A removed library's
-  plugin is disabled and its copy deleted. `godot-autolinking.lock.json` records the
+  Godot editor, as Project Settings does, so `_enable_plugin` runs. When an update changes
+  an enabled addon, its plugin is disabled before the copy and enabled after it, so the
+  plugin sets itself up again. A removed library's plugin is disabled and its copy
+  deleted. `godot-autolinking.lock.json` records the
   copies the command owns: it never replaces an `addons/` directory it didn't create, and
   two libraries can't link addons with the same directory name. Copies keep the `.uid` and
   `.import` files Godot adds to them.

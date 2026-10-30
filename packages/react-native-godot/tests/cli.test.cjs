@@ -239,3 +239,20 @@ test('autolinking checks addon ownership, rejects colliding addons and waits for
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /enable-plugins=meter/);
   assert.match(console.info.mock.calls.at(-1).arguments[0], /build-godot-editor to enable meter/);
 });
+
+test('autolinking re-enables updated plugins and rejects colliding native modules', async () => {
+  const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
+  const godot = fakeEditor(root);
+  const project = loadGodotProject(root);
+  const config = {root, dependencies: {scores: library(root, 'scores', {addon: 'godot/addons/scores'})}};
+  await autolink(project, config, {godot});
+  fs.appendFileSync(path.join(root, 'libraries', 'scores', 'godot', 'addons', 'scores', 'plugin.cfg'), 'version="2"\n');
+  fs.writeFileSync(path.join(root, 'editor-args'), '');
+  await autolink(project, config, {godot});
+  assert.match(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /disable-plugins=scores[\s\S]*enable-plugins=scores/);
+  assert.deepEqual(await autolink(project, config, {check: true, godot}), []);
+
+  const first = library(path.join(root, 'a'), 'first', {module: 'godot/rn_module'});
+  const second = library(path.join(root, 'b'), 'second', {module: 'godot/rn_module'});
+  await assert.rejects(autolink(project, {root, dependencies: {first, second}}, {godot}), /first and second both link a native module named rn_module/);
+});
