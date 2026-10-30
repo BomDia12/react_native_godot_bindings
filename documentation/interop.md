@@ -149,7 +149,8 @@ Messages carry any value the codec carries, without a schema:
 Messages arrive in order and return nothing. JavaScript posts reach Godot on the main thread
 on the next frame. A message for a root that isn't running is dropped with a warning, and
 a payload holding an Object is dropped with an error, because Objects need a declared
-capability.
+capability. For the same reason, `postGodotMessage` throws `E_VALIDATION` for a payload
+holding an Object wrapper.
 
 ## Binary and network ownership
 

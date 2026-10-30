@@ -25,3 +25,6 @@ func run() -> void:
 		return
 	if acks[0] != [1, "two"]:
 		fail("the application message arrived as %s" % [acks[0]])
+		return
+	if await js("__postObjectMessage()") != "E_VALIDATION":
+		fail("a message carrying an Object wrapper was posted")
