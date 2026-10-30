@@ -17,7 +17,7 @@ truth for both sides:
 | `component` | The registered component name, in PascalCase. |
 | `properties` | Ordered `{name, value, default}` entries. `value` is a value schema, as in [interop](interop.md#script-capability-resources). |
 | `events` | Ordered `{name, arguments: [{name, value}]}` entries. |
-| `types` | Named record types, `{RosterEnemy: {type: "record", fields: {...}}}`, referenced from any schema as `{"type": "named", "name": "RosterEnemy"}`. |
+| `types` | Named record types, `{RosterEnemy: {type: "record", fields: {...}}}`, referenced from any schema as `{"type": "named", "name": "RosterEnemy"}`. A reference can add `nullable`, `optional` or `default`, but not change the type's shape. |
 
 ```gdscript
 # res://react_native/contracts/EnemyHealthBar.tres, as text
@@ -34,7 +34,7 @@ Property, event, argument and record field names are snake_case. Property and ev
 must be unique and can't reuse a property, method or signal of `ReactNativeRootView`, nor
 a property or signal of the root's script. Every property needs a default that fits its
 schema. Contract values start the surface as plain props, so they can't use `int64`,
-`Uint8Array` or `Object` schemas; pass objects through a scene binding or an
+`Uint8Array`, `Object` or `void` schemas; pass objects through a scene binding or an
 [application module](interop.md#application-modules). Field names convert between
 snake_case and camelCase by the schema, so values can't be `dynamic` either; send
 free-form values as [messages](interop.md#messages). Named types can't contain themselves,
@@ -70,7 +70,7 @@ The build writes three kinds of files under the project root:
 | File | Owner | Content |
 |---|---|---|
 | `godot/contracts.ts` | generated | Named types, one `<Component>Props` type per contract, and the `GodotContracts` map. |
-| `godot/registry.ts` | generated | Registers every contract component, wrapped by `withGodotContract`. The template's `index.js` imports it. |
+| `godot/registry.ts` | generated | Registers every contract component, wrapped by `withGodotContract`. The template's `index.js` imports it after its own registrations, so contract components take precedence. |
 | `components/<Component>.tsx` | developer | Written once, when missing, as a component that returns a `View`. |
 
 ```ts

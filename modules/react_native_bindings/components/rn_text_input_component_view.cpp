@@ -35,6 +35,25 @@ RNTextInputComponentView::RNTextInputComponentView(Tag p_tag, SurfaceId p_surfac
 void RNTextInputComponentView::update_props(const Props::Shared &p_old, const Props::Shared &p_new) {
 	RNComponentView::update_props(p_old, p_new);
 	const auto &next = static_cast<const GodotTextInputProps &>(*p_new);
+	_configure();
+
+	const auto previous = std::static_pointer_cast<const GodotTextInputProps>(p_old);
+	const bool fresh_text = !previous || previous->text != next.text;
+	const bool fresh_selection = next.selection && (!previous || previous->selection != next.selection);
+	if (fresh_text || fresh_selection) {
+		input->reconcile(next.mostRecentEventCount, fresh_text ? Variant(String::utf8(next.text.c_str())) : Variant(), fresh_selection ? next.selection->start : -1, fresh_selection ? next.selection->end : -1);
+	}
+}
+
+// Fonts and colors that props leave out come from the surface's theme.
+void RNTextInputComponentView::theme_changed() {
+	if (props) {
+		_configure();
+	}
+}
+
+void RNTextInputComponentView::_configure() {
+	const auto &next = static_cast<const GodotTextInputProps &>(*props);
 	RNTextInputConfig config;
 	config.font = shaper->resolve_font(next.textAttributes, surface, config.font_size, config.font_color);
 	config.selection_color = optional_color(next.selectionColor);
@@ -49,13 +68,6 @@ void RNTextInputComponentView::update_props(const Props::Shared &p_old, const Pr
 	config.auto_focus = next.autoFocus;
 	config.targetable = next.pointerEvents != PointerEventsMode::None && next.pointerEvents != PointerEventsMode::BoxNone;
 	input->configure(config);
-
-	const auto previous = std::static_pointer_cast<const GodotTextInputProps>(p_old);
-	const bool fresh_text = !previous || previous->text != next.text;
-	const bool fresh_selection = next.selection && (!previous || previous->selection != next.selection);
-	if (fresh_text || fresh_selection) {
-		input->reconcile(next.mostRecentEventCount, fresh_text ? Variant(String::utf8(next.text.c_str())) : Variant(), fresh_selection ? next.selection->start : -1, fresh_selection ? next.selection->end : -1);
-	}
 }
 
 void RNTextInputComponentView::_emit(const StringName &p_event, const Dictionary &p_payload) {

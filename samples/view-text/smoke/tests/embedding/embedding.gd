@@ -23,6 +23,12 @@ func wait_until(condition: Callable, label: String) -> bool:
 	fail("timed out waiting for %s" % label)
 	return false
 
+func editor_of(control: Control) -> LineEdit:
+	for child in control.get_children(true):
+		if child is LineEdit:
+			return child
+	return null
+
 func _ready() -> void:
 	_run.call_deferred()
 
@@ -44,6 +50,16 @@ func _run() -> void:
 	var inner: Dictionary = measured["inner"]
 	if not is_equal_approx(inner["windowX"], 400.0) or not is_equal_approx(inner["windowY"], 300.0):
 		fail("a root in a SubViewport measured itself at %s,%s in the window" % [inner["windowX"], inner["windowY"]])
+		return
+	var normal: ReactNativeRootView = $Normal
+	var editor := editor_of(normal.get_native_node("input"))
+	if editor == null:
+		fail("the TextInput has no line editor")
+		return
+	var theme := Theme.new()
+	theme.set_font_size("normal_font_size", "RichTextLabel", 31)
+	normal.theme = theme
+	if not await wait_until(func(): return editor.get_theme_font_size("font_size") == 31, "the TextInput to follow its root's new theme"):
 		return
 	print("RN_SMOKE_OK: embedding")
 	get_tree().quit(0)
