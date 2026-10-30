@@ -178,9 +178,9 @@ Ref<Font> RNTextShaper::_font(const TextAttributes &p_attributes, const RNThemeM
 	return font;
 }
 
-std::shared_ptr<const RNThemeMetrics> RNTextShaper::get_theme_metrics(const AttributedString &p_string) const {
+SurfaceId RNTextShaper::surface_of(const AttributedString &p_string) {
 	const auto &fragments = p_string.getFragments();
-	return theme->get(fragments.empty() ? -1 : fragments.front().parentShadowView.surfaceId);
+	return fragments.empty() ? -1 : fragments.front().parentShadowView.surfaceId;
 }
 
 Ref<Font> RNTextShaper::resolve_font(const TextAttributes &p_attributes, SurfaceId p_surface, int &r_size, ::Color &r_color) const {
@@ -190,8 +190,8 @@ Ref<Font> RNTextShaper::resolve_font(const TextAttributes &p_attributes, Surface
 	return _font(p_attributes, *metrics);
 }
 
-void RNTextShaper::_shape(const AttributedString &p_string, const ParagraphAttributes &p_paragraph, float p_width, float p_scale, RNParagraphLayout &r_layout) const {
-	const std::shared_ptr<const RNThemeMetrics> metrics = get_theme_metrics(p_string);
+void RNTextShaper::_shape(const AttributedString &p_string, const ParagraphAttributes &p_paragraph, float p_width, float p_scale, SurfaceId p_surface, RNParagraphLayout &r_layout) const {
+	const std::shared_ptr<const RNThemeMetrics> metrics = theme->get(p_surface);
 	Vector<RNParagraphLayout::Fragment> fragments;
 	std::optional<TextAlignment> alignment;
 	std::optional<WritingDirection> direction;
@@ -242,9 +242,9 @@ void RNTextShaper::_shape(const AttributedString &p_string, const ParagraphAttri
 	r_layout.shape(fragments, attributes);
 }
 
-void RNTextShaper::shape(const AttributedString &p_string, const ParagraphAttributes &p_paragraph, const Size2 &p_available, RNParagraphLayout &r_layout) const {
+void RNTextShaper::shape(const AttributedString &p_string, const ParagraphAttributes &p_paragraph, const Size2 &p_available, SurfaceId p_surface, RNParagraphLayout &r_layout) const {
 	const float width = std::isfinite(p_available.x) && p_available.x > 0 ? p_available.x : -1;
-	_shape(p_string, p_paragraph, width, 1, r_layout);
+	_shape(p_string, p_paragraph, width, 1, p_surface, r_layout);
 	if (!p_paragraph.adjustsFontSizeToFit) {
 		return;
 	}
@@ -260,12 +260,12 @@ void RNTextShaper::shape(const AttributedString &p_string, const ParagraphAttrib
 	int high = 99;
 	while (low < high) {
 		const int middle = (low + high + 1) / 2;
-		_shape(p_string, p_paragraph, width, middle / 100.0f, r_layout);
+		_shape(p_string, p_paragraph, width, middle / 100.0f, p_surface, r_layout);
 		if (fits()) {
 			low = middle;
 		} else {
 			high = middle - 1;
 		}
 	}
-	_shape(p_string, p_paragraph, width, low / 100.0f, r_layout);
+	_shape(p_string, p_paragraph, width, low / 100.0f, p_surface, r_layout);
 }

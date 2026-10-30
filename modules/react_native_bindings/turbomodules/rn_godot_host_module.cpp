@@ -98,6 +98,14 @@ void RNGodotHostModule::postMessage(jsi::Runtime &rt, std::optional<double> root
 	});
 }
 
+void RNGodotHostModule::invokeDefaultBackPressHandler(jsi::Runtime &) {
+	host.main_thread->post([] {
+		if (ReactNativeHost *host_singleton = ReactNativeHost::get_singleton()) {
+			host_singleton->invoke_default_back_press();
+		}
+	});
+}
+
 void RNGodotHostModule::emit_root_state(int p_root_tag, const RNRootState &p_state) {
 	static_cast<AsyncEventEmitter<jsi::Value> &>(*eventEmitterMap_["onRootStateChanged"]).emit([p_root_tag, p_state](jsi::Runtime &p_runtime) -> jsi::Value {
 		jsi::Object change = state_to_js(p_runtime, p_state);

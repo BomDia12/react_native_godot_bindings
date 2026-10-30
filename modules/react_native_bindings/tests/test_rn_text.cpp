@@ -41,17 +41,17 @@ const Size2 UNBOUNDED(std::numeric_limits<float>::infinity(), std::numeric_limit
 TEST_CASE("[ReactNativeBindings][Text][SceneTree] natural, start, end, left and right alignment follow the layout direction") {
 	Shaper shaper;
 	RNParagraphLayout layout;
-	shaper.shaper.shape(attributed("aligned", [](TextAttributes &p_attributes) { p_attributes.layoutDirection = LayoutDirection::RightToLeft; }), ParagraphAttributes(), Size2(300, 100), layout);
+	shaper.shaper.shape(attributed("aligned", [](TextAttributes &p_attributes) { p_attributes.layoutDirection = LayoutDirection::RightToLeft; }), ParagraphAttributes(), Size2(300, 100), -1, layout);
 	CHECK(layout.get_lines()[0].bounds.get_end().x == doctest::Approx(300));
 
-	shaper.shaper.shape(attributed("aligned", [](TextAttributes &p_attributes) { p_attributes.alignment = TextAlignment::End; }), ParagraphAttributes(), Size2(300, 100), layout);
+	shaper.shaper.shape(attributed("aligned", [](TextAttributes &p_attributes) { p_attributes.alignment = TextAlignment::End; }), ParagraphAttributes(), Size2(300, 100), -1, layout);
 	CHECK(layout.get_lines()[0].bounds.get_end().x == doctest::Approx(300));
 
 	shaper.shaper.shape(attributed("aligned", [](TextAttributes &p_attributes) {
 		p_attributes.layoutDirection = LayoutDirection::RightToLeft;
 		p_attributes.alignment = TextAlignment::Left;
 	}),
-			ParagraphAttributes(), Size2(300, 100), layout);
+			ParagraphAttributes(), Size2(300, 100), -1, layout);
 	// Left and right swap in right-to-left layouts, as upstream does.
 	CHECK(layout.get_lines()[0].bounds.get_end().x == doctest::Approx(300));
 }
@@ -59,9 +59,9 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] natural, start, end, left and 
 TEST_CASE("[ReactNativeBindings][Text][SceneTree] text transforms keep character indices") {
 	Shaper shaper;
 	RNParagraphLayout layout;
-	shaper.shaper.shape(attributed("hello big world", [](TextAttributes &p_attributes) { p_attributes.textTransform = TextTransform::Capitalize; }), ParagraphAttributes(), UNBOUNDED, layout);
+	shaper.shaper.shape(attributed("hello big world", [](TextAttributes &p_attributes) { p_attributes.textTransform = TextTransform::Capitalize; }), ParagraphAttributes(), UNBOUNDED, -1, layout);
 	CHECK(layout.get_fragments()[0].text == "Hello Big World");
-	shaper.shaper.shape(attributed("straße", [](TextAttributes &p_attributes) { p_attributes.textTransform = TextTransform::Uppercase; }), ParagraphAttributes(), UNBOUNDED, layout);
+	shaper.shaper.shape(attributed("straße", [](TextAttributes &p_attributes) { p_attributes.textTransform = TextTransform::Uppercase; }), ParagraphAttributes(), UNBOUNDED, -1, layout);
 	CHECK(layout.get_fragments()[0].text.length() == String::utf8("straße").length());
 }
 
@@ -74,7 +74,7 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] decorations and shadows take t
 		p_attributes.textDecorationLineType = TextDecorationLineType::Underline;
 		p_attributes.textDecorationStyle = TextDecorationStyle::Dashed;
 	}),
-			ParagraphAttributes(), UNBOUNDED, layout);
+			ParagraphAttributes(), UNBOUNDED, -1, layout);
 	const RNParagraphLayout::Fragment &defaulted = layout.get_fragments()[0];
 	CHECK(defaulted.decoration_color.is_equal_approx(::Color(1, 0, 0)));
 	CHECK(defaulted.decoration_style == RNParagraphLayout::DECORATION_DASHED);
@@ -85,7 +85,7 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] decorations and shadows take t
 		p_attributes.textShadowOffset = Size{ .width = 2, .height = 3 };
 		p_attributes.textShadowRadius = 4;
 	}),
-			ParagraphAttributes(), UNBOUNDED, layout);
+			ParagraphAttributes(), UNBOUNDED, -1, layout);
 	const RNParagraphLayout::Fragment &styled = layout.get_fragments()[0];
 	CHECK(styled.decoration_color.is_equal_approx(::Color(0, 0, 1)));
 	CHECK(styled.shadow_offset == Vector2(2, 3));
@@ -100,11 +100,11 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] adjustsFontSizeToFit picks the
 	paragraph.maximumNumberOfLines = 1;
 	const AttributedString text = attributed("a sentence that is far too long for its box");
 	RNParagraphLayout natural;
-	shaper.shaper.shape(text, ParagraphAttributes(), UNBOUNDED, natural);
+	shaper.shaper.shape(text, ParagraphAttributes(), UNBOUNDED, -1, natural);
 	const float width = natural.get_size().x / 2;
 
 	RNParagraphLayout fitted;
-	shaper.shaper.shape(text, paragraph, Size2(width, 100), fitted);
+	shaper.shaper.shape(text, paragraph, Size2(width, 100), -1, fitted);
 	CHECK_FALSE(fitted.is_truncated());
 	CHECK(fitted.get_size().x <= width);
 	const int size = fitted.get_fragments()[0].font_size;
@@ -112,7 +112,7 @@ TEST_CASE("[ReactNativeBindings][Text][SceneTree] adjustsFontSizeToFit picks the
 	CHECK(size >= 7);
 
 	paragraph.minimumFontScale = 0.9;
-	shaper.shaper.shape(text, paragraph, Size2(width, 100), fitted);
+	shaper.shaper.shape(text, paragraph, Size2(width, 100), -1, fitted);
 	CHECK(fitted.get_fragments()[0].font_size == 14);
 	CHECK(fitted.is_truncated());
 }

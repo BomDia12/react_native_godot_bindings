@@ -209,11 +209,15 @@ Upstream's TV props `nextFocusUp`, `nextFocusDown`, `nextFocusLeft`, `nextFocusR
 view's focus neighbors and `focus_next`, resolved again after every mount. A view whose
 `hasTVPreferredFocus` turns true takes focus.
 
-`BackHandler` listeners receive `ui_cancel` presses, a gamepad's B button once bound, made
-while focus is in a React view, and Godot's back requests. Godot can't wait for JavaScript
-to decide whether a press was handled, so roots take `ui_cancel` from the game only while
-at least one listener is registered. Unhandled presses don't exit; `BackHandler.exitApp`
-stays unsupported.
+`BackHandler` listeners receive `ui_cancel` presses made while focus is in a React view,
+and Godot's back requests, such as Android's back button. `ui_cancel` is a gamepad's B
+button once bound, and Escape on a keyboard, so Escape in a focused TextInput is a back
+press too. Godot can't wait for JavaScript to decide whether a press was handled, so roots
+take `ui_cancel` from the game only while at least one listener is registered, and
+`SceneTree.quit_on_go_back` is off meanwhile. When no listener handles a press, Godot gets
+it back, as upstream's default handler does: `ui_cancel` reaches the game, and a back
+request quits when the project's `quit_on_go_back` is on. `BackHandler.exitApp` stays
+unsupported.
 
 ## Developer server
 

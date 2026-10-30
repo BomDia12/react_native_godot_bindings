@@ -14,13 +14,17 @@ class RNGodotSceneHost : public Control {
 
 	String source;
 	String loading;
-	Node *instance = nullptr;
+	// GDScript receives the instance and can free or reparent it, so the host
+	// finds it, and the node it added, again before touching them.
+	ObjectID instance;
+	ObjectID shown;
 	std::function<void(Node *)> loaded;
 	std::function<void(const String &)> failed;
 
 	void _poll();
 	void _show(Node *p_instance);
 	void _clear();
+	void _cancel_load();
 
 protected:
 	static void _bind_methods() {}
@@ -30,7 +34,7 @@ public:
 	RNGodotSceneHost();
 	void set_callbacks(std::function<void(Node *p_instance)> p_loaded, std::function<void(const String &p_message)> p_failed);
 	void set_source(const String &p_source);
-	Node *get_instance() const { return instance; }
+	Node *get_instance() const { return Object::cast_to<Node>(ObjectDB::get_instance(instance)); }
 };
 
 class RNGodotSceneComponentView : public RNComponentView {

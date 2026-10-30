@@ -545,6 +545,7 @@ protected:
     methodMap_["getRootState"] = MethodMetadata {.argCount = 1, .invoker = __getRootState};
     methodMap_["setBackHandlerEnabled"] = MethodMetadata {.argCount = 1, .invoker = __setBackHandlerEnabled};
     methodMap_["postMessage"] = MethodMetadata {.argCount = 3, .invoker = __postMessage};
+    methodMap_["invokeDefaultBackPressHandler"] = MethodMetadata {.argCount = 0, .invoker = __invokeDefaultBackPressHandler};
     eventEmitterMap_["onRootStateChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
     eventEmitterMap_["onMessage"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
   }
@@ -587,6 +588,13 @@ private:
       count <= 0 || args[0].isNull() || args[0].isUndefined() ? std::nullopt : std::make_optional(args[0].asNumber()),
       count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt),
       count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : jsi::Value(rt, args[2]));return jsi::Value::undefined();
+  }
+
+  static jsi::Value __invokeDefaultBackPressHandler(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::invokeDefaultBackPressHandler) == 1,
+      "Expected invokeDefaultBackPressHandler(...) to have 1 parameters");
+    bridging::callFromJs<void>(rt, &T::invokeDefaultBackPressHandler,  static_cast<NativeGodotHostCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));return jsi::Value::undefined();
   }
 };
 
