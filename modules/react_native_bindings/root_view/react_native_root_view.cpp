@@ -436,7 +436,7 @@ void ReactNativeRootView::_fit_contract_values() {
 		RNError error;
 		const Variant current = contract_values.get(property.name, Variant());
 		const bool fits = contract_values.has(property.name) && rn_validate_native_value(current, property.schema, error, "value");
-		values[property.name] = fits ? current : property.default_value.duplicate(true);
+		values[property.name] = rn_contract_value_with_defaults(fits ? current : property.default_value, property.schema);
 	}
 	contract_values = values;
 }
@@ -472,7 +472,7 @@ bool ReactNativeRootView::_set(const StringName &p_name, const Variant &p_value)
 		ERR_PRINT(vformat("%s cannot be set to %s: %s", p_name, p_value, error.describe()));
 		return true;
 	}
-	contract_values[p_name] = p_value;
+	contract_values[p_name] = rn_contract_value_with_defaults(p_value, property->schema);
 	_contract_values_changed();
 	return true;
 }
@@ -549,6 +549,12 @@ void ReactNativeRootView::input(const Ref<InputEvent> &p_event) {
 // controls inside a GodotScene keep theirs.
 void ReactNativeRootView::_begin_input(const Ref<InputEvent> &p_event, ObjectID p_viewport_id) {
 	++input_serial;
+	// The release of a back press the root took goes with it, wherever focus is now.
+	if (took_back_press && p_event->is_action_released(SNAME("ui_cancel"))) {
+		took_back_press = false;
+		get_viewport()->set_input_as_handled();
+		return;
+	}
 	if (Ref<InputEventMouseMotion>(p_event).is_valid()) {
 		callable_mp(this, &ReactNativeRootView::_route_unclaimed_motion).call_deferred(p_event, input_serial, p_viewport_id);
 		return;
@@ -561,6 +567,7 @@ void ReactNativeRootView::_begin_input(const Ref<InputEvent> &p_event, ObjectID 
 	ReactNativeHost *host = ReactNativeHost::get_singleton();
 	if (host && host->handles_back_press() && p_event->is_action_pressed(SNAME("ui_cancel")) && !host->is_default_back_press(p_event)) {
 		get_viewport()->set_input_as_handled();
+		took_back_press = true;
 		host->back_pressed(false);
 		return;
 	}

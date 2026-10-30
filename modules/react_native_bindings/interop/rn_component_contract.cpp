@@ -216,9 +216,68 @@ bool RNComponentContract::compile(RNCompiledContract &r_contract, RNError &r_err
 		}
 		compiled.events.push_back(event);
 	}
+	// Each name becomes a React prop, which must stay distinct and can't be one
+	// React or withGodotContract takes for itself.
+	HashMap<String, String> react_props = { { "key", String() }, { "ref", String() }, { "rootTag", String() } };
+	for (const RNContractProperty &property : compiled.properties) {
+		const String prop = rn_contract_prop_name(property.name);
+		if (react_props.has(prop)) {
+			return invalid(r_error, vformat("'%s' becomes the React prop '%s', which %s", property.name, prop, react_props[prop].is_empty() ? "React reserves" : "'" + react_props[prop] + "' also becomes"), "properties");
+		}
+		react_props[prop] = property.name;
+	}
+	for (const RNContractEvent &event : compiled.events) {
+		const String prop = rn_contract_event_prop(event.name);
+		if (react_props.has(prop)) {
+			return invalid(r_error, vformat("'%s' becomes the React prop '%s', which %s", event.name, prop, react_props[prop].is_empty() ? "React reserves" : "'" + react_props[prop] + "' also becomes"), "events");
+		}
+		react_props[prop] = event.name;
+	}
 	compiled.snapshot = RNValueSchema::record(snapshot_fields);
 	r_contract = std::move(compiled);
 	return true;
+}
+
+// An underscore before a letter becomes its capital; one before a digit stays,
+// so the name converts back to the same snake_case.
+String rn_contract_prop_name(const String &p_name) {
+	String result;
+	for (int i = 0; i < p_name.length(); ++i) {
+		if (p_name[i] == '_' && i + 1 < p_name.length() && is_ascii_lower_case(p_name[i + 1])) {
+			result += String::chr(p_name[++i]).to_upper();
+		} else {
+			result += String::chr(p_name[i]);
+		}
+	}
+	return result;
+}
+
+String rn_contract_event_prop(const String &p_event) {
+	const String name = rn_contract_prop_name(p_event);
+	return "on" + name.substr(0, 1).to_upper() + name.substr(1);
+}
+
+Variant rn_contract_value_with_defaults(const Variant &p_value, const RNValueSchema &p_schema) {
+	if (p_schema.type == RNValueType::RECORD && p_value.get_type() == Variant::DICTIONARY) {
+		Dictionary record = Dictionary(p_value).duplicate();
+		for (const RNRecordFieldSchema &field : p_schema.fields) {
+			const String name = field.name;
+			if (record.has(name)) {
+				record[name] = rn_contract_value_with_defaults(record[name], *field.value);
+			} else if (field.has_default) {
+				record[name] = field.default_value.duplicate(true);
+			}
+		}
+		return record;
+	}
+	if (p_schema.type == RNValueType::ARRAY && p_schema.element && p_value.get_type() == Variant::ARRAY) {
+		Array result;
+		for (const Variant &item : Array(p_value)) {
+			result.push_back(rn_contract_value_with_defaults(item, *p_schema.element));
+		}
+		return result;
+	}
+	return p_value;
 }
 
 bool rn_is_generating_contracts() {
