@@ -181,6 +181,12 @@ void RNComponentViewRegistry::_resolve_focus_references() {
 	}
 }
 
+void RNComponentViewRegistry::theme_changed() {
+	for (const auto &entry : views) {
+		entry.second->theme_changed();
+	}
+}
+
 void RNComponentViewRegistry::clear() {
 	focus_references.clear();
 	views.clear();

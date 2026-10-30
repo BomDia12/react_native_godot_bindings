@@ -92,6 +92,7 @@ public:
 	Size2 get_minimum_size() const override;
 	RNRootState get_state() const;
 	Node *get_native_node(const String &p_native_id) const;
+	void theme_metrics_changed();
 	int get_root_tag() const { return surface_id; }
 	void reload();
 	void set_alert_handler(const Callable &p_handler) { alert_handler = p_handler; }

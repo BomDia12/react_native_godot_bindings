@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {AppRegistry, BackHandler, findNodeHandle, Pressable, StyleSheet, Text, View} from 'react-native';
+import {AppRegistry, BackHandler, findNodeHandle, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import GodotScene from 'react-native-godot/GodotScene';
 import {useGodotRootState} from 'react-native-godot/root';
 
@@ -31,6 +31,7 @@ function EmbeddingApp({label}) {
         }}>
         Embedded text
       </Text>
+      {label === 'normal' && <TextInput nativeID="input" style={styles.input} />}
     </View>
   );
 }
@@ -103,6 +104,10 @@ const styles = StyleSheet.create({
   content: {
     height: 48,
     alignItems: 'flex-start',
+  },
+  input: {
+    width: 100,
+    height: 24,
   },
   fill: {
     flex: 1,
