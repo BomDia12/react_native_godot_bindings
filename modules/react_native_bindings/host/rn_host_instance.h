@@ -79,6 +79,7 @@ private:
 		std::function<void(bool)> done;
 	};
 	PackedStringArray startup_segments;
+	String bundle_fingerprint;
 	bool script_loaded = false;
 	std::vector<Segment> waiting_segments;
 	RNHostRuntime runtime;

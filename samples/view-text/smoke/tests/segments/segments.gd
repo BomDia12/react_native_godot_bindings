@@ -59,6 +59,17 @@ func _run() -> void:
 	if await ReactNativeHost.load_segment("res://dist/segments/missing.segment.js"):
 		fail("a missing segment reported success")
 		return
+	var runtime_source := FileAccess.get_file_as_string(BUNDLE.get_base_dir().path_join("runtime_segment.segment.js"))
+	var mark := runtime_source.rfind("//# godotBase=")
+	if mark < 0:
+		fail("the segment build did not mark the segment's base")
+		return
+	var stale := FileAccess.open("user://stale.segment.js", FileAccess.WRITE)
+	stale.store_string(runtime_source.substr(0, mark) + "//# godotBase=0000000000000000\n")
+	stale.close()
+	if await ReactNativeHost.load_segment("user://stale.segment.js"):
+		fail("a segment built for another bundle reported success")
+		return
 
 	var generation := ReactNativeHost.get_generation()
 	ReactNativeHost.reload()

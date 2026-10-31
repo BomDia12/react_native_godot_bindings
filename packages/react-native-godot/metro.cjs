@@ -19,11 +19,20 @@ function linkedDependencyRoots(projectRoot) {
 }
 
 // Module IDs hash the project-relative path, so a segment built on its own
-// refers to the modules of the bundle it extends by the same IDs.
+// refers to the modules of the bundle it extends by the same IDs. Two paths
+// with the same ID would silently share one module, so that fails the build.
 function stableModuleIds(projectRoot) {
-  return () => modulePath => {
-    const relative = path.relative(projectRoot, modulePath).split(path.sep).join('/');
-    return crypto.createHash('sha1').update(relative).digest().readUInt32BE(0) & 0x7fffffff;
+  return () => {
+    const paths = new Map();
+    return modulePath => {
+      const relative = path.relative(projectRoot, modulePath).split(path.sep).join('/');
+      const id = crypto.createHash('sha1').update(relative).digest().readUInt32BE(0) & 0x7fffffff;
+      if (paths.has(id) && paths.get(id) !== relative) {
+        throw new Error(`${paths.get(id)} and ${relative} have the same module ID ${id}; rename one of them.`);
+      }
+      paths.set(id, relative);
+      return id;
+    };
   };
 }
 

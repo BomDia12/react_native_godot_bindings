@@ -34,7 +34,7 @@ bool RNExportPlugin::is_tooling_file(const String &p_path, const String &p_proje
 	if (!p_path.begins_with(p_output_directory.path_join(""))) {
 		return false;
 	}
-	return p_path.ends_with(".map") || p_path.ends_with(".dependencies.json") || p_path.get_file() == "assets-manifest.json";
+	return p_path.ends_with(".map") || p_path.ends_with(".dependencies.json") || p_path.ends_with("assets-manifest.json");
 }
 
 bool RNExportPlugin::_build(String &r_output) {

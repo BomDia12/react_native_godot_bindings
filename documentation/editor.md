@@ -70,7 +70,7 @@ Exports build a release bundle and its startup
 `react-native-godot/scripts/build.cjs` and the project's `node`, after regenerating
 contracts. New assets are imported before the export collects its files, and the bundle
 and its segments are added to the export because a `.js` file is not a resource. Source
-maps, `.dependencies.json`, `assets-manifest.json` and the JavaScript project's
+maps, `.dependencies.json`, `.assets-manifest.json` and the JavaScript project's
 `package.json`, `package-lock.json` and `tsconfig.json` stay out. Debug exports get the
 same release bundle; debug JavaScript in a game the editor runs. Export templates ignore
 the developer server.

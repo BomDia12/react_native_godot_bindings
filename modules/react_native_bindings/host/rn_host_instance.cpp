@@ -142,6 +142,30 @@ void send_error_to_editor(const JsErrorHandler::ProcessedError &p_error) {
 	EngineDebugger::get_singleton()->send_message("react_native:error", { String::utf8(p_error.message.c_str()), frames });
 }
 
+// The value of the `//# <key>=` comment a build appends to bundles and segments.
+String build_mark(const String &p_tail, const String &p_key) {
+	const String prefix = "//# " + p_key + "=";
+	const int start = p_tail.rfind(prefix);
+	return start < 0 ? String() : p_tail.substr(start + prefix.length()).strip_edges();
+}
+
+// The last lines of a script, where builds put their marks. The marks are
+// ASCII, and Latin-1 decodes any byte, wherever the tail starts.
+String tail_of(const PackedByteArray &p_bytes) {
+	const int start = MAX(0, p_bytes.size() - 128);
+	return String::latin1(Span<char>(reinterpret_cast<const char *>(p_bytes.ptr()) + start, p_bytes.size() - start));
+}
+
+String file_tail(const String &p_path) {
+	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::READ);
+	if (file.is_null()) {
+		return String();
+	}
+	const uint64_t length = file->get_length();
+	file->seek(length > 128 ? length - 128 : 0);
+	return tail_of(file->get_buffer(length - file->get_position()));
+}
+
 String processed_error(const JsErrorHandler::ProcessedError &p_error) {
 	String result = String::utf8(p_error.message.c_str());
 	for (const JsErrorHandler::ProcessedError::StackFrame &frame : p_error.stack) {
@@ -291,6 +315,7 @@ bool RNHostInstance::load_script(const String &p_bundle) {
 	const std::string bundle_file = p_bundle.utf8().get_data();
 	if (!dev_server) {
 		source_url->set(bundle_file);
+		bundle_fingerprint = build_mark(file_tail(p_bundle), "godotBundle");
 		const bool loaded = runtime.react_host->loadScript(bundle_file, "");
 		_bundle_loaded(_segment_files(p_bundle));
 		return loaded;
@@ -302,6 +327,7 @@ bool RNHostInstance::load_script(const String &p_bundle) {
 		}
 		if (!p_downloaded) {
 			source_url->set(bundle_file);
+			bundle_fingerprint = build_mark(file_tail(p_bundle), "godotBundle");
 			if (!FileAccess::exists(p_bundle) || !runtime.react_host->loadScript(bundle_file, "")) {
 				const String error = vformat("React Native bundle '%s' could not be loaded from Metro or from disk.", p_bundle);
 				on_error(error);
@@ -372,8 +398,11 @@ void RNHostInstance::load_segment(const String &p_path, std::function<void(bool)
 // from packs loaded later, such as DLC. A failing segment doesn't stop later ones.
 void RNHostInstance::_evaluate_segment(const Segment &p_segment) {
 	const PackedByteArray bytes = FileAccess::exists(p_segment.file) ? FileAccess::get_file_as_bytes(p_segment.file) : PackedByteArray();
-	if (bytes.is_empty()) {
-		const String error = vformat("React Native segment '%s' is missing.", p_segment.file);
+	// A segment lacks the modules its base bundle had, so another bundle can't
+	// run it. Metro serves bundles without a fingerprint, which skips the check.
+	const String base = build_mark(tail_of(bytes), "godotBase");
+	if (bytes.is_empty() || (!base.is_empty() && !bundle_fingerprint.is_empty() && base != bundle_fingerprint)) {
+		const String error = bytes.is_empty() ? vformat("React Native segment '%s' is missing.", p_segment.file) : vformat("React Native segment '%s' was built for another bundle; build it again against this one.", p_segment.file);
 		on_error(error);
 		ERR_PRINT(error);
 		if (p_segment.done) {

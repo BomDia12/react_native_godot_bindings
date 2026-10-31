@@ -1,2 +1,3 @@
-# The fixture intentionally loads a segment that doesn't exist.
+# The fixture intentionally loads a segment that doesn't exist and one built for another bundle.
 ^ERROR: React Native segment 'res://dist/segments/missing\.segment\.js' is missing\.$
+^ERROR: React Native segment 'user://stale\.segment\.js' was built for another bundle; build it again against this one\.$

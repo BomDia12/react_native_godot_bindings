@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const {stageAssets} = require('../assets.cjs');
@@ -52,6 +53,12 @@ function collectSources(sourceMap) {
     sources.push(...collectSources(section.map ?? {}));
   }
   return sources;
+}
+
+// Names the set of modules a bundle holds. A segment only works with a base
+// bundle that has the modules it was built against.
+function fingerprint(dependencies) {
+  return crypto.createHash('sha256').update(JSON.stringify(dependencies)).digest('hex').slice(0, 16);
 }
 
 // A segment holds only the modules its base bundle lacks, without Metro's
@@ -115,14 +122,16 @@ async function buildBundle({projectRoot, entry, out, dev = false, minify = false
       fs.cpSync(outputDirectory, stagedOutput, {recursive: true});
     }
     const bundleName = path.basename(output);
+    const projectDependencies = dependencies.map(file => path.relative(projectRoot, file).replaceAll(path.sep, '/'));
     fs.renameSync(temporaryBundle, path.join(stagedOutput, bundleName));
+    // A trailing comment keeps the source map's lines. The runtime checks that
+    // a segment's base is the bundle it runs with.
+    const mark = base ? `godotBase=${fingerprint(JSON.parse(fs.readFileSync(path.resolve(projectRoot, base) + '.dependencies.json', 'utf8')))}` : `godotBundle=${fingerprint(projectDependencies)}`;
+    fs.appendFileSync(path.join(stagedOutput, bundleName), `\n//# ${mark}\n`);
     fs.renameSync(sourceMap, path.join(stagedOutput, bundleName + '.map'));
-    fs.writeFileSync(
-      path.join(stagedOutput, bundleName + '.dependencies.json'),
-      JSON.stringify(dependencies.map(file => path.relative(projectRoot, file).replaceAll(path.sep, '/')), null, 2) + '\n',
-    );
+    fs.writeFileSync(path.join(stagedOutput, bundleName + '.dependencies.json'), JSON.stringify(projectDependencies, null, 2) + '\n');
     const manifest = stageAssets(result.assets ?? [], stagedOutput);
-    fs.writeFileSync(path.join(stagedOutput, 'assets-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+    fs.writeFileSync(path.join(stagedOutput, bundleName + '.assets-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     replaceDirectory(stagedOutput, outputDirectory);
   } finally {
     fs.rmSync(temporaryRoot, {recursive: true, force: true});

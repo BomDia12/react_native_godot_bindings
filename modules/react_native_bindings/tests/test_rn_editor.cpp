@@ -58,7 +58,7 @@ TEST_CASE("[ReactNativeBindings][Editor] exports leave out build listings and Ja
 	const String output = "res://react_native/dist";
 	CHECK(RNExportPlugin::is_tooling_file("res://react_native/dist/index.bundle.js.map", root, output));
 	CHECK(RNExportPlugin::is_tooling_file("res://react_native/dist/index.bundle.js.dependencies.json", root, output));
-	CHECK(RNExportPlugin::is_tooling_file("res://react_native/dist/assets-manifest.json", root, output));
+	CHECK(RNExportPlugin::is_tooling_file("res://react_native/dist/index.bundle.js.assets-manifest.json", root, output));
 	CHECK(RNExportPlugin::is_tooling_file("res://react_native/package.json", root, output));
 	CHECK(RNExportPlugin::is_tooling_file("res://package-lock.json", "res://", "res://dist"));
 	CHECK_FALSE(RNExportPlugin::is_tooling_file("res://react_native/dist/assets/abc/1.png", root, output));

@@ -286,3 +286,21 @@ test('autolinking rejects colliding or reserved codegen names and incomplete cod
   fs.writeFileSync(path.join(library, 'package.json'), JSON.stringify({name: 'incomplete', version: '1.0.0', codegenConfig: {name: 'Incomplete'}}));
   assert.throws(() => dependencyConfig(library, {module: 'godot/rn_incomplete'}), /incomplete has a codegenConfig without jsSrcsDir/);
 });
+
+test('module IDs are stable per path, and two paths with the same ID fail the build', () => {
+  const {createModuleIdFactory} = require('../metro.cjs').createGodotMetroConfig(path.resolve(__dirname, '..')).serializer;
+  const ids = createModuleIdFactory();
+  assert.equal(ids(path.join(__dirname, 'a.js')), createModuleIdFactory()(path.join(__dirname, 'a.js')));
+  const seen = new Map();
+  for (let i = 0; ; i++) {
+    const modulePath = path.join(__dirname, `m${i}.js`);
+    const id = createModuleIdFactory()(modulePath);
+    if (seen.has(id)) {
+      const colliding = createModuleIdFactory();
+      colliding(seen.get(id));
+      assert.throws(() => colliding(modulePath), /have the same module ID/);
+      break;
+    }
+    seen.set(id, modulePath);
+  }
+});
