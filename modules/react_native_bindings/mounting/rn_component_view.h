@@ -13,6 +13,7 @@
 #include <react/renderer/core/State.h>
 #include <react/renderer/mounting/ShadowView.h>
 
+#include <functional>
 #include <memory>
 
 ::Color rn_godot_color(const facebook::react::SharedColor &p_color, const ::Color &p_default = ::Color(0, 0, 0, 0));
@@ -73,23 +74,42 @@ public:
 	virtual void remove_child(RNComponentView *p_child);
 	void finish_removal();
 	virtual void handle_command(const std::string &p_name, const folly::dynamic &p_args) {}
+	// The surface's theme metrics changed. Views that resolve fonts or colors
+	// from them outside of layout apply them again.
+	virtual void theme_changed() {}
 	virtual void synchronously_update_props(const facebook::react::ComponentDescriptor &p_descriptor, const facebook::react::PropsParserContext &p_context, const folly::dynamic &p_props);
 
 	// Controls besides get_control() whose gui_input belongs to this view.
 	virtual Vector<Control *> get_input_controls() const { return {}; }
 	virtual bool owns_input_control(Control *p_control) const { return p_control == control; }
 	virtual Control *get_focus_control() const { return control; }
+	// What ReactNativeRootView.get_native_node() returns for this view's nativeID.
+	virtual Node *get_native_node() const { return control; }
+	const std::string &get_native_id() const;
 	// Views whose Godot control handles presses itself receive pointer events but no touches.
 	virtual bool owns_activation() const { return false; }
+	// Views that name other views as focus neighbors resolve them once each
+	// mount transaction has placed every control.
+	virtual bool has_focus_references() const { return false; }
+	virtual void resolve_focus_references(const std::function<Control *(facebook::react::Tag p_tag)> &p_find_focus_control) {}
 	virtual RNTouchTarget touch_target_at(const Point2 &p_local) const;
 };
 
 // The surface container a ReactNativeRootView hosts React children in. The
 // root view keeps ownership of the container control.
 class RNRootComponentView : public RNComponentView {
+	std::function<void(const Size2 &)> size_listener;
+
 public:
 	RNRootComponentView(facebook::react::Tag p_tag, Control *p_container) :
 			RNComponentView(p_tag, p_container) { owns_control = false; }
+	// Reports the size React laid the surface out at, which differs from the
+	// root's own size on the axes the root fits to its content.
+	void set_size_listener(std::function<void(const Size2 &p_size)> p_listener) { size_listener = std::move(p_listener); }
 	void update_props(const facebook::react::Props::Shared &, const facebook::react::Props::Shared &) override {}
-	void update_layout(const facebook::react::LayoutMetrics &) override {}
+	void update_layout(const facebook::react::LayoutMetrics &p_metrics) override {
+		if (size_listener) {
+			size_listener(Size2(p_metrics.frame.size.width, p_metrics.frame.size.height));
+		}
+	}
 };

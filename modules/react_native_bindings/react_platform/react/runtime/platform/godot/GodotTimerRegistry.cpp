@@ -3,6 +3,7 @@
 #include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 #include <react/runtime/TimerManager.h>
 
+#include <algorithm>
 #include <chrono>
 
 namespace facebook::react {
@@ -35,52 +36,73 @@ void GodotTimerRegistry::quit() {
 }
 
 void GodotTimerRegistry::add(uint32_t timerId, double delayMs, bool recurring) {
-	{
-		std::lock_guard lock(mutex_);
-		timers_[timerId] = Timer{ .delayMs = delayMs, .recurring = recurring };
+	std::lock_guard lock(mutex_);
+	Timer &timer = timers_[timerId] = Timer{ .delayMs = delayMs, .recurring = recurring };
+	schedule(timerId, timer, delayMs);
+}
+
+void GodotTimerRegistry::schedule(uint32_t timerId, Timer &timer, double delayMs) {
+	if (paused_) {
+		timer.tick = 0;
+		timer.remainingMs = delayMs;
+		return;
 	}
-	start(timerId, delayMs);
+	const auto delay = std::chrono::milliseconds(static_cast<int32_t>(delayMs));
+	timer.tick = nextTick_++;
+	timer.due = Clock::now() + delay;
+	thread_.runAsync([this, timerId, tick = timer.tick] { fire(timerId, tick); }, delay);
 }
 
-void GodotTimerRegistry::start(uint32_t timerId, double delayMs) {
-	thread_.runAsync([this, timerId] { fire(timerId); }, std::chrono::milliseconds(static_cast<int32_t>(delayMs)));
+void GodotTimerRegistry::setPaused(bool paused) {
+	std::lock_guard lock(mutex_);
+	if (paused_ == paused) {
+		return;
+	}
+	paused_ = paused;
+	for (auto &[timerId, timer] : timers_) {
+		if (paused) {
+			timer.remainingMs = std::max(0.0, std::chrono::duration<double, std::milli>(timer.due - Clock::now()).count());
+			timer.tick = 0;
+		} else {
+			schedule(timerId, timer, timer.remainingMs);
+		}
+	}
 }
 
-void GodotTimerRegistry::fire(uint32_t timerId) {
+void GodotTimerRegistry::fire(uint32_t timerId, uint64_t tick) {
 	bool recurring = false;
 	bool call = false;
-	double delayMs = 0;
 	{
 		std::lock_guard lock(mutex_);
 		auto timer = timers_.find(timerId);
-		if (timer == timers_.end()) {
+		if (timer == timers_.end() || timer->second.tick != tick) {
 			return;
 		}
 		recurring = timer->second.recurring;
-		delayMs = timer->second.delayMs;
 		call = !timer->second.queued;
 		if (!recurring) {
 			timers_.erase(timer);
 		} else {
 			timer->second.queued = true;
+			schedule(timerId, timer->second, timer->second.delayMs);
 		}
 	}
-	if (call) {
-		if (auto timerManager = timerManager_.lock()) {
-			timerManager->callTimer(timerId);
-		}
-		if (!recurring) {
-			return;
-		}
-		// Work scheduled later at the same priority expires later, so the flag
-		// clears once the tick that callTimer just queued has run.
-		if (auto scheduler = runtimeScheduler()) {
-			scheduler->scheduleWork([this, timerId](jsi::Runtime &) { unqueue(timerId); });
-		} else {
-			unqueue(timerId);
-		}
+	if (!call) {
+		return;
 	}
-	start(timerId, delayMs);
+	if (auto timerManager = timerManager_.lock()) {
+		timerManager->callTimer(timerId);
+	}
+	if (!recurring) {
+		return;
+	}
+	// Work scheduled later at the same priority expires later, so the flag
+	// clears once the tick that callTimer just queued has run.
+	if (auto scheduler = runtimeScheduler()) {
+		scheduler->scheduleWork([this, timerId](jsi::Runtime &) { unqueue(timerId); });
+	} else {
+		unqueue(timerId);
+	}
 }
 
 void GodotTimerRegistry::unqueue(uint32_t timerId) {

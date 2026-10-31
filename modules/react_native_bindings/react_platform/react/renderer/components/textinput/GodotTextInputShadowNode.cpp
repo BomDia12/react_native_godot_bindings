@@ -14,7 +14,8 @@ void GodotTextInputShadowNode::setTextShaper(std::shared_ptr<const RNTextShaper>
 // The Godot editor draws its theme stylebox around the text, so its content
 // margins add to the measured text like Android's theme padding does.
 Size GodotTextInputShadowNode::measureContent(const LayoutContext &layoutContext, const LayoutConstraints &layoutConstraints) const {
-	const Rect2 margins = getConcreteProps().multiline ? shaper_->get_theme_metrics()->text_edit_margins : shaper_->get_theme_metrics()->line_edit_margins;
+	const std::shared_ptr<const RNThemeMetrics> metrics = shaper_->get_theme_metrics(getSurfaceId());
+	const Rect2 margins = getConcreteProps().multiline ? metrics->text_edit_margins : metrics->line_edit_margins;
 	const Size horizontal{ .width = margins.position.x + margins.size.x, .height = margins.position.y + margins.size.y };
 	LayoutConstraints textConstraints = layoutConstraints;
 	textConstraints.minimumSize = { .width = std::max<Float>(0, layoutConstraints.minimumSize.width - horizontal.width), .height = std::max<Float>(0, layoutConstraints.minimumSize.height - horizontal.height) };

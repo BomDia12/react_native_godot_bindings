@@ -4,6 +4,7 @@
 #include <react/threading/TaskDispatchThread.h>
 #include <react/utils/ContextContainer.h>
 
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -14,12 +15,20 @@ class RuntimeScheduler;
 
 // Fires JS timers like PlatformTimerRegistryImpl, but keeps at most one tick of
 // each interval waiting for the JS thread. While JavaScript is busy, interval
-// ticks are skipped, as browsers do, instead of piling up behind it.
+// ticks are skipped, as browsers do, instead of piling up behind it. Paused
+// timers keep their remaining delay and run it out once resumed.
 class GodotTimerRegistry : public PlatformTimerRegistry {
+	using Clock = std::chrono::steady_clock;
+
 	struct Timer {
 		double delayMs = 0;
 		bool recurring = false;
 		bool queued = false;
+		// The scheduled tick that may fire. Pausing or rescheduling a timer
+		// makes its earlier ticks stale.
+		uint64_t tick = 0;
+		Clock::time_point due;
+		double remainingMs = 0;
 	};
 
 	TaskDispatchThread thread_{ "GodotTimerRegistry" };
@@ -27,10 +36,12 @@ class GodotTimerRegistry : public PlatformTimerRegistry {
 	std::weak_ptr<TimerManager> timerManager_;
 	std::mutex mutex_;
 	std::unordered_map<uint32_t, Timer> timers_;
+	uint64_t nextTick_ = 1;
+	bool paused_ = false;
 
 	void add(uint32_t timerId, double delayMs, bool recurring);
-	void start(uint32_t timerId, double delayMs);
-	void fire(uint32_t timerId);
+	void schedule(uint32_t timerId, Timer &timer, double delayMs);
+	void fire(uint32_t timerId, uint64_t tick);
 	void unqueue(uint32_t timerId);
 	std::shared_ptr<RuntimeScheduler> runtimeScheduler() const;
 
@@ -42,6 +53,7 @@ public:
 	void deleteTimer(uint32_t timerId) override;
 	void setTimerManager(std::weak_ptr<TimerManager> timerManager) override;
 	void quit() override;
+	void setPaused(bool paused);
 };
 
 } // namespace facebook::react

@@ -2,6 +2,7 @@
 
 #include "rn_service_settings.h"
 
+#include "core/input/input_event.h"
 #include "core/object/object.h"
 #include "core/object/ref_counted.h"
 #include "core/templates/hash_map.h"
@@ -54,12 +55,18 @@ class ReactNativeHost : public Object {
 	HashMap<facebook::react::SurfaceId, ObjectID> surfaces;
 	facebook::react::SurfaceId next_surface_id = 1;
 	uint64_t generation = 0;
+	uint64_t theme_revision = 0;
 	ObjectID lifecycle_node;
 	bool frame_connected = false;
 	bool processing_frame = false;
 	std::deque<std::function<void()>> deferred;
 	HashMap<uint64_t, Ref<RNEvaluation>> evaluations;
 	uint64_t next_evaluation = 1;
+	bool takes_back_press = false;
+	bool project_quits_on_go_back = true;
+	bool back_press_quits = false;
+	Ref<InputEventAction> default_back_press;
+	Vector<String> scene_loads;
 
 	mutable std::mutex error_mutex;
 	String last_error;
@@ -67,8 +74,10 @@ class ReactNativeHost : public Object {
 
 	bool _start();
 	void _retire();
+	void _sync_back_press();
 	void _finish_retired();
 	void _start_surface(ReactNativeRootView *p_root);
+	void _publish_theme(ReactNativeRootView *p_root, facebook::react::SurfaceId p_surface);
 	void _stop_surface(ReactNativeRootView *p_root, bool p_stop_react = true);
 	void _process_frame();
 	void _theme_changed();
@@ -76,6 +85,7 @@ class ReactNativeHost : public Object {
 	void _record_error(uint64_t p_generation, const String &p_error);
 	void _finish_evaluation(uint64_t p_id, const Variant &p_result);
 	bool _defer(std::function<void()> p_task);
+	void _update_suspension();
 
 protected:
 	static void _bind_methods();
@@ -98,6 +108,13 @@ public:
 	void restart_root(ReactNativeRootView *p_root);
 	void update_root_layout(ReactNativeRootView *p_root);
 	void scene_binding_changed(facebook::react::SurfaceId p_surface);
+	void root_state_changed(ReactNativeRootView *p_root);
+	bool handles_back_press() const;
+	void back_pressed(bool p_go_back_request);
+	void invoke_default_back_press();
+	bool is_default_back_press(const Ref<InputEvent> &p_event) const { return p_event.ptr() == default_back_press.ptr(); }
+	// Collects a threaded scene load once it finishes, after its view gave up on it.
+	void collect_scene_load(const String &p_path) { scene_loads.push_back(p_path); }
 	ReactNativeRootView *find_root(facebook::react::SurfaceId p_surface) const;
 	void shutdown();
 };

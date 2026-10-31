@@ -33,7 +33,7 @@ void RNParagraphComponentView::update_layout(const LayoutMetrics &p_metrics) {
 
 void RNParagraphComponentView::_set_content() {
 	const auto &paragraph = static_cast<const ParagraphProps &>(*props);
-	text->set_content(String::utf8(attributed.getString().c_str()), [shaper = shaper, attributed = attributed, attributes = paragraph_attributes](const Size2 &p_size, RNParagraphLayout &r_layout) { shaper->shape(attributed, attributes, p_size, r_layout); }, paragraph.isSelectable);
+	text->set_content(String::utf8(attributed.getString().c_str()), [shaper = shaper, attributed = attributed, attributes = paragraph_attributes](const Size2 &p_size, RNParagraphLayout &r_layout) { shaper->shape(attributed, attributes, p_size, RNTextShaper::surface_of(attributed), r_layout); }, paragraph.isSelectable);
 }
 
 // The drawn text comes from the state's attributed string, which only a Fabric

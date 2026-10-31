@@ -14,6 +14,35 @@
 
 namespace facebook::react {
 
+GodotSceneProps::GodotSceneProps(
+    const PropsParserContext &context,
+    const GodotSceneProps &sourceProps,
+    const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
+
+    source(convertRawProp(context, rawProps, "source", sourceProps.source, {})) {}
+    
+#ifdef RN_SERIALIZABLE_STATE
+ComponentName GodotSceneProps::getDiffPropsImplementationTarget() const {
+  return "GodotScene";
+}
+
+folly::dynamic GodotSceneProps::getDiffProps(
+    const Props* prevProps) const {
+  static const auto defaultProps = GodotSceneProps();
+  const GodotSceneProps* oldProps = prevProps == nullptr
+      ? &defaultProps
+      : static_cast<const GodotSceneProps*>(prevProps);
+  if (this == oldProps) {
+    return folly::dynamic::object();
+  }
+  folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+  
+  if (source != oldProps->source) {
+    result["source"] = source;
+  }
+  return result;
+}
+#endif
 GodotWindowProps::GodotWindowProps(
     const PropsParserContext &context,
     const GodotWindowProps &sourceProps,

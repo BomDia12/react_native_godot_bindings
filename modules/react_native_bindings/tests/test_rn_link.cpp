@@ -7,6 +7,7 @@ void rn_force_link_value_codec_tests();
 void rn_force_link_style_tests();
 void rn_force_link_text_tests();
 void rn_force_link_accessibility_tests();
+void rn_force_link_engine_integration_tests();
 
 void rn_force_link_tests() {
 	rn_force_link_service_tests();
@@ -16,4 +17,5 @@ void rn_force_link_tests() {
 	rn_force_link_style_tests();
 	rn_force_link_text_tests();
 	rn_force_link_accessibility_tests();
+	rn_force_link_engine_integration_tests();
 }

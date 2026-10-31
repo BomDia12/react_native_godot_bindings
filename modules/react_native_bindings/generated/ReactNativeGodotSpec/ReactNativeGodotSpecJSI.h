@@ -369,6 +369,162 @@ private:
 };
 
 
+#pragma mark - NativeGodotHostRootState
+
+template <typename P0, typename P1, typename P2>
+struct NativeGodotHostRootState {
+  P0 visible{};
+  P1 processing{};
+  P2 focused;
+  bool operator==(const NativeGodotHostRootState &other) const {
+    return visible == other.visible && processing == other.processing && focused == other.focused;
+  }
+};
+
+template <typename T>
+struct NativeGodotHostRootStateBridging {
+  static T types;
+
+  static T fromJs(
+      jsi::Runtime &rt,
+      const jsi::Object &value,
+      const std::shared_ptr<CallInvoker> &jsInvoker) {
+    T result{
+      bridging::fromJs<decltype(types.visible)>(rt, value.getProperty(rt, "visible"), jsInvoker),
+      bridging::fromJs<decltype(types.processing)>(rt, value.getProperty(rt, "processing"), jsInvoker),
+      bridging::fromJs<decltype(types.focused)>(rt, value.getProperty(rt, "focused"), jsInvoker)};
+    return result;
+  }
+
+#ifdef DEBUG
+  static bool visibleToJs(jsi::Runtime &rt, decltype(types.visible) value) {
+    return bridging::toJs(rt, value);
+  }
+  static bool processingToJs(jsi::Runtime &rt, decltype(types.processing) value) {
+    return bridging::toJs(rt, value);
+  }
+  static bool focusedToJs(jsi::Runtime &rt, decltype(types.focused) value) {
+    return bridging::toJs(rt, value);
+  }
+#endif
+
+  static jsi::Object toJs(
+      jsi::Runtime &rt,
+      const T &value,
+      const std::shared_ptr<CallInvoker> &jsInvoker) {
+    auto result = facebook::jsi::Object(rt);
+    result.setProperty(rt, "visible", bridging::toJs(rt, value.visible, jsInvoker));
+    result.setProperty(rt, "processing", bridging::toJs(rt, value.processing, jsInvoker));
+    result.setProperty(rt, "focused", bridging::toJs(rt, value.focused, jsInvoker));
+    return result;
+  }
+};
+
+
+
+#pragma mark - NativeGodotHostRootStateChange
+
+template <typename P0, typename P1, typename P2, typename P3>
+struct NativeGodotHostRootStateChange {
+  P0 rootTag{};
+  P1 visible{};
+  P2 processing{};
+  P3 focused;
+  bool operator==(const NativeGodotHostRootStateChange &other) const {
+    return rootTag == other.rootTag && visible == other.visible && processing == other.processing && focused == other.focused;
+  }
+};
+
+template <typename T>
+struct NativeGodotHostRootStateChangeBridging {
+  static T types;
+
+  static T fromJs(
+      jsi::Runtime &rt,
+      const jsi::Object &value,
+      const std::shared_ptr<CallInvoker> &jsInvoker) {
+    T result{
+      bridging::fromJs<decltype(types.rootTag)>(rt, value.getProperty(rt, "rootTag"), jsInvoker),
+      bridging::fromJs<decltype(types.visible)>(rt, value.getProperty(rt, "visible"), jsInvoker),
+      bridging::fromJs<decltype(types.processing)>(rt, value.getProperty(rt, "processing"), jsInvoker),
+      bridging::fromJs<decltype(types.focused)>(rt, value.getProperty(rt, "focused"), jsInvoker)};
+    return result;
+  }
+
+#ifdef DEBUG
+  static double rootTagToJs(jsi::Runtime &rt, decltype(types.rootTag) value) {
+    return bridging::toJs(rt, value);
+  }
+  static bool visibleToJs(jsi::Runtime &rt, decltype(types.visible) value) {
+    return bridging::toJs(rt, value);
+  }
+  static bool processingToJs(jsi::Runtime &rt, decltype(types.processing) value) {
+    return bridging::toJs(rt, value);
+  }
+  static bool focusedToJs(jsi::Runtime &rt, decltype(types.focused) value) {
+    return bridging::toJs(rt, value);
+  }
+#endif
+
+  static jsi::Object toJs(
+      jsi::Runtime &rt,
+      const T &value,
+      const std::shared_ptr<CallInvoker> &jsInvoker) {
+    auto result = facebook::jsi::Object(rt);
+    result.setProperty(rt, "rootTag", bridging::toJs(rt, value.rootTag, jsInvoker));
+    result.setProperty(rt, "visible", bridging::toJs(rt, value.visible, jsInvoker));
+    result.setProperty(rt, "processing", bridging::toJs(rt, value.processing, jsInvoker));
+    result.setProperty(rt, "focused", bridging::toJs(rt, value.focused, jsInvoker));
+    return result;
+  }
+};
+
+
+template <typename T>
+class JSI_EXPORT NativeGodotHostCxxSpec : public TurboModule {
+public:
+  static constexpr std::string_view kModuleName = "GodotHostCxx";
+
+protected:
+  NativeGodotHostCxxSpec(std::shared_ptr<CallInvoker> jsInvoker) : TurboModule(std::string{NativeGodotHostCxxSpec::kModuleName}, jsInvoker) {
+    methodMap_["getRootState"] = MethodMetadata {.argCount = 1, .invoker = __getRootState};
+    methodMap_["setBackHandlerEnabled"] = MethodMetadata {.argCount = 1, .invoker = __setBackHandlerEnabled};
+    methodMap_["invokeDefaultBackPressHandler"] = MethodMetadata {.argCount = 0, .invoker = __invokeDefaultBackPressHandler};
+    eventEmitterMap_["onRootStateChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
+  }
+  
+  template <typename OnRootStateChangedType> void emitOnRootStateChanged(OnRootStateChangedType value) {
+    static_assert(bridging::supportsFromJs<OnRootStateChangedType, jsi::Object>, "value cannnot be converted to jsi::Object");
+    static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onRootStateChanged"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
+      return bridging::toJs(rt, eventValue, jsInvoker);
+    });
+  }
+private:
+  static jsi::Value __getRootState(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::getRootState) == 2,
+      "Expected getRootState(...) to have 2 parameters");
+    return bridging::callFromJs<jsi::Object>(rt, &T::getRootState,  static_cast<NativeGodotHostCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asNumber());
+  }
+
+  static jsi::Value __setBackHandlerEnabled(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::setBackHandlerEnabled) == 2,
+      "Expected setBackHandlerEnabled(...) to have 2 parameters");
+    bridging::callFromJs<void>(rt, &T::setBackHandlerEnabled,  static_cast<NativeGodotHostCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asBool());return jsi::Value::undefined();
+  }
+
+  static jsi::Value __invokeDefaultBackPressHandler(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::invokeDefaultBackPressHandler) == 1,
+      "Expected invokeDefaultBackPressHandler(...) to have 1 parameters");
+    bridging::callFromJs<void>(rt, &T::invokeDefaultBackPressHandler,  static_cast<NativeGodotHostCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));return jsi::Value::undefined();
+  }
+};
+
+
 #pragma mark - NativeGodotPlatformConstantsPlatformConstants
 
 template <typename P0, typename P1, typename P2, typename P3, typename P4, typename P5, typename P6>

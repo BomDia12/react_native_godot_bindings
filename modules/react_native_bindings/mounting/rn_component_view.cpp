@@ -268,6 +268,11 @@ void RNComponentView::finish_removal() {
 	}
 }
 
+const std::string &RNComponentView::get_native_id() const {
+	static const std::string none;
+	return props ? props->nativeId : none;
+}
+
 RNTouchTarget RNComponentView::touch_target_at(const Point2 &) const {
 	return { tag, std::dynamic_pointer_cast<const TouchEventEmitter>(event_emitter) };
 }

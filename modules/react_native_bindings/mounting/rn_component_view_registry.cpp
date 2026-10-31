@@ -31,6 +31,15 @@ RNComponentView *RNComponentViewRegistry::find_for_control(Control *p_control) c
 	return nullptr;
 }
 
+RNComponentView *RNComponentViewRegistry::find_by_native_id(const std::string &p_native_id) const {
+	for (const auto &[tag, view] : views) {
+		if (!p_native_id.empty() && view->get_native_id() == p_native_id) {
+			return view.get();
+		}
+	}
+	return nullptr;
+}
+
 RNComponentView *RNComponentViewRegistry::find(Tag p_tag) const {
 	if (auto root = roots.find(p_tag); root != roots.end()) {
 		return root->second;
@@ -60,6 +69,7 @@ void RNComponentViewRegistry::create(const ShadowView &p_view) {
 	view->update_layout(p_view.layoutMetrics);
 	RNComponentView *created = view.get();
 	views[p_view.tag] = std::move(view);
+	_track_focus_references(created);
 	if (change_listener) {
 		change_listener(created);
 	}
@@ -78,6 +88,7 @@ void RNComponentViewRegistry::destroy(Tag p_tag) {
 		}
 	}
 	views.erase(view);
+	focus_references.erase(p_tag);
 	if (destroy_listener) {
 		destroy_listener(p_tag);
 	}
@@ -103,6 +114,7 @@ void RNComponentViewRegistry::update(const ShadowView &p_old, const ShadowView &
 	ERR_FAIL_COND_MSG(!view, vformat("Mounting updated unknown React tag %d.", p_new.tag));
 	if (p_old.props != p_new.props) {
 		view->update_props(p_old.props, p_new.props);
+		_track_focus_references(view);
 	}
 	if (p_old.state != p_new.state) {
 		view->update_state(p_new.state);
@@ -146,9 +158,37 @@ void RNComponentViewRegistry::apply(const ShadowViewMutationList &p_mutations) {
 		}
 	}
 	removed.clear();
+	_resolve_focus_references();
+}
+
+void RNComponentViewRegistry::_track_focus_references(RNComponentView *p_view) {
+	if (p_view->has_focus_references()) {
+		focus_references.insert(p_view->get_tag());
+	} else {
+		focus_references.erase(p_view->get_tag());
+	}
+}
+
+// Neighbors are resolved again after every transaction, because the views
+// they name can mount later or remount.
+void RNComponentViewRegistry::_resolve_focus_references() {
+	const auto find_focus_control = [this](Tag p_tag) {
+		RNComponentView *view = find(p_tag);
+		return view ? view->get_focus_control() : nullptr;
+	};
+	for (Tag tag : focus_references) {
+		find(tag)->resolve_focus_references(find_focus_control);
+	}
+}
+
+void RNComponentViewRegistry::theme_changed() {
+	for (const auto &entry : views) {
+		entry.second->theme_changed();
+	}
 }
 
 void RNComponentViewRegistry::clear() {
+	focus_references.clear();
 	views.clear();
 	roots.clear();
 }

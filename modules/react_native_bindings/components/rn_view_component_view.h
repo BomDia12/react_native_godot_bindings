@@ -10,6 +10,7 @@ class RNViewComponentView : public RNComponentView {
 	RNEffectHost *effect = nullptr;
 	RNClipControl *clip = nullptr;
 	bool reported_drop_shadows = false;
+	bool preferred_focus_pending = false;
 	void _apply_style();
 	void _restructure(bool p_effect, bool p_clip);
 
@@ -22,6 +23,8 @@ public:
 	void update_layout(const facebook::react::LayoutMetrics &p_metrics) override;
 	void update_event_emitter(const facebook::react::EventEmitter::Shared &p_emitter) override;
 	void handle_command(const std::string &p_name, const folly::dynamic &p_args) override;
+	bool has_focus_references() const override;
+	void resolve_focus_references(const std::function<Control *(facebook::react::Tag p_tag)> &p_find_focus_control) override;
 	RNEffectHost *get_effect_host() const { return effect; }
 	RNClipControl *get_clip_host() const { return clip; }
 };

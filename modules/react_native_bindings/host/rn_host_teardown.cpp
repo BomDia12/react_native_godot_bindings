@@ -1,8 +1,8 @@
 #include "rn_host_teardown.h"
 
 #include <jsi/hermes-interfaces.h>
-#include <react/runtime/PlatformTimerRegistry.h>
 #include <react/runtime/ReactHost.h>
+#include <react/runtime/platform/godot/GodotTimerRegistry.h>
 
 #include <future>
 #include <mutex>

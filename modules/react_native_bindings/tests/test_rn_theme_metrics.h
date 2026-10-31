@@ -5,6 +5,7 @@
 #include "scene/gui/control.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
+#include "scene/resources/theme.h"
 #include "tests/test_macros.h"
 
 #include <thread>
@@ -29,6 +30,18 @@ TEST_CASE("[ReactNativeBindings][ThemeMetrics][SceneTree] captured metrics publi
 	std::thread reader([&]() { seen = store.get()->revision; });
 	reader.join();
 	CHECK(seen == 3);
+
+	store.publish(7, RNThemeMetrics::capture(owner, 4));
+	store.publish(7, RNThemeMetrics::capture(owner, 5));
+	CHECK(store.get(7)->revision == 4);
+	store.publish(RNThemeMetrics::capture(owner, 6));
+	CHECK(store.get()->revision == 3);
+	Ref<Theme> theme;
+	theme.instantiate();
+	theme->set_font_size("font_size", "LineEdit", 31);
+	owner->set_theme(theme);
+	store.publish(7, RNThemeMetrics::capture(owner, 7));
+	CHECK(store.get(7)->revision == 7);
 	memdelete(owner);
 }
 

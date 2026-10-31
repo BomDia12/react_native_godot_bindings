@@ -20,11 +20,13 @@ TextLayoutManager::TextLayoutManager(const std::shared_ptr<const ContextContaine
 		shaper_(contextContainer->at<std::shared_ptr<const RNTextShaper>>(RNTextShaper::CONTEXT_KEY)) {
 }
 
-TextMeasurement TextLayoutManager::measure(const AttributedStringBox &attributedStringBox, const ParagraphAttributes &paragraphAttributes, const TextLayoutContext &, const LayoutConstraints &layoutConstraints) const {
+TextMeasurement TextLayoutManager::measure(const AttributedStringBox &attributedStringBox, const ParagraphAttributes &paragraphAttributes, const TextLayoutContext &textLayoutContext, const LayoutConstraints &layoutConstraints) const {
 	const AttributedString &attributedString = attributedStringBox.getValue();
-	return textMeasureCache_.get({ attributedString, paragraphAttributes, layoutConstraints }, [&]() {
+	const SurfaceId surface = textLayoutContext.surfaceId;
+	const RNTextMeasureCacheKey key{ .text = { attributedString, paragraphAttributes, layoutConstraints }, .theme_revision = shaper_->get_theme_metrics(surface)->revision };
+	return textMeasureCache_.get(key, [&]() {
 		RNParagraphLayout layout;
-		shaper_->shape(attributedString, paragraphAttributes, available_size(layoutConstraints.maximumSize), layout);
+		shaper_->shape(attributedString, paragraphAttributes, available_size(layoutConstraints.maximumSize), surface, layout);
 		TextMeasurement::Attachments attachments;
 		for (const auto &fragment : attributedString.getFragments()) {
 			if (fragment.isAttachment()) {
@@ -38,7 +40,7 @@ TextMeasurement TextLayoutManager::measure(const AttributedStringBox &attributed
 
 LinesMeasurements TextLayoutManager::measureLines(const AttributedStringBox &attributedStringBox, const ParagraphAttributes &paragraphAttributes, const Size &size) const {
 	RNParagraphLayout layout;
-	shaper_->shape(attributedStringBox.getValue(), paragraphAttributes, available_size(size), layout);
+	shaper_->shape(attributedStringBox.getValue(), paragraphAttributes, available_size(size), RNTextShaper::surface_of(attributedStringBox.getValue()), layout);
 	// Line ranges index the shaped text, which differs from the attributed
 	// string where a head or middle ellipsis hides part of it.
 	String text;

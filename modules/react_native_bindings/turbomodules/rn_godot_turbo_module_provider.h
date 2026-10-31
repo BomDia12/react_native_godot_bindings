@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rn_application_modules.h"
+#include "rn_godot_host_module.h"
 #include "rn_godot_scene_module.h"
 #include "rn_host_module_context.h"
 #include "rn_network_modules.h"
@@ -40,6 +41,7 @@ struct RNTurboModuleContext {
 	RNApplicationModuleContext application;
 	RNNetworkModuleContext network;
 	std::shared_ptr<RNSceneBindings> scenes;
+	std::shared_ptr<RNGodotHostEvents> host_events;
 	std::shared_ptr<IImageLoader> image_loader;
 	std::map<std::string, RNTurboModuleFactory> extensions;
 	std::shared_ptr<RNSourceURL> source_url = std::make_shared<RNSourceURL>();

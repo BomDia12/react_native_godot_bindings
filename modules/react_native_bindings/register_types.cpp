@@ -2,6 +2,7 @@
 
 #include "components/rn_clip.h"
 #include "components/rn_effect_host.h"
+#include "components/rn_godot_scene_component_view.h"
 #include "components/rn_image_control.h"
 #include "components/rn_presentation_control.h"
 #include "components/rn_scroll_control.h"
@@ -82,6 +83,7 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		ClassDB::register_internal_class<RNScrollIndicators>();
 		ClassDB::register_internal_class<RNModalOverlay>();
 		ClassDB::register_internal_class<RNWindowContent>();
+		ClassDB::register_internal_class<RNGodotSceneHost>();
 		ClassDB::register_internal_class<RNLineEditor>();
 		ClassDB::register_internal_class<RNTextEditor>();
 		ClassDB::register_internal_class<RNExampleMeterControl>();
