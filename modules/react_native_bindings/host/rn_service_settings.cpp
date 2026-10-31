@@ -49,6 +49,7 @@ void rn_register_service_settings() {
 	settings->set_custom_property_info(PropertyInfo(Variant::INT, "react_native/dev_server/port", PROPERTY_HINT_RANGE, "1,65535,1"));
 	GLOBAL_DEF("react_native/dev_server/entry", "index");
 	GLOBAL_DEF("react_native/dev_server/fast_refresh", true);
+	GLOBAL_DEF("react_native/bundle/segments", PackedStringArray());
 	GLOBAL_DEF(PropertyInfo(Variant::STRING, "react_native/project/root", PROPERTY_HINT_DIR), "res://react_native/");
 }
 bool RNServiceSettings::snapshot(RNServiceSettings &r_settings, RNError &r_error) {
@@ -93,6 +94,7 @@ bool RNServiceSettings::snapshot(RNServiceSettings &r_settings, RNError &r_error
 	snapshot.dev_server.port = dev_port;
 	snapshot.dev_server.entry = dev_entry;
 	snapshot.dev_server.fast_refresh = settings->get_setting("react_native/dev_server/fast_refresh", true);
+	snapshot.segments = settings->get_setting("react_native/bundle/segments", PackedStringArray());
 	if (snapshot.limit("network/http/max_idle_requests") > snapshot.limit("network/http/max_active_requests")) {
 		r_error = RNError::make(RNErrorCode::VALIDATION, "HTTP idle limit exceeds active limit", "settings.snapshot");
 		return false;

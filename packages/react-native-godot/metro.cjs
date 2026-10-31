@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const {createRequire} = require('module');
@@ -15,6 +16,24 @@ function linkedDependencyRoots(projectRoot) {
     .filter(installed => fs.existsSync(installed))
     .map(installed => fs.realpathSync(installed))
     .filter(root => path.relative(projectRoot, root).startsWith('..'));
+}
+
+// Module IDs hash the project-relative path, so a segment built on its own
+// refers to the modules of the bundle it extends by the same IDs. Two paths
+// with the same ID would silently share one module, so that fails the build.
+function stableModuleIds(projectRoot) {
+  return () => {
+    const paths = new Map();
+    return modulePath => {
+      const relative = path.relative(projectRoot, modulePath).split(path.sep).join('/');
+      const id = crypto.createHash('sha1').update(relative).digest().readUInt32BE(0) & 0x7fffffff;
+      if (paths.has(id) && paths.get(id) !== relative) {
+        throw new Error(`${paths.get(id)} and ${relative} have the same module ID ${id}; rename one of them.`);
+      }
+      paths.set(id, relative);
+      return id;
+    };
+  };
 }
 
 function createGodotMetroConfig(projectRoot) {
@@ -37,6 +56,7 @@ function createGodotMetroConfig(projectRoot) {
       resolveRequest: createGodotResolver({projectRoot: resolvedProjectRoot, reactNativeRoot}),
     },
     serializer: {
+      createModuleIdFactory: stableModuleIds(resolvedProjectRoot),
       getModulesRunBeforeMainModule: () => [
         projectRequire.resolve('react-native/Libraries/Core/InitializeCore'),
         path.join(packageRoot, 'src/setup.js'),

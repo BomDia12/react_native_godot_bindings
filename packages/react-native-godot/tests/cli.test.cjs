@@ -9,7 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
 const {autolink, dependencyConfig, readManifest} = require('../cli/autolink.cjs');
-const {buildBundle, findEntry} = require('../cli/build.cjs');
+const {buildBundle, findEntry, segmentConfig, segmentPath} = require('../cli/build.cjs');
 const {downloadEditor, hostPlatform, resolveEditor} = require('../cli/editor.cjs');
 const {addMainScene, packageName, writeTemplate} = require('../cli/init.cjs');
 const {addProjectSettings, ignoreNodeModules, loadGodotProject, readProjectSettings} = require('../cli/project.cjs');
@@ -240,6 +240,23 @@ test('autolinking checks addon ownership, rejects colliding addons and waits for
   assert.match(console.info.mock.calls.at(-1).arguments[0], /build-godot-editor to enable meter/);
 });
 
+test('a segment leaves out its base bundle, the prelude and polyfills, but runs its entry', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-segment-'));
+  const base = path.join(root, 'dist', 'index.bundle.js');
+  assert.throws(() => segmentConfig({}, root, base), /Build the bundle .* before its segments/);
+  fs.mkdirSync(path.dirname(base));
+  fs.writeFileSync(base + '.dependencies.json', JSON.stringify(['node_modules/react/index.js']));
+  const {processModuleFilter, getModulesRunBeforeMainModule} = segmentConfig({}, root, base).serializer;
+  const module = (modulePath, type) => ({path: modulePath, output: [{type}]});
+  assert.ok(processModuleFilter(module(path.join(root, 'segment.js'), 'js/module')));
+  assert.ok(processModuleFilter(module('require-' + path.join(root, 'segment.js'), 'js/script/virtual')));
+  assert.ok(!processModuleFilter(module(path.join(root, 'node_modules/react/index.js'), 'js/module')));
+  assert.ok(!processModuleFilter(module('__prelude__', 'js/script/virtual')));
+  assert.ok(!processModuleFilter(module(path.join(root, 'polyfill.js'), 'js/script')));
+  assert.deepEqual(getModulesRunBeforeMainModule(), []);
+  assert.equal(segmentPath(base, 'shop.entry.tsx'), path.join(root, 'dist', 'shop.entry.segment.js'));
+});
+
 test('autolinking re-enables updated plugins and rejects colliding native modules', async () => {
   const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
   const godot = fakeEditor(root);
@@ -268,4 +285,22 @@ test('autolinking rejects colliding or reserved codegen names and incomplete cod
   fs.mkdirSync(library);
   fs.writeFileSync(path.join(library, 'package.json'), JSON.stringify({name: 'incomplete', version: '1.0.0', codegenConfig: {name: 'Incomplete'}}));
   assert.throws(() => dependencyConfig(library, {module: 'godot/rn_incomplete'}), /incomplete has a codegenConfig without jsSrcsDir/);
+});
+
+test('module IDs are stable per path, and two paths with the same ID fail the build', () => {
+  const {createModuleIdFactory} = require('../metro.cjs').createGodotMetroConfig(path.resolve(__dirname, '..')).serializer;
+  const ids = createModuleIdFactory();
+  assert.equal(ids(path.join(__dirname, 'a.js')), createModuleIdFactory()(path.join(__dirname, 'a.js')));
+  const seen = new Map();
+  for (let i = 0; ; i++) {
+    const modulePath = path.join(__dirname, `m${i}.js`);
+    const id = createModuleIdFactory()(modulePath);
+    if (seen.has(id)) {
+      const colliding = createModuleIdFactory();
+      colliding(seen.get(id));
+      assert.throws(() => colliding(modulePath), /have the same module ID/);
+      break;
+    }
+    seen.set(id, modulePath);
+  }
 });

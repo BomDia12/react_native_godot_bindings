@@ -142,6 +142,30 @@ void send_error_to_editor(const JsErrorHandler::ProcessedError &p_error) {
 	EngineDebugger::get_singleton()->send_message("react_native:error", { String::utf8(p_error.message.c_str()), frames });
 }
 
+// The value of the `//# <key>=` comment a build appends to bundles and segments.
+String build_mark(const String &p_tail, const String &p_key) {
+	const String prefix = "//# " + p_key + "=";
+	const int start = p_tail.rfind(prefix);
+	return start < 0 ? String() : p_tail.substr(start + prefix.length()).strip_edges();
+}
+
+// The last lines of a script, where builds put their marks. The marks are
+// ASCII, and Latin-1 decodes any byte, wherever the tail starts.
+String tail_of(const PackedByteArray &p_bytes) {
+	const int start = MAX(0, p_bytes.size() - 128);
+	return String::latin1(Span<char>(reinterpret_cast<const char *>(p_bytes.ptr()) + start, p_bytes.size() - start));
+}
+
+String file_tail(const String &p_path) {
+	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::READ);
+	if (file.is_null()) {
+		return String();
+	}
+	const uint64_t length = file->get_length();
+	file->seek(length > 128 ? length - 128 : 0);
+	return tail_of(file->get_buffer(length - file->get_position()));
+}
+
 String processed_error(const JsErrorHandler::ProcessedError &p_error) {
 	String result = String::utf8(p_error.message.c_str());
 	for (const JsErrorHandler::ProcessedError::StackFrame &frame : p_error.stack) {
@@ -181,6 +205,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	mounting = std::make_shared<RNMountingManager>(main_thread, component_view_factories(shaper, images), component_registry_factory(), image_loader);
 	run_loop_observers = std::make_shared<RunLoopObserverManager>();
 	log_box = std::make_shared<RNLogBoxSurface>(main_thread);
+	startup_segments = p_setup.settings.segments;
 	if (p_setup.settings.dev_server.enabled) {
 		dev_server = std::make_unique<RNDevServer>(p_setup.settings.dev_server);
 	}
@@ -290,22 +315,121 @@ bool RNHostInstance::load_script(const String &p_bundle) {
 	const std::string bundle_file = p_bundle.utf8().get_data();
 	if (!dev_server) {
 		source_url->set(bundle_file);
-		return runtime.react_host->loadScript(bundle_file, "");
+		bundle_fingerprint = build_mark(file_tail(p_bundle), "godotBundle");
+		const bool loaded = runtime.react_host->loadScript(bundle_file, "");
+		_bundle_loaded(_segment_files(p_bundle));
+		return loaded;
 	}
-	dev_server->download_bundle(*http, [this, p_bundle, bundle_file](bool p_downloaded) {
+	const std::string bundle_url = dev_server->bundle_url();
+	dev_server->download(*http, bundle_url, [this, p_bundle, bundle_file, bundle_url](bool p_downloaded) {
 		if (retired) {
 			return;
 		}
-		const std::string script = p_downloaded ? dev_server->bundle_url() : bundle_file;
-		source_url->set(script);
-		const bool loaded = (p_downloaded || FileAccess::exists(p_bundle)) && runtime.react_host->loadScript(script, "");
-		if (!loaded) {
-			const String error = vformat("React Native bundle '%s' could not be loaded from Metro or from disk.", p_bundle);
+		if (!p_downloaded) {
+			source_url->set(bundle_file);
+			bundle_fingerprint = build_mark(file_tail(p_bundle), "godotBundle");
+			if (!FileAccess::exists(p_bundle) || !runtime.react_host->loadScript(bundle_file, "")) {
+				const String error = vformat("React Native bundle '%s' could not be loaded from Metro or from disk.", p_bundle);
+				on_error(error);
+				ERR_PRINT(error);
+			}
+			_bundle_loaded(_segment_files(p_bundle));
+			return;
+		}
+		// Surfaces wait for the bundle, so startup segments are downloaded
+		// before it loads to be there when they start.
+		_download_segments(p_bundle, {}, [this, bundle_url](std::vector<Segment> p_segments) {
+			source_url->set(bundle_url);
+			runtime.react_host->loadScript(bundle_url, "");
+			_bundle_loaded(p_segments);
+		});
+	});
+	return true;
+}
+
+// A segment's file sits beside the bundle it extends.
+std::vector<RNHostInstance::Segment> RNHostInstance::_segment_files(const String &p_bundle) const {
+	std::vector<Segment> segments;
+	for (const String &entry : startup_segments) {
+		const String file = p_bundle.get_base_dir().path_join(entry.get_file() + ".segment.js");
+		segments.push_back({ file, file.utf8().get_data(), nullptr });
+	}
+	return segments;
+}
+
+// A segment Metro can't serve falls back to its file, as the bundle does.
+void RNHostInstance::_download_segments(const String &p_bundle, std::vector<Segment> p_downloaded, std::function<void(std::vector<Segment>)> p_done) {
+	if (p_downloaded.size() == size_t(startup_segments.size())) {
+		p_done(std::move(p_downloaded));
+		return;
+	}
+	const String entry = startup_segments[p_downloaded.size()];
+	const std::string url = dev_server->segment_url(entry);
+	dev_server->download(*http, url, [this, p_bundle, p_downloaded, p_done, url](bool p_ok) mutable {
+		if (retired) {
+			return;
+		}
+		p_downloaded.push_back(p_ok ? Segment{ rn_downloaded_resource_path(url), url, nullptr } : _segment_files(p_bundle)[p_downloaded.size()]);
+		_download_segments(p_bundle, std::move(p_downloaded), std::move(p_done));
+	});
+}
+
+void RNHostInstance::_bundle_loaded(const std::vector<Segment> &p_startup) {
+	script_loaded = true;
+	for (const Segment &segment : p_startup) {
+		_evaluate_segment(segment);
+	}
+	for (const Segment &segment : waiting_segments) {
+		_evaluate_segment(segment);
+	}
+	waiting_segments.clear();
+}
+
+void RNHostInstance::load_segment(const String &p_path, std::function<void(bool)> p_done) {
+	const Segment segment{ p_path, p_path.utf8().get_data(), std::move(p_done) };
+	if (script_loaded) {
+		_evaluate_segment(segment);
+	} else {
+		waiting_segments.push_back(segment);
+	}
+}
+
+// The file is read on the main thread through FileAccess, so segments can come
+// from packs loaded later, such as DLC. A failing segment doesn't stop later ones.
+void RNHostInstance::_evaluate_segment(const Segment &p_segment) {
+	const PackedByteArray bytes = FileAccess::exists(p_segment.file) ? FileAccess::get_file_as_bytes(p_segment.file) : PackedByteArray();
+	// A segment lacks the modules its base bundle had, so another bundle can't
+	// run it. Metro serves bundles without a fingerprint, which skips the check.
+	const String base = build_mark(tail_of(bytes), "godotBase");
+	if (bytes.is_empty() || (!base.is_empty() && !bundle_fingerprint.is_empty() && base != bundle_fingerprint)) {
+		const String error = bytes.is_empty() ? vformat("React Native segment '%s' is missing.", p_segment.file) : vformat("React Native segment '%s' was built for another bundle; build it again against this one.", p_segment.file);
+		on_error(error);
+		ERR_PRINT(error);
+		if (p_segment.done) {
+			main_thread->post([done = p_segment.done] { done(false); });
+		}
+		return;
+	}
+	auto script = std::make_shared<jsi::StringBuffer>(std::string(reinterpret_cast<const char *>(bytes.ptr()), bytes.size()));
+	runtime.react_host->runOnRuntimeScheduler([this, script, segment = p_segment](jsi::Runtime &p_runtime) {
+		String error;
+		try {
+			p_runtime.evaluateJavaScript(script, segment.source_url);
+		} catch (const jsi::JSError &p_error) {
+			error = String::utf8(p_error.getMessage().c_str()) + "\n" + String::utf8(p_error.getStack().c_str());
+		} catch (const std::exception &p_error) {
+			error = String::utf8(p_error.what());
+		}
+		if (!error.is_empty() && !retired) {
+			error = vformat("React Native segment '%s' failed: %s", segment.file, error);
 			on_error(error);
 			ERR_PRINT(error);
 		}
-	});
-	return true;
+		if (segment.done) {
+			main_thread->post([done = segment.done, ok = error.is_empty()] { done(ok); });
+		}
+	},
+			SchedulerPriority::ImmediatePriority);
 }
 
 void RNHostInstance::_report_error(const String &p_error) {

@@ -23,23 +23,27 @@ const commands = [
       {name: '--out <file>', description: 'Bundle file; defaults to react_native/bundle/path'},
       {name: '--dev [boolean]', description: 'Build a development bundle', parse: parseBoolean, default: false},
       {name: '--minify [boolean]', description: 'Minify the bundle', parse: parseBoolean, default: false},
+      {name: '--segment <entry>', description: 'Build the entry as a segment of the bundle in --out, beside it as <entry>.segment.js'},
       {name: '--godot <editor>', description: 'Godot editor that regenerates component contracts; defaults to GODOT_EDITOR, then the prebuilt editor'},
     ],
     func: async (_argv, config, args) => {
       const project = requireProject(config);
-      const {buildBundle} = require('./build.cjs');
+      const {buildBundle, buildProject, segmentPath} = require('./build.cjs');
       const {generateContracts} = require('./contracts.cjs');
       const {resolveEditor} = require('./editor.cjs');
       if (fs.existsSync(path.join(project.jsRoot, 'contracts'))) {
         generateContracts(project, await resolveEditor({godot: args.godot, project}));
       }
-      const output = await buildBundle({
-        projectRoot: config.root,
-        entry: args.entry ?? project.entry,
-        out: args.out ?? project.bundlePath,
-        dev: args.dev,
-        minify: args.minify,
-      });
+      const options = {dev: args.dev, minify: args.minify};
+      const bundle = path.resolve(config.root, args.out ?? project.bundlePath);
+      let output;
+      if (args.segment) {
+        output = await buildBundle({projectRoot: config.root, entry: args.segment, out: segmentPath(bundle, args.segment), base: bundle, ...options});
+      } else if (args.entry || args.out) {
+        output = await buildBundle({projectRoot: config.root, entry: args.entry ?? project.entry, out: bundle, ...options});
+      } else {
+        output = await buildProject(project, options);
+      }
       console.info('Built ' + output);
     },
   },

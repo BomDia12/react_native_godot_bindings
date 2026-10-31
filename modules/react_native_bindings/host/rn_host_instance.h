@@ -72,11 +72,25 @@ private:
 	std::mutex animation_mutex;
 	std::function<void()> animation_frame;
 	bool suspended = false;
+	// Segments evaluate in order after the bundle; ones requested earlier wait for it.
+	struct Segment {
+		String file;
+		std::string source_url;
+		std::function<void(bool)> done;
+	};
+	PackedStringArray startup_segments;
+	String bundle_fingerprint;
+	bool script_loaded = false;
+	std::vector<Segment> waiting_segments;
 	RNHostRuntime runtime;
 	std::unique_ptr<RNHostTeardown> teardown;
 
 	void _on_js_thread(std::function<void()> p_task, facebook::react::SchedulerPriority p_priority = facebook::react::SchedulerPriority::ImmediatePriority);
 	void _report_error(const String &p_error);
+	std::vector<Segment> _segment_files(const String &p_bundle) const;
+	void _download_segments(const String &p_bundle, std::vector<Segment> p_downloaded, std::function<void(std::vector<Segment>)> p_done);
+	void _bundle_loaded(const std::vector<Segment> &p_startup);
+	void _evaluate_segment(const Segment &p_segment);
 	void _run_animation_frame();
 
 public:
@@ -84,6 +98,7 @@ public:
 	~RNHostInstance();
 
 	bool load_script(const String &p_bundle);
+	void load_segment(const String &p_path, std::function<void(bool p_ok)> p_done);
 	void start_surface(ReactNativeRootView *p_root, facebook::react::SurfaceId p_surface);
 	void stop_surface(ReactNativeRootView *p_root, bool p_stop_react);
 	void update_layout(ReactNativeRootView *p_root);

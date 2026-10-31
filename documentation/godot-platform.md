@@ -257,6 +257,43 @@ Debug builds report `Platform.isTesting`, which turns LogBox notifications off, 
 uncaught errors open it there unless the app calls `LogBox.ignoreAllLogs(false)`. With the
 inspector on, warnings go to the DevTools console instead of LogBox, as upstream.
 
+## Bundle segments
+
+A segment is a bundle that holds only the modules its base bundle lacks, such as a game
+mode's screens or a DLC's UI, so the base bundle stays small and DLC can bring its own.
+`react-native build-godot` builds the base bundle and then each entry of
+`react_native/bundle/segments` (a `PackedStringArray` of entries without their extension)
+into `<entry>.segment.js` beside the bundle. `build-godot --segment <entry>` builds one
+segment of the bundle in `--out`. Every bundle names its modules by a hash of their
+project-relative path, so a segment built on its own finds the base bundle's modules.
+
+Each runtime evaluates the startup segments in order right after its bundle, before any
+root starts, so roots can run components that segments register. A runtime that uses Metro
+downloads them as modules-only bundles, and falls back to the files as it does for the
+bundle. `ReactNativeHost.load_segment(path)` evaluates a segment file at runtime, for
+example from a pack loaded with `ProjectSettings.load_resource_pack()`, and returns a
+signal that completes with whether it succeeded:
+
+```gdscript
+ProjectSettings.load_resource_pack("user://dlc/shop.pck")
+if await ReactNativeHost.load_segment("res://dist/shop.segment.js"):
+	$Shop.application_key = "Shop"
+```
+
+Segments that loaded are evaluated again, in the order they first loaded, after every hard
+reload. A segment that fails reports through `get_last_error()` and the debugger, and the
+segments after it still load. Exports add the startup segments with the bundle, and report
+a segment that wasn't built.
+
+A segment works only with a bundle that has the modules it was built against: build
+segments again against every bundle they ship with, such as a DLC for each game version.
+Builds mark each bundle with a fingerprint of its modules, and each segment with its base's,
+and a runtime rejects a segment built for another bundle before evaluating it. Bundles that
+Metro serves have no fingerprint, so this check doesn't apply to them. Segments downloaded
+from Metro aren't part of the bundle the Fast Refresh client follows, so their edits apply
+at the next reload. Two module paths that hash to the same ID fail the build, naming both.
+Each build writes its assets list as `<bundle>.assets-manifest.json`.
+
 ## Colors
 
 Component colors use React Native's own `processColor` and C++ color parsing. Values that

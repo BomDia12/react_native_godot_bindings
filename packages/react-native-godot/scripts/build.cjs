@@ -4,7 +4,7 @@
 // Builds a Godot project's bundle for tools that can't set a working
 // directory, such as the Godot editor when it exports.
 const {parseArgs} = require('util');
-const {buildBundle} = require('../cli/build.cjs');
+const {buildProject} = require('../cli/build.cjs');
 const {loadGodotProject} = require('../cli/project.cjs');
 
 const {values} = parseArgs({
@@ -20,7 +20,7 @@ if (project == null) {
   console.error(`No Godot project contains ${values['project-root']}.`);
   process.exit(1);
 }
-buildBundle({projectRoot: project.jsRoot, entry: project.entry, out: project.bundlePath, dev: values.dev === 'true', minify: values.minify === 'true'})
+buildProject(project, {dev: values.dev === 'true', minify: values.minify === 'true'})
   .then(output => console.info('Built ' + output))
   .catch(error => {
     console.error(error.stack ?? error);
