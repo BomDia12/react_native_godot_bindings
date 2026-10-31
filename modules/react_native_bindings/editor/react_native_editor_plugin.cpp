@@ -2,6 +2,7 @@
 
 #ifdef TOOLS_ENABLED
 
+#include "../host/rn_service_settings.h"
 #include "../singletons/react_native_file_singleton.h"
 #include "rn_contract_codegen.h"
 
@@ -9,6 +10,7 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
+#include "editor/editor_interface.h"
 #include "editor/file_system/editor_file_system.h"
 #include "editor/script/script_editor_plugin.h"
 #include "editor/settings/editor_settings.h"
@@ -26,7 +28,7 @@ ReactNativeEditorPlugin::ReactNativeEditorPlugin() {
 	add_debugger_plugin(debugger_plugin);
 	inspector_plugin.instantiate();
 	add_inspector_plugin(inspector_plugin);
-	if (!rn_is_generating_contracts()) {
+	if (!rn_is_tooling_run()) {
 		panel = memnew(RNEditorPanel);
 		add_control_to_bottom_panel(panel, "React Native");
 	}
@@ -71,6 +73,8 @@ void ReactNativeEditorPlugin::_notification(int p_what) {
 			connect(SNAME("resource_saved"), callable_mp(this, &ReactNativeEditorPlugin::_resource_saved));
 			if (rn_is_generating_contracts()) {
 				_generate_contracts_and_quit();
+			} else if (rn_is_tooling_run()) {
+				_set_plugins_and_quit();
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
@@ -115,6 +119,32 @@ void ReactNativeEditorPlugin::_generate_contracts_and_quit() {
 		ERR_PRINT(vformat("Generating React Native contracts failed: %s", error.describe()));
 	}
 	get_tree()->quit(generated ? 0 : 1);
+}
+
+// `godot --headless --editor --react-native-enable-plugins=a,b
+// --react-native-disable-plugins=c` toggles addons as Project Settings does,
+// running their _enable_plugin and _disable_plugin, for the CLI's autolinking.
+void ReactNativeEditorPlugin::_set_plugins_and_quit() {
+	// The first scan initializes the enabled plugins, which ignores changes until it ends.
+	if (EditorFileSystem::get_singleton()->doing_first_scan() || EditorFileSystem::get_singleton()->is_scanning()) {
+		get_tree()->connect(SNAME("process_frame"), callable_mp(this, &ReactNativeEditorPlugin::_set_plugins_and_quit), CONNECT_ONE_SHOT);
+		return;
+	}
+	EditorInterface *editor = EditorInterface::get_singleton();
+	for (const String &plugin : rn_tooling_values("react-native-disable-plugins")) {
+		editor->set_plugin_enabled(plugin, false);
+	}
+	bool enabled = true;
+	for (const String &plugin : rn_tooling_values("react-native-enable-plugins")) {
+		editor->set_plugin_enabled(plugin, true);
+		if (!editor->is_plugin_enabled(plugin)) {
+			ERR_PRINT(vformat("Enabling the Godot plugin '%s' failed.", plugin));
+			enabled = false;
+		}
+	}
+	// The editor saves plugin and autoload changes on a timer that quitting skips.
+	ProjectSettings::get_singleton()->save();
+	get_tree()->quit(enabled ? 0 : 1);
 }
 
 void ReactNativeEditorPlugin::_update_monitored_path() {

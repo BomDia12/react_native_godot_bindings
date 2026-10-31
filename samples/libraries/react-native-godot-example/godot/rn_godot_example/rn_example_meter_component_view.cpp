@@ -1,7 +1,7 @@
 #include "rn_example_meter_component_view.h"
 
-#include <react/renderer/components/ReactNativeGodotSpec/EventEmitters.h>
-#include <react/renderer/components/ReactNativeGodotSpec/Props.h>
+#include <react/renderer/components/RNGodotExampleSpec/EventEmitters.h>
+#include <react/renderer/components/RNGodotExampleSpec/Props.h>
 
 using namespace facebook::react;
 

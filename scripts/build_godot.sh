@@ -38,6 +38,18 @@ done
 command -v scons >/dev/null
 command -v "${CXX:-g++}" >/dev/null
 
+# RN_AUTOLINKING names the autolinking.json of a project whose linked native
+# modules the editor includes.
+CUSTOM_MODULES="$REPO_ROOT/modules"
+AUTOLINKING_ARGS=()
+if [[ -n "${RN_AUTOLINKING:-}" ]]; then
+	RN_AUTOLINKING=$(realpath "$RN_AUTOLINKING")
+	while IFS= read -r module; do
+		CUSTOM_MODULES+=",$module"
+	done < <(python3 -c 'import json, sys; print("\n".join(json.load(open(sys.argv[1]))["modules"]))' "$RN_AUTOLINKING")
+	AUTOLINKING_ARGS=("react_native_autolinking=$RN_AUTOLINKING")
+fi
+
 cd "$GODOT_SOURCE_DIR"
 scons \
 	platform=linuxbsd \
@@ -46,8 +58,9 @@ scons \
 	tests=yes \
 	warnings=extra \
 	werror=yes \
-	custom_modules="$REPO_ROOT/modules" \
+	custom_modules="$CUSTOM_MODULES" \
 	custom_modules_recursive=no \
+	"${AUTOLINKING_ARGS[@]}" \
 	"$@"
 
 if ! grep -q '^#define MODULE_REACT_NATIVE_BINDINGS_ENABLED' "$GODOT_SOURCE_DIR/modules/modules_enabled.gen.h"; then

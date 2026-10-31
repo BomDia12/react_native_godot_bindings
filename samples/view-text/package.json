@@ -9,7 +9,8 @@
   "dependencies": {
     "react": "19.2.3",
     "react-native": "0.87.1",
-    "react-native-godot": "file:../../packages/react-native-godot"
+    "react-native-godot": "file:../../packages/react-native-godot",
+    "react-native-godot-example": "file:../libraries/react-native-godot-example"
   },
   "devDependencies": {
     "@react-native-community/cli": "20.2.0"

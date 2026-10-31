@@ -8,3 +8,7 @@ def can_build(env, platform):
 
 def configure(env):
     pass
+
+
+def get_opts(platform):
+    return [("react_native_autolinking", "Path to the autolinking.json that `react-native autolink-godot` writes", "")]

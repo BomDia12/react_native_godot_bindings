@@ -77,3 +77,16 @@ Add a `ReactNativeRootView` anywhere in a scene and set its `application_key` to
 registered component. All roots share one runtime. [Godot platform](godot-platform.md)
 describes roots, threads and the developer server, and [interop](interop.md) describes how
 roots talk to GDScript.
+
+## Libraries
+
+React Native Godot libraries install with npm. Link their Godot side afterwards:
+
+```sh
+npm install <library>
+npx react-native autolink-godot
+npx react-native build-godot-editor   # only for libraries with native modules
+```
+
+[Autolinking](autolinking.md) describes what the commands change and how to write a
+library.

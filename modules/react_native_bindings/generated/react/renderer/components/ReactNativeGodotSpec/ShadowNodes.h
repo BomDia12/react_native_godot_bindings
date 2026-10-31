@@ -29,15 +29,4 @@ using GodotSceneShadowNode = ConcreteViewShadowNode<
     GodotSceneEventEmitter,
     GodotSceneState>;
 
-JSI_EXPORT extern const char RNExampleMeterComponentName[];
-
-/*
- * `ShadowNode` for <RNExampleMeter> component.
- */
-using RNExampleMeterShadowNode = ConcreteViewShadowNode<
-    RNExampleMeterComponentName,
-    RNExampleMeterProps,
-    RNExampleMeterEventEmitter,
-    RNExampleMeterState>;
-
 } // namespace facebook::react

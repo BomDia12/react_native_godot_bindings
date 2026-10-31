@@ -10,8 +10,6 @@
 #include "../components/rn_text_shaper.h"
 #include "../components/rn_theme_metrics.h"
 #include "../components/rn_view_component_view.h"
-#include "../examples/rn_example_meter_component_view.h"
-#include "../examples/rn_example_scene_module.h"
 #include "../interop/rn_dynamic.h"
 #include "../interop/rn_value_codec.h"
 #include "../mounting/rn_mounting_manager.h"
@@ -25,6 +23,7 @@
 #include "../turbomodules/rn_image_loader.h"
 #include "rn_animation_clock.h"
 #include "rn_dev_server.h"
+#include "rn_extension_registry.h"
 #include "rn_inspector_socket.h"
 #include "rn_log_box_surface.h"
 #include "rn_main_thread_queue.h"
@@ -81,7 +80,9 @@ ComponentRegistryFactory component_registry_factory() {
 			registry->add(concreteComponentDescriptorProvider<GodotSwitchComponentDescriptor>());
 			registry->add(concreteComponentDescriptorProvider<GodotWindowComponentDescriptor>());
 			registry->add(concreteComponentDescriptorProvider<GodotSceneComponentDescriptor>());
-			registry->add(concreteComponentDescriptorProvider<RNExampleMeterComponentDescriptor>());
+			for (const RNExtensionRegistry::Component &component : RNExtensionRegistry::get_components()) {
+				registry->add(component.descriptor);
+			}
 			return registry;
 		}();
 		const ComponentDescriptorParameters parameters{ p_dispatcher, p_context, nullptr };
@@ -106,7 +107,9 @@ std::shared_ptr<RNComponentViewFactories> component_view_factories(const std::sh
 	factories->add("ModalHostView", [](const ShadowView &p_view) { return std::make_unique<RNModalComponentView>(p_view.tag); });
 	factories->add(GodotWindowComponentName, [](const ShadowView &p_view) { return std::make_unique<RNWindowComponentView>(p_view.tag); });
 	factories->add(GodotSceneComponentName, [](const ShadowView &p_view) { return std::make_unique<RNGodotSceneComponentView>(p_view.tag); });
-	factories->add(RNExampleMeterComponentName, [](const ShadowView &p_view) { return std::make_unique<RNExampleMeterComponentView>(p_view.tag); });
+	for (const RNExtensionRegistry::Component &component : RNExtensionRegistry::get_components()) {
+		factories->add(component.descriptor.name, component.view);
+	}
 	return factories;
 }
 
@@ -213,9 +216,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	modules.scenes = scenes;
 	modules.host_events = host_events;
 	modules.image_loader = image_loader;
-	modules.extensions[std::string(RNExampleSceneModule::kModuleName)] = [](const std::shared_ptr<CallInvoker> &p_invoker, const RNHostModuleContext &p_host) {
-		return std::make_shared<RNExampleSceneModule>(p_invoker, p_host);
-	};
+	modules.extensions = RNExtensionRegistry::get_turbo_modules();
 
 	ReactInstanceConfig config;
 	config.enableDevMode = false;

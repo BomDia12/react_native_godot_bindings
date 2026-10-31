@@ -85,7 +85,7 @@ jobs:
           path: |
             .scons-cache
             .ccache
-          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'requirements-ci.txt', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/config.py', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'modules/react_native_bindings/examples/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/react_native_sources.py', 'modules/react_native_bindings/react_platform/**', 'modules/react_native_bindings/generated/**', 'modules/react_native_bindings/host/**', 'modules/react_native_bindings/turbomodules/**', '.github/workflows/_linux-build.yml') }}
+          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'requirements-ci.txt', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/config.py', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'samples/libraries/react-native-godot-example/godot/**', 'samples/libraries/react-native-godot-example/specs/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/react_native_sources.py', 'modules/react_native_bindings/react_platform/**', 'modules/react_native_bindings/generated/**', 'modules/react_native_bindings/host/**', 'modules/react_native_bindings/turbomodules/**', '.github/workflows/_linux-build.yml') }}
           restore-keys: |
             compiler-${{ runner.os }}-gcc13-
 
@@ -135,6 +135,8 @@ jobs:
           npm --prefix packages/react-native-godot test
           npm --prefix samples/view-text ci
           npm --prefix samples/game-ui ci
+          (cd samples/view-text && npx react-native autolink-godot)
+          (cd samples/game-ui && npx react-native autolink-godot --check)
 
       - name: Build Hermes
         if: steps.hermes-libraries.outputs.available != 'true'
@@ -150,6 +152,8 @@ jobs:
           key: ${{ steps.hermes-library-cache.outputs.cache-primary-key }}
 
       - name: Build Godot and module
+        env:
+          RN_AUTOLINKING: samples/view-text/node_modules/.cache/react-native-godot/autolinking/autolinking.json
         run: |
           ccache --zero-stats
           set -o pipefail

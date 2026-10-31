@@ -1,9 +1,9 @@
 # JavaScript and Godot interop
 
 JavaScript runs on React Native's JS thread and Godot runs on the main thread. Godot
-TurboModules (`GodotScene`, `GodotAlert`, `ExampleScene` and the application, network and
-image modules) are implemented in C++ against codegen'd specs, so React Native checks
-their argument and result types. Values that Godot scripts declare at runtime cross
+TurboModules (`GodotScene`, `GodotAlert`, the application, network and image modules, and
+[library](autolinking.md) modules such as `ExampleScene`) are implemented in C++ against
+codegen'd specs, so React Native checks their argument and result types. Values that Godot scripts declare at runtime cross
 through one schema-driven codec, which either converts a value completely or reports a
 structured error; it never truncates, stringifies an unknown value, or silently
 substitutes null.

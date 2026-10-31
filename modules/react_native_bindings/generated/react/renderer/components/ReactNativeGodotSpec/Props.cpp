@@ -87,39 +87,5 @@ folly::dynamic GodotWindowProps::getDiffProps(
   return result;
 }
 #endif
-RNExampleMeterProps::RNExampleMeterProps(
-    const PropsParserContext &context,
-    const RNExampleMeterProps &sourceProps,
-    const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
-
-    value(convertRawProp(context, rawProps, "value", sourceProps.value, {0.0})),
-    tint(convertRawProp(context, rawProps, "tint", sourceProps.tint, {})) {}
-    
-#ifdef RN_SERIALIZABLE_STATE
-ComponentName RNExampleMeterProps::getDiffPropsImplementationTarget() const {
-  return "RNExampleMeter";
-}
-
-folly::dynamic RNExampleMeterProps::getDiffProps(
-    const Props* prevProps) const {
-  static const auto defaultProps = RNExampleMeterProps();
-  const RNExampleMeterProps* oldProps = prevProps == nullptr
-      ? &defaultProps
-      : static_cast<const RNExampleMeterProps*>(prevProps);
-  if (this == oldProps) {
-    return folly::dynamic::object();
-  }
-  folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
-  
-  if ((value != oldProps->value) && !(std::isnan(value) && std::isnan(oldProps->value))) {
-    result["value"] = value;
-  }
-    
-  if (tint != oldProps->tint) {
-    result["tint"] = *tint;
-  }
-  return result;
-}
-#endif
 
 } // namespace facebook::react

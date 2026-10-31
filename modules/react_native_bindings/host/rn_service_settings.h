@@ -3,6 +3,7 @@
 #include "../interop/rn_error.h"
 
 #include "core/templates/hash_map.h"
+#include "core/variant/variant.h"
 
 struct RNDevServerSettings {
 	bool enabled = false;
@@ -26,3 +27,9 @@ struct RNServiceSettings {
 	static bool snapshot(RNServiceSettings &r_settings, RNError &r_error);
 };
 void rn_register_service_settings();
+
+// An editor started by the CLI to generate contracts or enable plugins, which
+// runs no React Native.
+bool rn_is_tooling_run();
+// The comma-separated values of a `--<flag>=a,b` command-line argument.
+PackedStringArray rn_tooling_values(const String &p_flag);

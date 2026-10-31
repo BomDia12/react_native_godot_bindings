@@ -51,6 +51,15 @@ if [[ -f "$PUBLISHED_PACKAGE" && ! -f "$PROJECT_DIR/react_native/node_modules/re
 	exit 1
 fi
 cp "$SCRIPT_DIR/consumer_check.gd" "$PROJECT_DIR/"
+# Autolinking copies and enables a script library's addon, whose autoload
+# registers the module that consumer_check.gd calls from JavaScript.
+(cd "$PROJECT_DIR/react_native" && npm install --silent "$REPO_ROOT/samples/libraries/react-native-godot-script-example" && npx react-native autolink-godot) > "$LOG_DIR/consumer-autolink.log" 2>&1
+cat >> "$PROJECT_DIR/react_native/index.js" <<'JS'
+import {getGodotModule} from 'react-native-godot/modules';
+import 'react-native-godot-script-example';
+
+global.__consumerScore = () => getGodotModule('Scoreboard').call('add', 1);
+JS
 # A component contract makes the build generate its props type, registry and
 # component, which the template must type-check with.
 mkdir -p "$PROJECT_DIR/react_native/contracts"

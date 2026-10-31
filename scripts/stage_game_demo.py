@@ -16,7 +16,7 @@ def stage(destination: Path) -> None:
         raise RuntimeError("Destination contains another Godot project")
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source / "project.godot", project)
-    for folder in ("game", "assets", "dist", "fixtures"):
+    for folder in ("addons", "game", "assets", "dist", "fixtures"):
         shutil.copytree(source / folder, destination / folder, dirs_exist_ok=True,
                         ignore=shutil.ignore_patterns("*.import", "*.map", "*.dependencies.json", "*.js", "server-key.pem") if folder != "dist"
                         else shutil.ignore_patterns("*.import", "*.map", "*.dependencies.json"))

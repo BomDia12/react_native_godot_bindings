@@ -17,7 +17,6 @@
 namespace facebook::react {
 
 using GodotSceneComponentDescriptor = ConcreteComponentDescriptor<GodotSceneShadowNode>;
-using RNExampleMeterComponentDescriptor = ConcreteComponentDescriptor<RNExampleMeterShadowNode>;
 
 void ReactNativeGodotSpec_registerComponentDescriptorsFromCodegen(
   std::shared_ptr<const ComponentDescriptorProviderRegistry> registry);

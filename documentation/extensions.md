@@ -1,11 +1,16 @@
 # C++ extension contracts
 
 Extensions follow React Native's own pattern: a codegen spec in JavaScript, plus a C++
-component view or TurboModule that implements it. Godot specs live in
-`packages/react-native-godot/specs/`. `node packages/react-native-godot/scripts/codegen.cjs`
-regenerates `modules/react_native_bindings/generated/`, which is committed. C++ sources
-belong in `components/`, `turbomodules/` or `examples/`; each source directory must appear
-in `module_source_dirs` in `modules/react_native_bindings/SCsub`.
+component view or TurboModule that implements it. They live in a library: its specs, its
+JavaScript API and a Godot module, which [autolinking](autolinking.md) compiles into the
+editor. The examples below come from
+[`samples/libraries/react-native-godot-example`](../samples/libraries/react-native-godot-example/).
+
+The bindings' own specs live in `packages/react-native-godot/specs/`.
+`node packages/react-native-godot/scripts/codegen.cjs` regenerates
+`modules/react_native_bindings/generated/`, which is committed. Their C++ sources belong in
+`components/` or `turbomodules/`; each source directory must appear in
+`module_source_dirs` in `modules/react_native_bindings/SCsub`.
 
 ## Component views
 
@@ -57,19 +62,17 @@ when children belong inside an internal control, `handle_command()` for commands
 Godot control handles presses itself. Controls return an empty combined minimum size and
 an unbounded combined maximum size, so React Native's layout sizes them exactly.
 
-Register the descriptor and the view together in `host/react_native_host.cpp`: add
-`concreteComponentDescriptorProvider<RNExampleMeterComponentDescriptor>()` to
-`component_registry_factory()` and the view factory to `component_view_factories()`. A
-name without a view factory reports `E_UNKNOWN_COMPONENT` and mounts a plain View.
+[Registration](#registration) adds the descriptor and the view together. A name without
+a view factory reports `E_UNKNOWN_COMPONENT` and mounts a plain View.
 
-JavaScript uses the spec directly:
+JavaScript uses the library's exports:
 
 ```js
-import RNExampleMeter, {Commands} from 'react-native-godot/specs/RNExampleMeterNativeComponent';
+import {RNExampleMeter, RNExampleMeterCommands} from 'react-native-godot-example';
 
 <RNExampleMeter ref={meter} style={{width: 80, height: 20}} value={0.25}
   onValueChanged={event => setValue(event.nativeEvent.value)} />;
-Commands.advance(meter.current, 0.25);
+RNExampleMeterCommands.advance(meter.current, 0.25);
 ```
 
 ## TurboModules
@@ -92,10 +95,34 @@ thread. A synchronous method that needs Godot uses `main_thread->run_sync`, whic
 the JS thread until the main thread runs the work; an asynchronous method returns an
 `RNJSPromise` and settles it from the main thread. Never touch nodes from the JS thread,
 and never make the main thread wait for JavaScript. Events emit through the generated
-`emitOn...` methods or the module's event emitter from any thread. Register the factory in
-`RNTurboModuleContext::extensions` where `host/react_native_host.cpp` builds the
-TurboModule context. Specs whose values are only known at runtime use names ending in
-`Cxx`, so codegen passes `mixed` values through as `jsi::Value`.
+`emitOn...` methods or the module's event emitter from any thread. Specs whose values are
+only known at runtime use names ending in `Cxx`, so codegen passes `mixed` values through
+as `jsi::Value`.
+
+## Registration
+
+A library's module registers its components and TurboModules with `RNExtensionRegistry`
+at `MODULE_INITIALIZATION_LEVEL_SCENE`, before any runtime starts. Every runtime then adds
+them after the built-in ones:
+
+```cpp
+void initialize_rn_godot_example_module(ModuleInitializationLevel p_level) {
+	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
+		return;
+	}
+	ClassDB::register_internal_class<RNExampleMeterControl>();
+	RNExtensionRegistry::add_component(concreteComponentDescriptorProvider<RNExampleMeterComponentDescriptor>(), [](const ShadowView &p_view) {
+		return std::make_unique<RNExampleMeterComponentView>(p_view.tag);
+	});
+	RNExtensionRegistry::add_turbo_module(std::string(RNExampleSceneModule::kModuleName), [](const std::shared_ptr<CallInvoker> &p_invoker, const RNHostModuleContext &p_host) {
+		return std::make_shared<RNExampleSceneModule>(p_invoker, p_host);
+	});
+}
+```
+
+A component's view factory is keyed by its descriptor's name. A TurboModule registered
+under a built-in module's name replaces it. A name another library already registered
+keeps its first registration, with an error naming it.
 
 `RNImageTransport` connects the image service to a transport. Start, completion and cancel run on the main thread.
 Transport must enforce the encoded ceiling before growing response buffers, honor

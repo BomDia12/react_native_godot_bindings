@@ -16,10 +16,23 @@
     "samples/view-text/package-lock.json",
     "samples/view-text/godot.entry.js",
     "samples/view-text/component_registry.entry.js",
-    "packages/react-native-godot/specs/RNExampleMeterNativeComponent.js",
     "packages/react-native-godot/Libraries/NativeComponent/BaseViewConfig.godot.js",
     "documentation/expected-warnings-component-registry.txt",
     "samples/view-text/smoke/tests/component_registry/ComponentRegistry.tscn",
-    "samples/view-text/smoke/tests/component_registry/component_registry.gd"
+    "samples/view-text/smoke/tests/component_registry/component_registry.gd",
+    "samples/libraries/react-native-godot-example/package.json",
+    "samples/libraries/react-native-godot-example/react-native.config.js",
+    "samples/libraries/react-native-godot-example/src/index.js",
+    "samples/libraries/react-native-godot-example/specs/NativeExampleScene.js",
+    "samples/libraries/react-native-godot-example/specs/RNExampleMeterNativeComponent.js",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/SCsub",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/config.py",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/register_types.cpp",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/register_types.h",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/rn_example_meter.h",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/rn_example_meter_component_view.cpp",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/rn_example_meter_component_view.h",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/rn_example_scene_module.cpp",
+    "samples/libraries/react-native-godot-example/godot/rn_godot_example/rn_example_scene_module.h"
   ]
 }

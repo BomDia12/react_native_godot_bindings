@@ -5,6 +5,7 @@ from SCons.Script import Alias, Copy, Requires
 Import("env")
 Import("env_modules")
 
+import json
 import os
 import sys
 
@@ -55,6 +56,17 @@ if env["platform"] == "linuxbsd" and env["library_type"] == "executable":
 
 env_rn.Append(CXXFLAGS=["-std=c++20", "-fexceptions", "-frtti"], CCFLAGS=["-fexceptions"])
 
+# Codegen output of the libraries that `react-native autolink-godot` linked.
+autolinked_codegen = []
+if env["react_native_autolinking"]:
+	with open(env["react_native_autolinking"], encoding="utf-8") as manifest:
+		autolinked_codegen = json.load(manifest)["codegen"]
+env_rn.Append(CXXFLAGS=["-isystem%s" % path for path in autolinked_codegen])
+
+# Modules that extend React Native build with this environment.
+env_react_native = env_rn.Clone()
+Export("env_react_native")
+
 # Module sources. Listed explicitly: SCons' Glob has no recursive "**", so the old
 # "**/*.cpp" only ever matched one directory deep. An explicit list is what keeps
 # engines/hermes out of the build and lets nested sources in. Add new folders here.
@@ -64,7 +76,6 @@ env_rn.add_source_files(module_objects, "*.cpp")
 module_source_dirs = [
 	"components",
 	"editor",
-	"examples",
 	"host",
 	"input",
 	"interop",
@@ -100,10 +111,13 @@ env_upstream.Append(CXXFLAGS=["-std=c++20", "-fexceptions", "-frtti"], CCFLAGS=[
 # Upstream builds with libc++, whose headers provide the fixed-width integer types
 # that several React Native sources use without including <cstdint>.
 env_upstream.Append(CXXFLAGS=["-include", "cstdint"])
+env_upstream.Append(CXXFLAGS=["-isystem%s" % path for path in autolinked_codegen])
 
 upstream_objects = []
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.react_native_sources()))
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.generated_sources()))
+for path in autolinked_codegen:
+	env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.cpp_sources(path)))
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.react_platform_sources()))
 
 third_party = react_native_sources.third_party_sources()

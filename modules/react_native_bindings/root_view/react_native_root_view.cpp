@@ -3,6 +3,7 @@
 #include "../components/rn_clip.h"
 #include "../editor/rn_contract_codegen.h"
 #include "../host/react_native_host.h"
+#include "../host/rn_service_settings.h"
 #include "../turbomodules/rn_godot_alerts.h"
 
 #include "core/config/engine.h"
@@ -135,7 +136,7 @@ void ReactNativeRootView::_connect_window(bool p_connect) {
 // which component it would host, as do roots in an editor that only
 // generates contracts.
 bool ReactNativeRootView::_is_running() const {
-	return (editor_preview || !Engine::get_singleton()->is_editor_hint()) && !rn_is_generating_contracts();
+	return (editor_preview || !Engine::get_singleton()->is_editor_hint()) && !rn_is_tooling_run();
 }
 
 void ReactNativeRootView::_draw_placeholder() {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../mounting/rn_component_view.h"
+#include "react_native_bindings/mounting/rn_component_view.h"
 #include "rn_example_meter.h"
 
 class RNExampleMeterComponentView : public RNComponentView {

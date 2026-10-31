@@ -1,7 +1,7 @@
 import React, {useContext, useEffect, useState} from 'react';
 import {AppRegistry, Text, View} from 'react-native';
 import {RootTagContext} from 'react-native/Libraries/ReactNative/RootTag';
-import NativeExampleScene from 'react-native-godot/specs/NativeExampleScene';
+import {NativeExampleScene} from 'react-native-godot-example';
 import {call, getBinding} from 'react-native-godot/scene';
 import {color, int64, vector2} from 'react-native-godot/values';
 

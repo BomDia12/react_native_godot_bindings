@@ -8,6 +8,7 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
+const {autolink, dependencyConfig, readManifest} = require('../cli/autolink.cjs');
 const {buildBundle, findEntry} = require('../cli/build.cjs');
 const {downloadEditor, hostPlatform, resolveEditor} = require('../cli/editor.cjs');
 const {addMainScene, packageName, writeTemplate} = require('../cli/init.cjs');
@@ -147,4 +148,124 @@ test('a bundle cannot share its directory with the JavaScript project', async ()
   for (const out of [path.join(root, 'game.bundle.js'), 'index.bundle.js']) {
     await assert.rejects(buildBundle({projectRoot: jsRoot, entry: 'index', out}), /must be in a directory of its own/);
   }
+});
+
+function library(root, name, platform) {
+  const directory = path.join(root, 'libraries', name);
+  fs.mkdirSync(path.join(directory, 'godot', 'rn_module'), {recursive: true});
+  fs.writeFileSync(path.join(directory, 'godot', 'rn_module', 'config.py'), 'def can_build(env, platform):\n    return True\n');
+  fs.mkdirSync(path.join(directory, 'godot', 'addons', name), {recursive: true});
+  fs.writeFileSync(path.join(directory, 'godot', 'addons', name, 'plugin.cfg'), '[plugin]\n');
+  fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({name, version: '1.0.0'}));
+  return {platforms: {godot: dependencyConfig(directory, platform)}};
+}
+
+// Stands in for the editor: records its arguments and enables or disables the
+// plugins in project.godot as Godot would.
+function fakeEditor(root) {
+  const editor = path.join(root, 'godot');
+  fs.writeFileSync(
+    editor,
+    `#!/usr/bin/env node
+const fs = require('fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(path.join(root, 'editor-args'))}, args.join(' ') + '\\n');
+const file = args[args.indexOf('--path') + 1] + '/project.godot';
+const value = flag => (args.find(arg => arg.startsWith(flag + '=')) ?? '=').split('=')[1].split(',').filter(Boolean);
+const text = fs.readFileSync(file, 'utf8');
+let enabled = [...text.matchAll(/res:\\/\\/addons\\/([^/]+)\\/plugin\\.cfg/g)].map(match => match[1]);
+enabled = [...enabled.filter(name => !value('--react-native-disable-plugins').includes(name)), ...value('--react-native-enable-plugins')];
+const list = 'enabled=PackedStringArray(' + enabled.map(name => '"res://addons/' + name + '/plugin.cfg"').join(', ') + ')';
+fs.writeFileSync(file, text.replace(/\\n\\[editor_plugins\\]\\n\\nenabled=.*\\n/, '\\n') + '\\n[editor_plugins]\\n\\n' + list + '\\n');
+`,
+    {mode: 0o755},
+  );
+  return editor;
+}
+
+test('autolinking writes the native manifest and owns the addons it copies', async () => {
+  const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
+  const godot = fakeEditor(root);
+  const project = loadGodotProject(root);
+  const config = {root, dependencies: {'lib-a': library(root, 'lib_a', {module: 'godot/rn_module', addon: 'godot/addons/lib_a'}), plain: {platforms: {godot: null}}}};
+
+  assert.deepEqual(await autolink(project, config, {godot}), []);
+  const manifest = readManifest(root);
+  assert.match(manifest.hash, /^[0-9a-f]{64}$/);
+  assert.deepEqual(manifest.modules, [path.join(root, 'libraries', 'lib_a', 'godot', 'rn_module')]);
+  assert.deepEqual(manifest.codegen, []);
+  assert.ok(fs.existsSync(path.join(root, 'addons', 'lib_a', 'plugin.cfg')));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'godot-autolinking.lock.json'), 'utf8')), {addons: {lib_a: 'lib-a'}});
+  assert.match(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /--react-native-enable-plugins=lib_a/);
+
+  fs.writeFileSync(path.join(root, 'addons', 'lib_a', 'plugin.cfg.uid'), 'uid://kept');
+  assert.deepEqual(await autolink(project, config, {check: true, godot}), []);
+  fs.appendFileSync(path.join(root, 'libraries', 'lib_a', 'godot', 'rn_module', 'config.py'), '# changed\n');
+  assert.deepEqual(await autolink(project, config, {check: true, godot}), ['the native module manifest or its codegen is out of date']);
+  await autolink(project, config, {godot});
+  assert.notEqual(readManifest(root).hash, manifest.hash);
+
+  fs.mkdirSync(path.join(root, 'addons', 'lib_b'));
+  const withB = {root, dependencies: {...config.dependencies, 'lib-b': library(root, 'lib_b', {addon: 'godot/addons/lib_b'})}};
+  await assert.rejects(autolink(project, withB, {godot}), /res:\/\/addons\/lib_b already exists and was not linked/);
+
+  await autolink(project, {root, dependencies: {}}, {godot});
+  assert.ok(!fs.existsSync(path.join(root, 'addons', 'lib_a')));
+  assert.ok(fs.existsSync(path.join(root, 'addons', 'lib_b')));
+  assert.match(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /--react-native-disable-plugins=lib_a/);
+  assert.deepEqual(readManifest(root), {hash: null, modules: [], codegen: []});
+});
+
+test('autolinking checks addon ownership, rejects colliding addons and waits for native editors', async t => {
+  const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
+  const godot = fakeEditor(root);
+  const project = loadGodotProject(root);
+  const scriptOnly = library(root, 'scores', {addon: 'godot/addons/scores'});
+  await autolink(project, {root, dependencies: {scores: scriptOnly}}, {godot});
+  fs.rmSync(path.join(root, 'godot-autolinking.lock.json'));
+  assert.deepEqual(await autolink(project, {root, dependencies: {scores: scriptOnly}}, {check: true, godot}), ["godot-autolinking.lock.json doesn't record the linked addons"]);
+
+  const twin = library(path.join(root, 'other'), 'scores', {addon: 'godot/addons/scores'});
+  await assert.rejects(autolink(project, {root, dependencies: {scores: scriptOnly, twin}}, {godot}), /scores and twin both link an addon named scores/);
+
+  const editorVariable = process.env.GODOT_EDITOR;
+  delete process.env.GODOT_EDITOR;
+  t.after(() => editorVariable != null && (process.env.GODOT_EDITOR = editorVariable));
+  t.mock.method(console, 'info', () => {});
+  const native = library(root, 'meter', {module: 'godot/rn_module', addon: 'godot/addons/meter'});
+  fs.rmSync(path.join(root, 'addons', 'scores'), {recursive: true});
+  await autolink(project, {root, dependencies: {meter: native}});
+  assert.ok(fs.existsSync(path.join(root, 'addons', 'meter', 'plugin.cfg')));
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /enable-plugins=meter/);
+  assert.match(console.info.mock.calls.at(-1).arguments[0], /build-godot-editor to enable meter/);
+});
+
+test('autolinking re-enables updated plugins and rejects colliding native modules', async () => {
+  const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
+  const godot = fakeEditor(root);
+  const project = loadGodotProject(root);
+  const config = {root, dependencies: {scores: library(root, 'scores', {addon: 'godot/addons/scores'})}};
+  await autolink(project, config, {godot});
+  fs.appendFileSync(path.join(root, 'libraries', 'scores', 'godot', 'addons', 'scores', 'plugin.cfg'), 'version="2"\n');
+  fs.writeFileSync(path.join(root, 'editor-args'), '');
+  await autolink(project, config, {godot});
+  assert.match(fs.readFileSync(path.join(root, 'editor-args'), 'utf8'), /disable-plugins=scores[\s\S]*enable-plugins=scores/);
+  assert.deepEqual(await autolink(project, config, {check: true, godot}), []);
+
+  const first = library(path.join(root, 'a'), 'first', {module: 'godot/rn_module'});
+  const second = library(path.join(root, 'b'), 'second', {module: 'godot/rn_module'});
+  await assert.rejects(autolink(project, {root, dependencies: {first, second}}, {godot}), /first and second both link a native module named rn_module/);
+});
+
+test('autolinking rejects colliding or reserved codegen names and incomplete codegen configs', async () => {
+  const root = godotProject('config_version=5\n\n[react_native]\n\nproject/root="res://"\n');
+  const project = loadGodotProject(root);
+  const native = (name, module, codegen) => ({platforms: {godot: {root, version: '1.0.0', module: path.join(root, module), addon: null, codegen: {name: codegen, sources: root}}}});
+  await assert.rejects(autolink(project, {root, dependencies: {spec: native('spec', 'a/rn_a', 'ReactNativeGodotSpec')}}), /react-native-godot and spec both use the codegen name ReactNativeGodotSpec/);
+  await assert.rejects(autolink(project, {root, dependencies: {one: native('one', 'a/rn_a', 'Shared'), two: native('two', 'b/rn_b', 'Shared')}}), /one and two both use the codegen name Shared/);
+
+  const library = path.join(root, 'incomplete');
+  fs.mkdirSync(library);
+  fs.writeFileSync(path.join(library, 'package.json'), JSON.stringify({name: 'incomplete', version: '1.0.0', codegenConfig: {name: 'Incomplete'}}));
+  assert.throws(() => dependencyConfig(library, {module: 'godot/rn_incomplete'}), /incomplete has a codegenConfig without jsSrcsDir/);
 });

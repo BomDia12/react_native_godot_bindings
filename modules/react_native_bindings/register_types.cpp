@@ -11,8 +11,6 @@
 #include "components/rn_text_control.h"
 #include "components/rn_text_input_control.h"
 #include "components/rn_view_control.h"
-#include "examples/rn_example_meter.h"
-#include "examples/rn_example_scene_module.h"
 #include "host/react_native_host.h"
 #include "host/rn_feature_flags.h"
 #include "host/rn_logging.h"
@@ -87,12 +85,10 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		ClassDB::register_internal_class<RNGodotSceneHost>();
 		ClassDB::register_internal_class<RNLineEditor>();
 		ClassDB::register_internal_class<RNTextEditor>();
-		ClassDB::register_internal_class<RNExampleMeterControl>();
 		ClassDB::register_class<RNTextInputControl>();
 		ClassDB::register_class<RNSceneBinding>();
 		ClassDB::register_class<RNComponentContract>();
 		ClassDB::register_class<ReactNativeRootView>();
-		ClassDB::register_class<RNExampleCounter>();
 		return;
 	}
 

@@ -12,7 +12,6 @@
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/PropsParserContext.h>
 #include <react/renderer/debug/DebugStringConvertible.h>
-#include <react/renderer/graphics/Color.h>
 
 namespace facebook::react {
 
@@ -45,25 +44,6 @@ class GodotWindowProps final : public ViewProps {
   double windowWidth{640.0};
   double windowHeight{480.0};
   bool visible{true};
-
-  #ifdef RN_SERIALIZABLE_STATE
-  ComponentName getDiffPropsImplementationTarget() const override;
-
-  folly::dynamic getDiffProps(const Props* prevProps) const override;
-  #endif
-
-  
-};
-
-class RNExampleMeterProps final : public ViewProps {
- public:
-  RNExampleMeterProps() = default;
-  RNExampleMeterProps(const PropsParserContext& context, const RNExampleMeterProps &sourceProps, const RawProps &rawProps);
-
-#pragma mark - Props
-
-  double value{0.0};
-  SharedColor tint{};
 
   #ifdef RN_SERIALIZABLE_STATE
   ComponentName getDiffPropsImplementationTarget() const override;

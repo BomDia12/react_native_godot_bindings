@@ -1,0 +1,14 @@
+{
+  "name": "react-native-godot-script-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example React Native Godot library whose Godot side is a GDScript addon",
+  "license": "MIT",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "files": ["godot", "src", "react-native.config.js"],
+  "peerDependencies": {
+    "react": "19.2.3",
+    "react-native-godot": "*"
+  }
+}

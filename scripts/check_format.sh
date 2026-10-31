@@ -9,10 +9,11 @@ command -v clang-format >/dev/null
 
 # Third-party submodules, Hermes and codegen output keep their upstream formatting.
 mapfile -t SOURCES < <(
-	find "$MODULE_DIR" \( -name '*.cpp' -o -name '*.h' \) \
+	find "$MODULE_DIR" "$REPO_ROOT/samples/libraries" \( -name '*.cpp' -o -name '*.h' \) \
 		-not -path "$MODULE_DIR/thirdparty/*" \
 		-not -path "$MODULE_DIR/engines/*" \
 		-not -path "$MODULE_DIR/generated/*" \
+		-not -path '*/node_modules/*' \
 		-print | sort
 )
 
