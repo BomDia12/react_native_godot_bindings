@@ -95,6 +95,7 @@ public:
 	bool handles_back_press() const;
 	void send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload);
 	void back_pressed();
+	void set_fast_refresh(bool p_enabled);
 	void evaluate(const String &p_code, std::function<void(const Variant &p_result)> p_done);
 	Dictionary stats() const;
 	void open_debugger();

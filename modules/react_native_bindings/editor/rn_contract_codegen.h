@@ -18,3 +18,5 @@ String rn_contract_component_source(const Ref<RNComponentContract> &p_contract);
 // components/<Name>.tsx where it is missing. Files are written only when
 // their content changes, so Metro sees no spurious edits.
 bool rn_generate_contracts(RNError &r_error);
+// Whether godot/contracts.ts and godot/registry.ts hold what the contracts generate.
+bool rn_generated_contracts_current();

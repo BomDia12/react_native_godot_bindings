@@ -22,6 +22,7 @@ export type PlatformConstants = {
   godotVersion: string,
   hostOS: string,
   assetScale: number,
+  fastRefresh?: boolean,
 };
 
 export interface Spec extends TurboModule {

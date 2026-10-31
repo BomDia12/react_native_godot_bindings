@@ -26,7 +26,7 @@
 #include "turbomodules/rn_godot_alerts.h"
 
 #ifdef TOOLS_ENABLED
-#include "editor/react_native_file_editor_plugin.h"
+#include "editor/react_native_editor_plugin.h"
 #endif
 
 #include "core/config/engine.h"
@@ -98,7 +98,7 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 
 #ifdef TOOLS_ENABLED
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
-		EditorPlugins::add_by_type<ReactNativeFileEditorPlugin>();
+		EditorPlugins::add_by_type<ReactNativeEditorPlugin>();
 	}
 #endif
 }

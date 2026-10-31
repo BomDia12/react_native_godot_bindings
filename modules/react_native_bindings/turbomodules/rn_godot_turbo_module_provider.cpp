@@ -21,7 +21,7 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 	const RNSceneModuleContext scene{ context.scenes, context.host.main_thread };
 	const RNApplicationModuleContext application = context.application;
 	const RNNetworkModuleContext network = context.network;
-	add(RNPlatformConstantsModule::kModuleName, [](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNPlatformConstantsModule>(p_invoker); });
+	add(RNPlatformConstantsModule::kModuleName, [fast_refresh = context.fast_refresh](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNPlatformConstantsModule>(p_invoker, fast_refresh); });
 	add(RNDeviceInfoModule::kModuleName, [application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNDeviceInfoModule>(p_invoker, application); });
 	add(RNAppStateModule::kModuleName, [application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAppStateModule>(p_invoker, application); });
 	add(RNAppearanceModule::kModuleName, [application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAppearanceModule>(p_invoker, application); });

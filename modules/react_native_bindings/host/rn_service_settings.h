@@ -9,6 +9,7 @@ struct RNDevServerSettings {
 	String host = "localhost";
 	int64_t port = 8081;
 	String entry = "index";
+	bool fast_refresh = true;
 };
 
 struct RNServiceSettings {

@@ -65,3 +65,18 @@ fi
 check consumer-file "$REPO_ROOT/documentation/expected-warnings.txt" --no-packager
 check_fallback
 RN_CONSUMER_EXPECT_METRO=1 check consumer-metro "$REPO_ROOT/documentation/expected-warnings-dev-server.txt"
+
+# An export builds the release bundle into a pack that runs without the
+# JavaScript project.
+cp "$SCRIPT_DIR/consumer_export_presets.cfg" "$PROJECT_DIR/export_presets.cfg"
+"$GODOT_BINARY" --headless --path "$PROJECT_DIR" --export-pack Linux "$PACKAGE_DIR/game.pck" > "$LOG_DIR/consumer-export.log" 2>&1
+# Godot's command-line export succeeds when export plugins report errors.
+if grep -q "completed with warnings" "$LOG_DIR/consumer-export.log"; then
+	echo "The consumer export reported problems; see $LOG_DIR/consumer-export.log." >&2
+	exit 1
+fi
+set +e
+(cd "$PACKAGE_DIR" && timeout 300s "$GODOT_BINARY" --headless --audio-driver Dummy --main-pack game.pck --react-native-no-dev-server --script res://consumer_check.gd) > "$LOG_DIR/consumer-export-run.log" 2>&1
+RUN_EXIT=$?
+set -e
+python3 "$SCRIPT_DIR/check_baseline_log.py" --log "$LOG_DIR/consumer-export-run.log" --allowlist "$REPO_ROOT/documentation/expected-warnings.txt" --exit-code "$RUN_EXIT" --test-id consumer

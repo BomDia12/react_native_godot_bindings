@@ -30,6 +30,7 @@
 #include "rn_main_thread_queue.h"
 
 #include "core/config/project_settings.h"
+#include "core/debugger/engine_debugger.h"
 #include "core/io/file_access.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
@@ -125,6 +126,19 @@ void layout_for(ReactNativeRootView *p_root, const RNGodotApplication &p_applica
 	r_context.swapLeftAndRightInRTL = p_application.get_snapshot().swap_left_and_right;
 }
 
+// A game the editor runs sends its JavaScript errors to the editor's React
+// Native debugger tab, which symbolicates their frames.
+void send_error_to_editor(const JsErrorHandler::ProcessedError &p_error) {
+	if (!EngineDebugger::is_active()) {
+		return;
+	}
+	Array frames;
+	for (const JsErrorHandler::ProcessedError::StackFrame &frame : p_error.stack) {
+		frames.push_back(Array({ String::utf8(frame.methodName.c_str()), String::utf8(frame.file.value_or("").c_str()), frame.lineNumber.value_or(0), frame.column.value_or(0) }));
+	}
+	EngineDebugger::get_singleton()->send_message("react_native:error", { String::utf8(p_error.message.c_str()), frames });
+}
+
 String processed_error(const JsErrorHandler::ProcessedError &p_error) {
 	String result = String::utf8(p_error.message.c_str());
 	for (const JsErrorHandler::ProcessedError::StackFrame &frame : p_error.stack) {
@@ -194,6 +208,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 						} } };
 	source_url = modules.source_url;
 	modules.application = { application, main_thread };
+	modules.fast_refresh = p_setup.settings.dev_server.fast_refresh;
 	modules.network = { blobs, http, websockets, main_thread };
 	modules.scenes = scenes;
 	modules.host_events = host_events;
@@ -215,9 +230,15 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	};
 	auto js_error = [this](jsi::Runtime &, const JsErrorHandler::ProcessedError &p_error) {
 		_report_error(processed_error(p_error));
+		if (!retired) {
+			send_error_to_editor(p_error);
+		}
 	};
 	auto logger = [](const std::string &p_message, unsigned int p_level) {
 		const String message = String::utf8(p_message.c_str());
+		if (EngineDebugger::is_active()) {
+			EngineDebugger::get_singleton()->send_message("react_native:log", { int(p_level), message });
+		}
 		if (p_level >= ReactNativeLogLevelError) {
 			ERR_PRINT(message);
 		} else if (p_level == ReactNativeLogLevelWarning) {
@@ -372,6 +393,13 @@ void RNHostInstance::send_message(std::optional<int> p_root_tag, const String &p
 
 bool RNHostInstance::handles_back_press() const {
 	return host_events->is_back_handler_enabled();
+}
+
+// Fast Refresh turns on and off without a reload, as upstream's dev menu does.
+void RNHostInstance::set_fast_refresh(bool p_enabled) {
+	if (dev_server) {
+		runtime.react_host->emitDeviceEvent(folly::dynamic::array("godotFastRefreshChanged", folly::dynamic::object("enabled", p_enabled)));
+	}
 }
 
 void RNHostInstance::back_pressed() {

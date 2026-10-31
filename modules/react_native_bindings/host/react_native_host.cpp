@@ -5,6 +5,7 @@
 #include "../singletons/react_native_file_singleton.h"
 #include "rn_host_instance.h"
 
+#include "core/config/project_settings.h"
 #include "core/input/input.h"
 #include "core/io/resource_loader.h"
 #include "core/object/callable_mp.h"
@@ -40,10 +41,12 @@ ReactNativeHost::ReactNativeHost() {
 	if (ReactNativeFileSingleton *files = ReactNativeFileSingleton::get_singleton()) {
 		files->connect("react_native_file_changed", callable_mp(this, &ReactNativeHost::_bundle_changed));
 	}
+	ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &ReactNativeHost::_settings_changed));
 }
 
 ReactNativeHost::~ReactNativeHost() {
 	shutdown();
+	ProjectSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &ReactNativeHost::_settings_changed));
 	if (ReactNativeFileSingleton *files = ReactNativeFileSingleton::get_singleton()) {
 		files->disconnect("react_native_file_changed", callable_mp(this, &ReactNativeHost::_bundle_changed));
 	}
@@ -340,6 +343,14 @@ void ReactNativeHost::unregister_module(const String &p_name) {
 std::shared_ptr<const RNSceneAttachment> ReactNativeHost::find_module(const String &p_name) const {
 	const std::shared_ptr<const RNSceneAttachment> *module = modules.getptr(p_name);
 	return module ? *module : nullptr;
+}
+
+void ReactNativeHost::_settings_changed() {
+	const bool fast_refresh = GLOBAL_GET("react_native/dev_server/fast_refresh");
+	if (instance && fast_refresh != settings.dev_server.fast_refresh) {
+		settings.dev_server.fast_refresh = fast_refresh;
+		instance->set_fast_refresh(fast_refresh);
+	}
 }
 
 void ReactNativeHost::post_message(const String &p_name, const Variant &p_payload) {

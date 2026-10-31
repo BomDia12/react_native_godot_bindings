@@ -92,6 +92,7 @@ class ReactNativeHost : public Object {
 	void _follow_module_node(const String &p_name, bool p_follow);
 	bool _defer(std::function<void()> p_task);
 	void _update_suspension();
+	void _settings_changed();
 
 protected:
 	static void _bind_methods();
