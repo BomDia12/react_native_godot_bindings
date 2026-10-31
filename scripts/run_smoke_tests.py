@@ -202,6 +202,8 @@ def main() -> int:
         godot_binary = find_godot_binary(godot_dir)
         log_dir = Path(os.environ.get("SMOKE_LOG_DIR", REPO_ROOT / "artifacts/smoke-logs")).resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
+        # Bundles of projects with component contracts regenerate them with the editor.
+        os.environ.setdefault("GODOT_EDITOR", str(godot_binary))
         build_bundles(REPO_ROOT, groups)
         prepare_project_imports(REPO_ROOT, godot_binary, manifests, log_dir)
     except (ManifestError, OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as error:

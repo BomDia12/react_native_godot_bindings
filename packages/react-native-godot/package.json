@@ -11,9 +11,21 @@
       "types": "./types/app-registry.d.ts",
       "default": "./src/app-registry.js"
     },
+    "./contracts": {
+      "types": "./types/contracts.d.ts",
+      "default": "./src/contracts.js"
+    },
     "./scene": {
       "types": "./types/scene.d.ts",
       "default": "./src/scene.js"
+    },
+    "./messages": {
+      "types": "./types/messages.d.ts",
+      "default": "./src/messages.js"
+    },
+    "./modules": {
+      "types": "./types/modules.d.ts",
+      "default": "./src/modules.js"
     },
     "./root": {
       "types": "./types/root.d.ts",

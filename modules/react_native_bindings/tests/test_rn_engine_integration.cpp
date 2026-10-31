@@ -137,20 +137,8 @@ TEST_CASE("[ReactNativeBindings][EngineIntegration] the animation clock stands s
 	CHECK(rn_animation_clock_now() - paused < std::chrono::milliseconds(15));
 }
 
-TEST_CASE("[ReactNativeBindings][EngineIntegration] root state changes reach every live listener") {
+TEST_CASE("[ReactNativeBindings][EngineIntegration] back presses go to JavaScript only while it listens") {
 	RNGodotHostEvents events;
-	int calls = 0;
-	RNRootState received;
-	events.add_listener([&](int p_root_tag, const RNRootState &p_state) {
-		calls += p_root_tag == 11;
-		received = p_state;
-		return true;
-	});
-	events.add_listener([](int, const RNRootState &) { return false; });
-	events.root_state_changed(11, { .visible = true, .processing = false, .focused = true });
-	events.root_state_changed(11, { .visible = false, .processing = false, .focused = false });
-	CHECK(calls == 2);
-	CHECK(received == RNRootState{ .visible = false, .processing = false, .focused = false });
 	CHECK_FALSE(events.is_back_handler_enabled());
 	events.set_back_handler_enabled(true);
 	CHECK(events.is_back_handler_enabled());

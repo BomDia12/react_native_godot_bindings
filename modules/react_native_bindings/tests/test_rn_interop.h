@@ -31,7 +31,7 @@ TEST_CASE("[ReactNativeBindings][Interop] object handles are scoped to their roo
 	CHECK(error.code == RNErrorCode::STALE_HANDLE);
 	CHECK(registry.resolve_object(target, 11, "Other", error) == nullptr);
 	CHECK(error.code == RNErrorCode::VALIDATION);
-	registry.close_surface(11);
+	registry.close_scope(11);
 	CHECK(registry.resolve_object(target, 11, "Fixture", error) == nullptr);
 	CHECK(error.code == RNErrorCode::STALE_HANDLE);
 }

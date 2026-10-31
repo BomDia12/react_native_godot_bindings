@@ -1,0 +1,63 @@
+[gd_resource type="RNComponentContract" format=3]
+
+[resource]
+component = "EnemyRoster"
+properties = [{
+"default": [],
+"name": "enemies",
+"value": {
+"element": {
+"name": "RosterEnemy",
+"type": "named"
+},
+"type": "array"
+}
+}, {
+"default": null,
+"name": "marked",
+"value": {
+"nullable": true,
+"type": "string"
+}
+}]
+events = [{
+"arguments": [{
+"name": "enemy_id",
+"value": {
+"type": "string"
+}
+}],
+"name": "mark"
+}, {
+"arguments": [{
+"name": "enemy_id",
+"value": {
+"type": "string"
+}
+}, {
+"name": "amount",
+"value": {
+"type": "integer"
+}
+}],
+"name": "heal"
+}]
+types = {
+"RosterEnemy": {
+"fields": {
+"health": {
+"type": "integer"
+},
+"id": {
+"type": "string"
+},
+"max_health": {
+"type": "integer"
+},
+"name": {
+"type": "string"
+}
+},
+"type": "record"
+}
+}

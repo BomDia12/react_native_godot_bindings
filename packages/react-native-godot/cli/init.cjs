@@ -35,7 +35,9 @@ function packThisPackage(destination) {
 }
 
 function templateFiles() {
-  return fs.readdirSync(TEMPLATE_ROOT).filter(file => file !== 'Main.tscn');
+  return fs
+    .readdirSync(TEMPLATE_ROOT, {recursive: true})
+    .filter(file => file !== 'Main.tscn' && fs.statSync(path.join(TEMPLATE_ROOT, file)).isFile());
 }
 
 function writeTemplate(jsRoot, values) {
@@ -48,7 +50,9 @@ function writeTemplate(jsRoot, values) {
   fs.mkdirSync(jsRoot, {recursive: true});
   for (const file of templateFiles()) {
     const content = fs.readFileSync(path.join(TEMPLATE_ROOT, file), 'utf8').replace(/\{\{(\w+)\}\}/g, (_match, key) => values[key]);
-    fs.writeFileSync(path.join(jsRoot, RENAMED_TEMPLATE_FILES[file] ?? file), content);
+    const destination = path.join(jsRoot, RENAMED_TEMPLATE_FILES[file] ?? file);
+    fs.mkdirSync(path.dirname(destination), {recursive: true});
+    fs.writeFileSync(destination, content);
   }
 }
 
@@ -82,7 +86,9 @@ async function main() {
   }
 
   const manifest = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
+  const root = 'res://' + path.relative(godotRoot, jsRoot).replaceAll(path.sep, '/') + '/';
   writeTemplate(jsRoot, {
+    contracts: root + 'contracts',
     name: packageName(godotRoot),
     react: manifest.peerDependencies.react,
     reactNative: manifest.peerDependencies['react-native'],
@@ -93,7 +99,6 @@ async function main() {
   run('npm', ['install'], {cwd: jsRoot});
   ignoreNodeModules(jsRoot);
 
-  const root = 'res://' + path.relative(godotRoot, jsRoot).replaceAll(path.sep, '/') + '/';
   addProjectSettings(godotRoot, {
     'react_native/project/root': root,
     'react_native/bundle/path': root + 'dist/index.bundle.js',

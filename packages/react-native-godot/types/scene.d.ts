@@ -1,7 +1,8 @@
 import type {GodotSceneSnapshot} from '../godot';
 
 export type GodotSceneChange = {
-  rootTag: number;
+  rootTag?: number;
+  module?: string;
   binding: string | null;
   ready: boolean;
   sequence: number;

@@ -44,7 +44,7 @@ enum class SceneValueMode {
 
 struct SceneValueContext {
 	RNObjectRegistry &objects;
-	int root_tag = 0;
+	RNBindingScope scope;
 	uint32_t visited = 0;
 };
 
@@ -72,11 +72,11 @@ bool convert_scene_value(const Variant &p_value, const RNValueSchema &p_schema, 
 			r_value = Variant();
 			return true;
 		}
-		r_value = r_context.objects.register_object(r_context.root_tag, object->get_instance_id(), p_schema.capability, r_error);
+		r_value = r_context.objects.register_object(r_context.scope, object->get_instance_id(), p_schema.capability, r_error);
 		return !r_error.is_set();
 	}
 	if (p_schema.type == RNValueType::OBJECT && p_mode == SceneValueMode::TO_SCRIPT) {
-		Object *object = r_context.objects.resolve_object(p_value, r_context.root_tag, p_schema.capability, r_error);
+		Object *object = r_context.objects.resolve_object(p_value, r_context.scope, p_schema.capability, r_error);
 		if (!object) {
 			return false;
 		}
@@ -130,8 +130,8 @@ bool convert_scene_value(const Variant &p_value, const RNValueSchema &p_schema, 
 
 // Turns a script value into what JavaScript receives: Objects become handles,
 // then the value is checked against its schema and wrapped.
-bool export_scene_value(const Variant &p_value, const RNValueSchema &p_schema, RNObjectRegistry &p_objects, int p_root_tag, Variant &r_value, RNError &r_error) {
-	SceneValueContext context{ p_objects, p_root_tag };
+bool export_scene_value(const Variant &p_value, const RNValueSchema &p_schema, RNObjectRegistry &p_objects, const RNBindingScope &p_scope, Variant &r_value, RNError &r_error) {
+	SceneValueContext context{ p_objects, p_scope };
 	Variant tokens;
 	if (!convert_scene_value(p_value, p_schema, context, SceneValueMode::TO_TOKEN, tokens, r_error) || !rn_validate_native_value(tokens, p_schema, r_error, "value")) {
 		return false;
@@ -183,10 +183,14 @@ Dictionary RNSceneBindings::_envelope(const Binding &p_binding) const {
 	return value;
 }
 
-void RNSceneBindings::_publish(int p_root_tag, const Binding &p_binding, const StringName &p_event, const Variant &p_payload) {
+void RNSceneBindings::_publish(const RNBindingScope &p_scope, const Binding &p_binding, const StringName &p_event, const Variant &p_payload) {
 	++sequence;
 	Dictionary change = _envelope(p_binding);
-	change["rootTag"] = p_root_tag;
+	if (p_scope.is_module()) {
+		change["module"] = p_scope.module;
+	} else {
+		change["rootTag"] = p_scope.root_tag;
+	}
 	change["event"] = String(p_event);
 	if (p_payload.get_type() != Variant::NIL) {
 		change["payload"] = p_payload;
@@ -195,9 +199,16 @@ void RNSceneBindings::_publish(int p_root_tag, const Binding &p_binding, const S
 	std::erase_if(emitters, [&change](const std::function<bool(const Variant &)> &p_emit) { return !p_emit(change); });
 }
 
-bool RNSceneBindings::_refresh(int p_root_tag, Binding &p_binding, RNError &r_error) {
-	ReactNativeRootView *root = find_root(p_root_tag);
-	auto attachment = root ? root->get_scene_attachment() : nullptr;
+std::shared_ptr<const RNSceneAttachment> RNSceneBindings::_attachment(const RNBindingScope &p_scope) const {
+	if (p_scope.is_module()) {
+		return find_module ? find_module(p_scope.module) : nullptr;
+	}
+	ReactNativeRootView *root = find_root(p_scope.root_tag);
+	return root ? root->get_scene_attachment() : nullptr;
+}
+
+bool RNSceneBindings::_refresh(const RNBindingScope &p_scope, Binding &p_binding, RNError &r_error) {
+	auto attachment = _attachment(p_scope);
 	if (attachment && !live_target(attachment->target)) {
 		attachment.reset();
 	}
@@ -205,11 +216,16 @@ bool RNSceneBindings::_refresh(int p_root_tag, Binding &p_binding, RNError &r_er
 		return true;
 	}
 	_disconnect(p_binding);
+	// A module that is gone or replaced takes its object handles with it; a
+	// root's handles last until the root stops.
+	if (p_scope.is_module()) {
+		objects.close_scope(p_scope);
+	}
 	if (!attachment) {
-		_publish(p_root_tag, p_binding, "ready", Variant());
+		_publish(p_scope, p_binding, "ready", Variant());
 		return true;
 	}
-	p_binding.handle = objects.register_object(p_root_tag, attachment->target, attachment->capability, r_error);
+	p_binding.handle = objects.register_object(p_scope, attachment->target, attachment->capability, r_error);
 	if (r_error.is_set()) {
 		return false;
 	}
@@ -218,8 +234,8 @@ bool RNSceneBindings::_refresh(int p_root_tag, Binding &p_binding, RNError &r_er
 	for (const KeyValue<StringName, RNSceneSignal> &entry : attachment->signals) {
 		const uint64_t identity = attachment->identity;
 		const RNSceneSignal signal = entry.value;
-		Callable callback(memnew(SceneSignalCallable(attachment->target, [this, p_root_tag, identity, signal](const Variant **p_arguments, int p_count) {
-			auto found = bindings.find(p_root_tag);
+		Callable callback(memnew(SceneSignalCallable(attachment->target, [this, p_scope, identity, signal](const Variant **p_arguments, int p_count) {
+			auto found = bindings.find(p_scope);
 			if (found == bindings.end() || !found->second.attachment || found->second.attachment->identity != identity || p_count != signal.arguments.size()) {
 				return;
 			}
@@ -229,11 +245,11 @@ bool RNSceneBindings::_refresh(int p_root_tag, Binding &p_binding, RNError &r_er
 			}
 			RNError error;
 			Variant converted;
-			if (!export_scene_value(payload, signal.payload, objects, p_root_tag, converted, error)) {
+			if (!export_scene_value(payload, signal.payload, objects, p_scope, converted, error)) {
 				ERR_PRINT(error.describe());
 				return;
 			}
-			_publish(p_root_tag, found->second, signal.event, converted);
+			_publish(p_scope, found->second, signal.event, converted);
 		})));
 		if (target->connect(entry.key, callback) != OK) {
 			_disconnect(p_binding);
@@ -242,21 +258,21 @@ bool RNSceneBindings::_refresh(int p_root_tag, Binding &p_binding, RNError &r_er
 		}
 		p_binding.connections.push_back({ attachment->target, entry.key, callback });
 	}
-	_publish(p_root_tag, p_binding, "ready", Variant());
+	_publish(p_scope, p_binding, "ready", Variant());
 	return true;
 }
 
-RNSceneBindings::Binding *RNSceneBindings::_binding(int p_root_tag, RNError &r_error) {
-	if (!find_root(p_root_tag)) {
-		r_error = RNError::make(RNErrorCode::STALE_HANDLE, vformat("root %d is not running", p_root_tag), "GodotScene", "rootTag");
+RNSceneBindings::Binding *RNSceneBindings::_binding(const RNBindingScope &p_scope, RNError &r_error) {
+	if (!p_scope.is_module() && !find_root(p_scope.root_tag)) {
+		r_error = RNError::make(RNErrorCode::STALE_HANDLE, vformat("root %d is not running", p_scope.root_tag), "GodotScene", "rootTag");
 		return nullptr;
 	}
-	Binding &binding = bindings[p_root_tag];
-	return _refresh(p_root_tag, binding, r_error) ? &binding : nullptr;
+	Binding &binding = bindings[p_scope];
+	return _refresh(p_scope, binding, r_error) ? &binding : nullptr;
 }
 
-bool RNSceneBindings::get_binding(int p_root_tag, Dictionary &r_binding, RNError &r_error) {
-	Binding *binding = _binding(p_root_tag, r_error);
+bool RNSceneBindings::get_binding(const RNBindingScope &p_scope, Dictionary &r_binding, RNError &r_error) {
+	Binding *binding = _binding(p_scope, r_error);
 	if (!binding) {
 		return false;
 	}
@@ -264,8 +280,8 @@ bool RNSceneBindings::get_binding(int p_root_tag, Dictionary &r_binding, RNError
 	return true;
 }
 
-bool RNSceneBindings::invoke(int p_root_tag, const String &p_handle, const StringName &p_command, const Array &p_arguments, bool p_async, Variant &r_result, RNError &r_error) {
-	Binding *binding = _binding(p_root_tag, r_error);
+bool RNSceneBindings::invoke(const RNBindingScope &p_scope, const String &p_handle, const StringName &p_command, const Array &p_arguments, bool p_async, Variant &r_result, RNError &r_error) {
+	Binding *binding = _binding(p_scope, r_error);
 	if (!binding) {
 		return false;
 	}
@@ -273,13 +289,14 @@ bool RNSceneBindings::invoke(int p_root_tag, const String &p_handle, const Strin
 		r_error = RNError::make(RNErrorCode::STALE_HANDLE, "binding is missing or has changed", "GodotScene");
 		return false;
 	}
-	Object *target = objects.resolve_object(p_handle, p_root_tag, binding->attachment->capability, r_error);
+	Object *target = objects.resolve_object(p_handle, p_scope, binding->attachment->capability, r_error);
 	if (!target) {
 		return false;
 	}
 	const std::shared_ptr<const RNSceneAttachment> attachment = binding->attachment;
 	StringName method = attachment->snapshot_method;
 	RNValueSchema result_schema = attachment->snapshot_schema;
+	bool emit = false;
 	Array arguments;
 	if (p_command != StringName()) {
 		const RNSceneCommand *command = attachment->commands.getptr(p_command);
@@ -289,11 +306,12 @@ bool RNSceneBindings::invoke(int p_root_tag, const String &p_handle, const Strin
 		}
 		method = command->method;
 		result_schema = command->schema.result;
+		emit = command->kind == RNSceneCommand::SIGNAL;
 		if (p_arguments.size() > command->schema.arguments.size()) {
 			r_error = RNError::make(RNErrorCode::VALIDATION, "too many command arguments", "GodotScene.call");
 			return false;
 		}
-		SceneValueContext context{ objects, p_root_tag };
+		SceneValueContext context{ objects, p_scope };
 		for (int index = 0; index < command->schema.arguments.size(); ++index) {
 			const RNArgumentSchema &argument = command->schema.arguments[index];
 			const bool supplied = index < p_arguments.size();
@@ -319,18 +337,23 @@ bool RNSceneBindings::invoke(int p_root_tag, const String &p_handle, const Strin
 		pointers.push_back(&arguments[i]);
 	}
 	Callable::CallError call_error;
-	const Variant value = target->callp(method, pointers.ptrw(), pointers.size(), call_error);
+	Variant value;
+	if (emit) {
+		target->emit_signalp(method, pointers.ptrw(), pointers.size());
+	} else {
+		value = target->callp(method, pointers.ptrw(), pointers.size(), call_error);
+	}
 	if (call_error.error != Callable::CallError::CALL_OK) {
 		r_error = RNError::make(RNErrorCode::NATIVE, "script invocation failed", "GodotScene.call");
 		return false;
 	}
-	auto current = bindings.find(p_root_tag);
+	auto current = bindings.find(p_scope);
 	if (current == bindings.end() || current->second.attachment != attachment || current->second.handle != p_handle || !live_target(attachment->target)) {
 		r_error = RNError::make(RNErrorCode::STALE_HANDLE, "binding changed during script invocation", "GodotScene.call");
 		return false;
 	}
 	Variant converted;
-	if (!export_scene_value(value, result_schema, objects, p_root_tag, converted, r_error)) {
+	if (!export_scene_value(value, result_schema, objects, p_scope, converted, r_error)) {
 		return false;
 	}
 	if (p_command == StringName()) {
@@ -343,36 +366,36 @@ bool RNSceneBindings::invoke(int p_root_tag, const String &p_handle, const Strin
 	return true;
 }
 
-void RNSceneBindings::binding_changed(int p_root_tag) {
-	auto found = bindings.find(p_root_tag);
+void RNSceneBindings::binding_changed(const RNBindingScope &p_scope) {
+	auto found = bindings.find(p_scope);
 	if (found != bindings.end()) {
 		RNError error;
-		if (!_refresh(p_root_tag, found->second, error)) {
+		if (!_refresh(p_scope, found->second, error)) {
 			ERR_PRINT(error.describe());
 		}
 	}
 }
 
-void RNSceneBindings::close_surface(int p_root_tag) {
-	auto found = bindings.find(p_root_tag);
+void RNSceneBindings::close_scope(const RNBindingScope &p_scope) {
+	auto found = bindings.find(p_scope);
 	if (found != bindings.end()) {
 		_disconnect(found->second);
 		bindings.erase(found);
 	}
-	objects.close_surface(p_root_tag);
+	objects.close_scope(p_scope);
 }
 
 void RNSceneBindings::process_frame() {
-	for (auto &[root_tag, binding] : bindings) {
+	for (auto &[scope, binding] : bindings) {
 		if (binding.attachment && !live_target(binding.attachment->target)) {
 			RNError error;
-			_refresh(root_tag, binding, error);
+			_refresh(scope, binding, error);
 		}
 	}
 }
 
 void RNSceneBindings::shutdown() {
-	for (auto &[root_tag, binding] : bindings) {
+	for (auto &[scope, binding] : bindings) {
 		_disconnect(binding);
 	}
 	bindings.clear();
@@ -384,10 +407,18 @@ RNGodotSceneModule::RNGodotSceneModule(std::shared_ptr<CallInvoker> jsInvoker, R
 		NativeGodotSceneCxxSpec(std::move(jsInvoker)), context(std::move(p_context)) {
 }
 
-jsi::Object RNGodotSceneModule::getBinding(jsi::Runtime &rt, double rootTag) {
+namespace {
+
+RNBindingScope module_scope(const std::string &p_name) {
+	return RNBindingScope::of_module(String::utf8(p_name.c_str()));
+}
+
+} // namespace
+
+jsi::Object RNGodotSceneModule::_get_binding(jsi::Runtime &rt, const RNBindingScope &p_scope) {
 	Dictionary binding;
 	RNError error;
-	if (!context.main_thread->run_sync([&] { context.scenes->get_binding(int(rootTag), binding, error); })) {
+	if (!context.main_thread->run_sync([&] { context.scenes->get_binding(p_scope, binding, error); })) {
 		rn_throw_js_error(rt, RNErrorCode::CANCELLED, "React Native is shutting down");
 	}
 	if (error.is_set()) {
@@ -396,15 +427,7 @@ jsi::Object RNGodotSceneModule::getBinding(jsi::Runtime &rt, double rootTag) {
 	return to_js(rt, binding).asObject(rt);
 }
 
-jsi::Object RNGodotSceneModule::read(jsi::Runtime &rt, double rootTag, const std::string &binding) {
-	return _invoke(rt, int(rootTag), binding, std::string(), jsi::Value::undefined(), false).asObject(rt);
-}
-
-jsi::Value RNGodotSceneModule::call(jsi::Runtime &rt, double rootTag, const std::string &binding, const std::string &command, jsi::Array args) {
-	return _invoke(rt, int(rootTag), binding, command, jsi::Value(rt, args), false);
-}
-
-jsi::Value RNGodotSceneModule::_invoke(jsi::Runtime &rt, int p_root_tag, const std::string &p_handle, const std::string &p_command, const jsi::Value &p_arguments, bool p_async) {
+jsi::Value RNGodotSceneModule::_invoke(jsi::Runtime &rt, const RNBindingScope &p_scope, const std::string &p_handle, const std::string &p_command, const jsi::Value &p_arguments, bool p_async) {
 	Array arguments;
 	if (!p_arguments.isUndefined()) {
 		RNDecodedValue decoded = RNValueCodec::from_js(rt, p_arguments, RNValueSchema::array(RNValueSchema::value(RNValueType::DYNAMIC)), "GodotScene.call", "args");
@@ -417,7 +440,7 @@ jsi::Value RNGodotSceneModule::_invoke(jsi::Runtime &rt, int p_root_tag, const s
 	RNError error;
 	const String handle = String::utf8(p_handle.c_str());
 	const StringName command = p_command.empty() ? StringName() : StringName(String::utf8(p_command.c_str()));
-	if (!context.main_thread->run_sync([&] { context.scenes->invoke(p_root_tag, handle, command, arguments, p_async, result, error); })) {
+	if (!context.main_thread->run_sync([&] { context.scenes->invoke(p_scope, handle, command, arguments, p_async, result, error); })) {
 		rn_throw_js_error(rt, RNErrorCode::CANCELLED, "React Native is shutting down");
 	}
 	if (error.is_set()) {
@@ -426,14 +449,13 @@ jsi::Value RNGodotSceneModule::_invoke(jsi::Runtime &rt, int p_root_tag, const s
 	return to_js(rt, result);
 }
 
-jsi::Value RNGodotSceneModule::callAsync(jsi::Runtime &rt, double rootTag, const std::string &binding, const std::string &command, jsi::Array args) {
-	RNDecodedValue decoded = RNValueCodec::from_js(rt, jsi::Value(rt, args), RNValueSchema::array(RNValueSchema::value(RNValueType::DYNAMIC)), "GodotScene.callAsync", "args");
+jsi::Value RNGodotSceneModule::_invoke_async(jsi::Runtime &rt, const RNBindingScope &p_scope, const std::string &p_handle, const std::string &p_command, jsi::Array p_arguments) {
+	RNDecodedValue decoded = RNValueCodec::from_js(rt, jsi::Value(rt, p_arguments), RNValueSchema::array(RNValueSchema::value(RNValueType::DYNAMIC)), "GodotScene.callAsync", "args");
 	if (!decoded.ok()) {
 		rn_throw_js_error(rt, decoded.error.code.utf8().get_data(), decoded.error.message.utf8().get_data());
 	}
-	const int root_tag = int(rootTag);
-	const String handle = String::utf8(binding.c_str());
-	const StringName name(String::utf8(command.c_str()));
+	const String handle = String::utf8(p_handle.c_str());
+	const StringName name(String::utf8(p_command.c_str()));
 	const Array arguments = decoded.value;
 	auto scenes = context.scenes;
 	auto main_thread = context.main_thread;
@@ -441,13 +463,45 @@ jsi::Value RNGodotSceneModule::callAsync(jsi::Runtime &rt, double rootTag, const
 		main_thread->post([=] {
 			Variant result;
 			RNError error;
-			if (!scenes->invoke(root_tag, handle, name, arguments, true, result, error)) {
+			if (!scenes->invoke(p_scope, handle, name, arguments, true, result, error)) {
 				p_promise->reject(error.code.utf8().get_data(), error.message.utf8().get_data());
 				return;
 			}
 			p_promise->resolve([result](jsi::Runtime &p_runtime) { return to_js(p_runtime, result); });
 		});
 	});
+}
+
+jsi::Object RNGodotSceneModule::getBinding(jsi::Runtime &rt, double rootTag) {
+	return _get_binding(rt, int(rootTag));
+}
+
+jsi::Object RNGodotSceneModule::read(jsi::Runtime &rt, double rootTag, const std::string &binding) {
+	return _invoke(rt, int(rootTag), binding, std::string(), jsi::Value::undefined(), false).asObject(rt);
+}
+
+jsi::Value RNGodotSceneModule::call(jsi::Runtime &rt, double rootTag, const std::string &binding, const std::string &command, jsi::Array args) {
+	return _invoke(rt, int(rootTag), binding, command, jsi::Value(rt, args), false);
+}
+
+jsi::Value RNGodotSceneModule::callAsync(jsi::Runtime &rt, double rootTag, const std::string &binding, const std::string &command, jsi::Array args) {
+	return _invoke_async(rt, int(rootTag), binding, command, std::move(args));
+}
+
+jsi::Object RNGodotSceneModule::getModule(jsi::Runtime &rt, const std::string &name) {
+	return _get_binding(rt, module_scope(name));
+}
+
+jsi::Object RNGodotSceneModule::readModule(jsi::Runtime &rt, const std::string &name, const std::string &binding) {
+	return _invoke(rt, module_scope(name), binding, std::string(), jsi::Value::undefined(), false).asObject(rt);
+}
+
+jsi::Value RNGodotSceneModule::callModule(jsi::Runtime &rt, const std::string &name, const std::string &binding, const std::string &command, jsi::Array args) {
+	return _invoke(rt, module_scope(name), binding, command, jsi::Value(rt, args), false);
+}
+
+jsi::Value RNGodotSceneModule::callModuleAsync(jsi::Runtime &rt, const std::string &name, const std::string &binding, const std::string &command, jsi::Array args) {
+	return _invoke_async(rt, module_scope(name), binding, command, std::move(args));
 }
 
 void RNGodotSceneModule::emit_changed(const Variant &p_change) {

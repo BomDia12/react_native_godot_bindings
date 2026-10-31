@@ -3,7 +3,10 @@ import {Platform, View} from 'react-native';
 import {GodotAppRegistry, useGodotAlert} from 'react-native-godot/app-registry';
 import GodotScene from 'react-native-godot/GodotScene';
 import GodotWindow from 'react-native-godot/GodotWindow';
+import {withGodotContract} from 'react-native-godot/contracts';
 import {fontFamily} from 'react-native-godot/fonts';
+import {postGodotMessage, useGodotMessage, usePostGodotMessage} from 'react-native-godot/messages';
+import {getGodotModule, useGodotModule} from 'react-native-godot/modules';
 import {useGodotRootState} from 'react-native-godot/root';
 import {call, onChanged, useGodotScene} from 'react-native-godot/scene';
 import 'react-native-godot/setup';
@@ -31,6 +34,18 @@ function Probe({rootTag}: {rootTag: number}) {
 }
 
 GodotAppRegistry.registerComponent('Probe', () => Probe);
+
+function Scoreboard({score, onReset}: {score: number; onReset: (playerId: string) => void}) {
+  const post = usePostGodotMessage();
+  useGodotMessage<{points: number}>('scored', payload => post('seen', payload.points));
+  const scores = useGodotModule<{best: number}>('Scores');
+  const best: number | undefined = scores?.value.best;
+  return <View onTouchEnd={() => onReset(String(score + (best ?? 0)))} />;
+}
+
+GodotAppRegistry.registerComponent('Scoreboard', () => withGodotContract(Scoreboard, {reset: 'onReset'}));
+postGodotMessage('ready');
+const total: number = getGodotModule('Scores').call<number>('total', 1, 2);
 
 // @ts-expect-error scene snapshots are typed by the caller
 const wrong: string = useGodotScene<Enemy>(1)?.value.health;

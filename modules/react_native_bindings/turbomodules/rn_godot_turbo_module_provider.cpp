@@ -63,13 +63,7 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 	});
 	add(RNGodotHostModule::kModuleName, [host, events = context.host_events](const std::shared_ptr<CallInvoker> &p_invoker) {
 		auto module = std::make_shared<RNGodotHostModule>(p_invoker, host, events);
-		events->add_listener([weak = std::weak_ptr<RNGodotHostModule>(module)](int p_root_tag, const RNRootState &p_state) {
-			auto alive = weak.lock();
-			if (alive) {
-				alive->emit_root_state(p_root_tag, p_state);
-			}
-			return alive != nullptr;
-		});
+		events->add_module(module);
 		return module;
 	});
 	add(RNAccessibilityManagerModule::kModuleName, [host, application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAccessibilityManagerModule>(p_invoker, host, application); });

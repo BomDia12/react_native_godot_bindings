@@ -5,6 +5,8 @@ import {useGodotScene, call, callAsync} from 'react-native-godot/scene';
 import GodotWindow from 'react-native-godot/GodotWindow';
 import {fontFamily} from 'react-native-godot/fonts';
 import 'react-native-godot/setup';
+import './communication.entry';
+import './godot/registry';
 
 import {runHTTPChecks, runSocketChecks, runLowFPSDownload} from './game/network';
 const icon = require('./assets/item.png');

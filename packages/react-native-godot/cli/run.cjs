@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const {spawn, spawnSync} = require('child_process');
 const {buildBundle} = require('./build.cjs');
+const {generateContracts} = require('./contracts.cjs');
 const {resolveEditor} = require('./editor.cjs');
 const {ignoreNodeModules} = require('./project.cjs');
 
@@ -54,6 +55,8 @@ function runEditor(editor, args) {
 // developer server and against a fresh bundle file otherwise.
 async function runGodot(project, {packager = true, editor: openEditor = false, godot, godotArgs = []}) {
   ignoreNodeModules(project.jsRoot);
+  const editor = await resolveEditor({godot});
+  generateContracts(project, editor);
   const usesMetro = packager && project.devServer.enabled;
   let metro = null;
   if (usesMetro && !(await isMetroRunning(project.devServer))) {
@@ -62,7 +65,6 @@ async function runGodot(project, {packager = true, editor: openEditor = false, g
     await buildBundle({projectRoot: project.jsRoot, entry: project.entry, out: project.bundlePath});
   }
   try {
-    const editor = await resolveEditor({godot});
     if (!fs.existsSync(path.join(project.godotRoot, '.godot'))) {
       importProject(editor, project.godotRoot);
     }

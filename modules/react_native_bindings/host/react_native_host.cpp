@@ -57,6 +57,10 @@ void ReactNativeHost::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_service_stats"), &ReactNativeHost::get_service_stats);
 	ClassDB::bind_method(D_METHOD("reload"), &ReactNativeHost::reload);
 	ClassDB::bind_method(D_METHOD("open_debugger"), &ReactNativeHost::open_debugger);
+	ClassDB::bind_method(D_METHOD("post_message", "name", "payload"), &ReactNativeHost::post_message, DEFVAL(Variant()));
+	ClassDB::bind_method(D_METHOD("register_module", "name", "target", "binding"), &ReactNativeHost::register_module);
+	ClassDB::bind_method(D_METHOD("unregister_module", "name"), &ReactNativeHost::unregister_module);
+	ADD_SIGNAL(MethodInfo("message_received", PropertyInfo(Variant::STRING, "name"), PropertyInfo(Variant::NIL, "payload", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NIL_IS_VARIANT)));
 }
 
 void ReactNativeHost::_record_error(uint64_t p_generation, const String &p_error) {
@@ -120,6 +124,7 @@ bool ReactNativeHost::_start() {
 	setup.theme = theme;
 	setup.generation = generation;
 	setup.find_root = [this](SurfaceId p_surface) { return find_root(p_surface); };
+	setup.find_module = [this](const String &p_name) { return find_module(p_name); };
 	setup.on_error = [this, current = generation](const String &p_error) { _record_error(current, p_error); };
 	setup.reload = [this] { reload(); };
 	instance = std::make_shared<RNHostInstance>(setup);
@@ -275,6 +280,78 @@ void ReactNativeHost::_update_suspension() {
 		processing = processing || (root && root->is_inside_tree() && root->can_process());
 	}
 	instance->set_suspended(!processing);
+}
+
+// Modules belong to the host rather than a runtime, so they survive reloads.
+Dictionary ReactNativeHost::register_module(const String &p_name, Object *p_target, const Ref<RNSceneBinding> &p_binding) {
+	RNError error;
+	auto attachment = std::make_shared<RNSceneAttachment>();
+	if (p_name.is_empty()) {
+		error = RNError::make(RNErrorCode::VALIDATION, "module name is required", "registerModule", "name");
+	} else if (p_binding.is_null()) {
+		error = RNError::make(RNErrorCode::VALIDATION, "binding resource is required", "registerModule", "binding");
+	} else {
+		p_binding->compile(p_target, *attachment, error);
+	}
+	if (error.is_set()) {
+		return error.to_dictionary();
+	}
+	attachment->identity = next_module_identity++;
+	_follow_module_node(p_name, false);
+	modules[p_name] = attachment;
+	_follow_module_node(p_name, true);
+	if (instance) {
+		instance->module_changed(p_name);
+	}
+	return Dictionary();
+}
+
+// A node outside the tree is no module target, so readiness follows the node.
+void ReactNativeHost::_follow_module_node(const String &p_name, bool p_follow) {
+	const std::shared_ptr<const RNSceneAttachment> *module = modules.getptr(p_name);
+	Node *node = module ? Object::cast_to<Node>(ObjectDB::get_instance((*module)->target)) : nullptr;
+	if (!node) {
+		return;
+	}
+	const Callable moved = callable_mp(this, &ReactNativeHost::_module_node_moved).bind(p_name, (*module)->identity);
+	for (const StringName &signal : { SNAME("tree_entered"), SNAME("tree_exited") }) {
+		if (p_follow) {
+			node->connect(signal, moved);
+		} else if (node->is_connected(signal, moved)) {
+			node->disconnect(signal, moved);
+		}
+	}
+}
+
+void ReactNativeHost::_module_node_moved(const String &p_name, uint64_t p_identity) {
+	const std::shared_ptr<const RNSceneAttachment> *module = modules.getptr(p_name);
+	if (module && (*module)->identity == p_identity && instance) {
+		instance->module_changed(p_name);
+	}
+}
+
+void ReactNativeHost::unregister_module(const String &p_name) {
+	_follow_module_node(p_name, false);
+	if (modules.erase(p_name) && instance) {
+		instance->module_changed(p_name);
+	}
+}
+
+std::shared_ptr<const RNSceneAttachment> ReactNativeHost::find_module(const String &p_name) const {
+	const std::shared_ptr<const RNSceneAttachment> *module = modules.getptr(p_name);
+	return module ? *module : nullptr;
+}
+
+void ReactNativeHost::post_message(const String &p_name, const Variant &p_payload) {
+	send_message(std::nullopt, p_name, p_payload);
+}
+
+void ReactNativeHost::send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload) {
+	if (!instance) {
+		WARN_PRINT(vformat("The message '%s' was dropped because React Native is not running.", p_name));
+		return;
+	}
+	instance->send_message(p_root_tag, p_name, p_payload);
 }
 
 bool ReactNativeHost::handles_back_press() const {

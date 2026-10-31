@@ -3,12 +3,14 @@
 #ifdef TOOLS_ENABLED
 
 #include "../singletons/react_native_file_singleton.h"
+#include "rn_contract_codegen.h"
 
 #include "core/config/project_settings.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
 #include "editor/file_system/editor_file_system.h"
+#include "scene/main/scene_tree.h"
 
 ReactNativeFileEditorPlugin::ReactNativeFileEditorPlugin() {
 	_ignore_node_modules();
@@ -30,6 +32,9 @@ void ReactNativeFileEditorPlugin::_notification(int p_what) {
 				fs->connect(SNAME("filesystem_changed"), callable_mp(this, &ReactNativeFileEditorPlugin::_on_filesystem_changed));
 			}
 			_check_file_status(true);
+			if (rn_is_generating_contracts()) {
+				_generate_contracts_and_quit();
+			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 			EditorFileSystem *fs = EditorFileSystem::get_singleton();
@@ -55,6 +60,22 @@ void ReactNativeFileEditorPlugin::_check_file_status(bool p_force_refresh) {
 			singleton->force_refresh();
 		}
 	}
+}
+
+// `godot --headless --editor --react-native-generate-contracts` generates the
+// TypeScript for the project's contracts, as CLI builds and CI need.
+void ReactNativeFileEditorPlugin::_generate_contracts_and_quit() {
+	// Quitting during the first scan aborts it with a warning.
+	if (EditorFileSystem::get_singleton()->is_scanning()) {
+		get_tree()->connect(SNAME("process_frame"), callable_mp(this, &ReactNativeFileEditorPlugin::_generate_contracts_and_quit), CONNECT_ONE_SHOT);
+		return;
+	}
+	RNError error;
+	const bool generated = rn_generate_contracts(error);
+	if (!generated) {
+		ERR_PRINT(vformat("Generating React Native contracts failed: %s", error.describe()));
+	}
+	get_tree()->quit(generated ? 0 : 1);
 }
 
 void ReactNativeFileEditorPlugin::_update_monitored_path() {

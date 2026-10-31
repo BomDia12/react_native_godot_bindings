@@ -6,8 +6,10 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/core_string_names.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/object/script_language.h"
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
 #include "scene/resources/font.h"
@@ -23,6 +25,7 @@ ReactNativeRootView::ReactNativeRootView() {
 	set_mouse_filter(MOUSE_FILTER_PASS);
 	set_process_input(true);
 	set_notify_transform(true);
+	connect(CoreStringName(script_changed), callable_mp(this, &ReactNativeRootView::_apply_contract));
 }
 
 ReactNativeRootView::~ReactNativeRootView() {
@@ -46,10 +49,16 @@ void ReactNativeRootView::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_editor_preview", "preview"), &ReactNativeRootView::set_editor_preview);
 	ClassDB::bind_method(D_METHOD("is_editor_preview"), &ReactNativeRootView::is_editor_preview);
 	ClassDB::bind_method(D_METHOD("get_native_node", "native_id"), &ReactNativeRootView::get_native_node);
+	ClassDB::bind_method(D_METHOD("post_message", "name", "payload"), &ReactNativeRootView::post_message, DEFVAL(Variant()));
+	ClassDB::bind_method(D_METHOD("set_contract_values", "values"), &ReactNativeRootView::set_contract_values);
+	ClassDB::bind_method(D_METHOD("get_contract_values"), &ReactNativeRootView::get_contract_values);
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "application_key"), "set_application_key", "get_application_key");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "initial_properties"), "set_initial_properties", "get_initial_properties");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "fit_content", PROPERTY_HINT_ENUM, "None,Width,Height,Both"), "set_fit_content", "get_fit_content");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "editor_preview"), "set_editor_preview", "is_editor_preview");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "contract_values", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_contract_values", "get_contract_values");
+	ADD_SIGNAL(MethodInfo("contract_changed", PropertyInfo(Variant::DICTIONARY, "values")));
+	ADD_SIGNAL(MethodInfo("message_received", PropertyInfo(Variant::STRING, "name"), PropertyInfo(Variant::NIL, "payload", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NIL_IS_VARIANT)));
 	ADD_SIGNAL(MethodInfo("scene_loaded", PropertyInfo(Variant::STRING, "native_id"), PropertyInfo(Variant::OBJECT, "instance", PROPERTY_HINT_RESOURCE_TYPE, "Node")));
 	BIND_ENUM_CONSTANT(FIT_CONTENT_NONE);
 	BIND_ENUM_CONSTANT(FIT_CONTENT_WIDTH);
@@ -64,6 +73,9 @@ void ReactNativeRootView::_notification(int p_what) {
 	}
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
+			if (contract_resource.is_null()) {
+				_load_contract();
+			}
 			ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &ReactNativeRootView::_surface_changed));
 			_connect_window(true);
 			reported_state = get_state();
@@ -118,9 +130,10 @@ void ReactNativeRootView::_connect_window(bool p_connect) {
 }
 
 // A root the editor doesn't preview leaves the runtime alone and only shows
-// which component it would host.
+// which component it would host, as do roots in an editor that only
+// generates contracts.
 bool ReactNativeRootView::_is_running() const {
-	return editor_preview || !Engine::get_singleton()->is_editor_hint();
+	return (editor_preview || !Engine::get_singleton()->is_editor_hint()) && !rn_is_generating_contracts();
 }
 
 void ReactNativeRootView::_draw_placeholder() {
@@ -221,6 +234,14 @@ Node *ReactNativeRootView::get_native_node(const String &p_native_id) const {
 	return view ? view->get_native_node() : nullptr;
 }
 
+void ReactNativeRootView::post_message(const String &p_name, const Variant &p_payload) {
+	if (surface_id == 0) {
+		WARN_PRINT(vformat("The message '%s' was dropped because the root is not running.", p_name));
+		return;
+	}
+	ReactNativeHost::get_singleton()->send_message(surface_id, p_name, p_payload);
+}
+
 void ReactNativeRootView::set_application_key(const String &p_key) {
 	ERR_FAIL_COND_MSG(p_key.is_empty(), "ReactNativeRootView.application_key cannot be empty.");
 	if (application_key == p_key) {
@@ -228,7 +249,240 @@ void ReactNativeRootView::set_application_key(const String &p_key) {
 	}
 	application_key = p_key;
 	queue_redraw();
+	_load_contract();
 	reload();
+}
+
+namespace {
+
+PropertyInfo contract_property_info(const RNContractProperty &p_property) {
+	Variant::Type type = Variant::NIL;
+	switch (p_property.schema.type) {
+		case RNValueType::BOOL:
+			type = Variant::BOOL;
+			break;
+		case RNValueType::FLOAT:
+			type = Variant::FLOAT;
+			break;
+		case RNValueType::INTEGER:
+		case RNValueType::INT64:
+			type = Variant::INT;
+			break;
+		case RNValueType::STRING:
+			type = Variant::STRING;
+			break;
+		case RNValueType::ARRAY:
+			type = Variant::ARRAY;
+			break;
+		case RNValueType::RECORD:
+			type = Variant::DICTIONARY;
+			break;
+		case RNValueType::BYTES:
+			type = Variant::PACKED_BYTE_ARRAY;
+			break;
+		case RNValueType::COLOR:
+			type = Variant::COLOR;
+			break;
+		case RNValueType::VECTOR2:
+			type = Variant::VECTOR2;
+			break;
+		case RNValueType::VECTOR3:
+			type = Variant::VECTOR3;
+			break;
+		case RNValueType::RECT2:
+			type = Variant::RECT2;
+			break;
+		case RNValueType::TRANSFORM2D:
+			type = Variant::TRANSFORM2D;
+			break;
+		default:
+			break;
+	}
+	if (p_property.schema.nullable) {
+		type = Variant::NIL;
+	}
+	return PropertyInfo(type, p_property.name, PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | (type == Variant::NIL ? PROPERTY_USAGE_NIL_IS_VARIANT : 0));
+}
+
+} // namespace
+
+// The contract named after the application key, from the project's contracts
+// folder. Editing the resource applies it again.
+void ReactNativeRootView::_load_contract() {
+	const Callable reapply = callable_mp(this, &ReactNativeRootView::_apply_contract);
+	if (contract_resource.is_valid() && contract_resource->is_connected(CoreStringName(changed), reapply)) {
+		contract_resource->disconnect(CoreStringName(changed), reapply);
+	}
+	contract_resource = rn_load_contract(application_key);
+	if (contract_resource.is_valid()) {
+		contract_resource->connect(CoreStringName(changed), reapply);
+	}
+	_apply_contract();
+}
+
+// Contract properties become inspector properties, events become signals, and
+// the root becomes its own scene binding target, so React receives the values
+// and emits the events through GodotScene.
+void ReactNativeRootView::_apply_contract() {
+	const bool had_contract = contract != nullptr;
+	contract.reset();
+	RNCompiledContract compiled;
+	RNError error;
+	if (contract_resource.is_valid()) {
+		if (contract_resource->compile(compiled, error) && _contract_free_on_script(compiled, error)) {
+			contract = std::make_shared<const RNCompiledContract>(std::move(compiled));
+		} else {
+			ERR_PRINT(vformat("The contract of '%s' is invalid: %s", application_key, error.describe()));
+		}
+	}
+	HashMap<StringName, ::Vector<StringName>> signals;
+	for (const RNContractEvent &event : contract ? contract->events : ::Vector<RNContractEvent>()) {
+		::Vector<StringName> arguments;
+		for (const RNArgumentSchema &argument : event.arguments) {
+			arguments.push_back(argument.name);
+		}
+		signals[event.name] = arguments;
+	}
+	// A signal whose arguments changed is added again, which drops its connections.
+	for (const KeyValue<StringName, ::Vector<StringName>> &signal : contract_signals) {
+		const ::Vector<StringName> *arguments = signals.getptr(signal.key);
+		if (!arguments || *arguments != signal.value) {
+			call(SNAME("remove_user_signal"), signal.key);
+		}
+	}
+	contract_signals = signals;
+	if (!contract) {
+		if (had_contract) {
+			scene_attachment.reset();
+			_scene_target_changed(false);
+		}
+		notify_property_list_changed();
+		return;
+	}
+	_fit_contract_values();
+	auto attachment = std::make_shared<RNSceneAttachment>();
+	attachment->target = get_instance_id();
+	attachment->capability = contract->component;
+	attachment->snapshot_method = "get_contract_values";
+	attachment->snapshot_schema = contract->snapshot;
+	RNRecordFieldSchema values;
+	values.name = "values";
+	values.value = std::make_shared<RNValueSchema>(contract->snapshot);
+	attachment->signals["contract_changed"] = { "changed", { "values" }, RNValueSchema::record({ values }) };
+	for (const RNContractEvent &event : contract->events) {
+		if (!has_signal(event.name)) {
+			Array arguments;
+			for (const RNArgumentSchema &argument : event.arguments) {
+				arguments.push_back(Dictionary({ { "name", argument.name }, { "type", Variant::NIL } }));
+			}
+			// Only signals added through the bound method can be removed again.
+			call(SNAME("add_user_signal"), event.name, arguments);
+		}
+		RNSceneCommand command;
+		command.method = event.name;
+		command.kind = RNSceneCommand::SIGNAL;
+		command.schema.name = event.name;
+		command.schema.arguments = event.arguments;
+		command.schema.mode = RNCallMode::ASYNC;
+		attachment->commands[event.name] = command;
+	}
+	attachment->identity = next_binding_identity++;
+	_disconnect_scene_target();
+	scene_attachment = attachment;
+	_scene_target_changed(true);
+	notify_property_list_changed();
+}
+
+// A script property or signal with a contract name would take the contract's
+// writes or emissions in its place.
+bool ReactNativeRootView::_contract_free_on_script(const RNCompiledContract &p_contract, RNError &r_error) const {
+	const Ref<Script> script = get_script();
+	if (script.is_null()) {
+		return true;
+	}
+	List<PropertyInfo> script_properties;
+	script->get_script_property_list(&script_properties);
+	for (const RNContractProperty &property : p_contract.properties) {
+		for (const PropertyInfo &info : script_properties) {
+			if (info.name == property.name) {
+				r_error = RNError::make(RNErrorCode::VALIDATION, vformat("property '%s' conflicts with a property of the root's script", property.name), "contract.apply");
+				return false;
+			}
+		}
+	}
+	for (const RNContractEvent &event : p_contract.events) {
+		if (script->has_script_signal(event.name)) {
+			r_error = RNError::make(RNErrorCode::VALIDATION, vformat("event '%s' conflicts with a signal of the root's script", event.name), "contract.apply");
+			return false;
+		}
+	}
+	return true;
+}
+
+// Keeps the values that still match the contract and fills the rest with defaults.
+void ReactNativeRootView::_fit_contract_values() {
+	Dictionary values;
+	for (const RNContractProperty &property : contract->properties) {
+		RNError error;
+		const Variant current = contract_values.get(property.name, Variant());
+		const bool fits = contract_values.has(property.name) && rn_validate_native_value(current, property.schema, error, "value");
+		values[property.name] = rn_contract_value_with_defaults(fits ? current : property.default_value, property.schema);
+	}
+	contract_values = values;
+}
+
+void ReactNativeRootView::set_contract_values(const Dictionary &p_values) {
+	contract_values = p_values.duplicate(true);
+	if (contract) {
+		_fit_contract_values();
+		_contract_values_changed();
+	}
+}
+
+// Writes made during one frame reach React as one change at its end.
+void ReactNativeRootView::_contract_values_changed() {
+	if (!contract_flush_pending) {
+		contract_flush_pending = true;
+		callable_mp(this, &ReactNativeRootView::_flush_contract).call_deferred();
+	}
+}
+
+void ReactNativeRootView::_flush_contract() {
+	contract_flush_pending = false;
+	emit_signal(SNAME("contract_changed"), contract_values);
+}
+
+bool ReactNativeRootView::_set(const StringName &p_name, const Variant &p_value) {
+	const RNContractProperty *property = contract ? contract->find_property(p_name) : nullptr;
+	if (!property) {
+		return false;
+	}
+	RNError error;
+	if (!rn_validate_native_value(p_value, property->schema, error, String(p_name))) {
+		ERR_PRINT(vformat("%s cannot be set to %s: %s", p_name, p_value, error.describe()));
+		return true;
+	}
+	contract_values[p_name] = rn_contract_value_with_defaults(p_value, property->schema);
+	_contract_values_changed();
+	return true;
+}
+
+bool ReactNativeRootView::_get(const StringName &p_name, Variant &r_value) const {
+	if (!contract || !contract->find_property(p_name)) {
+		return false;
+	}
+	r_value = contract_values[p_name];
+	return true;
+}
+
+void ReactNativeRootView::_get_property_list(List<PropertyInfo> *p_list) const {
+	if (!contract) {
+		return;
+	}
+	p_list->push_back(PropertyInfo(Variant::NIL, "Component", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_GROUP));
+	for (const RNContractProperty &property : contract->properties) {
+		p_list->push_back(contract_property_info(property));
+	}
 }
 
 void ReactNativeRootView::reload() {
@@ -435,6 +689,9 @@ Control *ReactNativeRootView::_focusable_at(Control *p_pressed, const Point2 &p_
 
 Dictionary ReactNativeRootView::attach_scene_binding(Object *p_target, const Ref<RNSceneBinding> &p_binding) {
 	RNError error;
+	if (contract) {
+		return RNError::make(RNErrorCode::VALIDATION, vformat("component '%s' uses a contract", application_key), "scene.attach").to_dictionary();
+	}
 	auto attachment = std::make_shared<RNSceneAttachment>();
 	if (p_binding.is_null() || !p_binding->compile(p_target, *attachment, error)) {
 		if (!error.is_set()) {

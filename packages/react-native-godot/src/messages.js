@@ -1,0 +1,51 @@
+'use strict';
+
+import {useCallback, useContext, useEffect, useRef} from 'react';
+import {RootTagContext} from 'react-native';
+import NativeGodotHost from '../specs/NativeGodotHost';
+
+function carriesObject(value) {
+  if (Array.isArray(value)) {
+    return value.some(carriesObject);
+  }
+  if (value != null && typeof value === 'object' && !ArrayBuffer.isView(value)) {
+    return value.$godot === 'Object' || Object.values(value).some(carriesObject);
+  }
+  return false;
+}
+
+// Without a root tag, messages go to and come from ReactNativeHost instead of
+// one root. Object handles belong to scene bindings and modules, which resolve
+// them; a message would hand Godot the bare handle.
+export function postGodotMessage(name, payload = null, rootTag = null) {
+  if (carriesObject(payload)) {
+    const error = new Error('Godot messages cannot carry Godot objects; pass them through a scene binding or module.');
+    error.code = 'E_VALIDATION';
+    throw error;
+  }
+  NativeGodotHost.postMessage(rootTag, name, payload);
+}
+
+export function onGodotMessage(name, handler, rootTag = null) {
+  return NativeGodotHost.onMessage(message => {
+    if (message?.name === name && message.rootTag === rootTag) {
+      handler(message.payload);
+    }
+  });
+}
+
+// Receives the messages Godot posts to the root the calling component renders in.
+export function useGodotMessage(name, handler) {
+  const rootTag = useContext(RootTagContext);
+  const latestHandler = useRef(handler);
+  latestHandler.current = handler;
+  useEffect(() => {
+    const subscription = onGodotMessage(name, payload => latestHandler.current(payload), rootTag);
+    return () => subscription.remove();
+  }, [name, rootTag]);
+}
+
+export function usePostGodotMessage() {
+  const rootTag = useContext(RootTagContext);
+  return useCallback((name, payload) => postGodotMessage(name, payload, rootTag), [rootTag]);
+}

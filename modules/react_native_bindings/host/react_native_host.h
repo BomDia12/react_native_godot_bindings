@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../interop/rn_scene_binding.h"
 #include "rn_service_settings.h"
 
 #include "core/input/input_event.h"
@@ -15,6 +16,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 class ReactNativeRootView;
 class RNHostInstance;
@@ -62,6 +64,8 @@ class ReactNativeHost : public Object {
 	std::deque<std::function<void()>> deferred;
 	HashMap<uint64_t, Ref<RNEvaluation>> evaluations;
 	uint64_t next_evaluation = 1;
+	HashMap<String, std::shared_ptr<const RNSceneAttachment>> modules;
+	uint64_t next_module_identity = 1;
 	bool takes_back_press = false;
 	bool project_quits_on_go_back = true;
 	bool back_press_quits = false;
@@ -84,6 +88,8 @@ class ReactNativeHost : public Object {
 	void _bundle_changed(const String &p_path, const String &p_content, bool p_exists);
 	void _record_error(uint64_t p_generation, const String &p_error);
 	void _finish_evaluation(uint64_t p_id, const Variant &p_result);
+	void _module_node_moved(const String &p_name, uint64_t p_identity);
+	void _follow_module_node(const String &p_name, bool p_follow);
 	bool _defer(std::function<void()> p_task);
 	void _update_suspension();
 
@@ -109,6 +115,11 @@ public:
 	void update_root_layout(ReactNativeRootView *p_root);
 	void scene_binding_changed(facebook::react::SurfaceId p_surface);
 	void root_state_changed(ReactNativeRootView *p_root);
+	void post_message(const String &p_name, const Variant &p_payload);
+	Dictionary register_module(const String &p_name, Object *p_target, const Ref<RNSceneBinding> &p_binding);
+	void unregister_module(const String &p_name);
+	std::shared_ptr<const RNSceneAttachment> find_module(const String &p_name) const;
+	void send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload);
 	bool handles_back_press() const;
 	void back_pressed(bool p_go_back_request);
 	void invoke_default_back_press();

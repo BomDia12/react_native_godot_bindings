@@ -6,6 +6,13 @@ export type GodotColor = {
   a: number;
 };
 
+export type GodotVector2 = {$godot: 'Vector2'; x: number; y: number};
+export type GodotVector3 = {$godot: 'Vector3'; x: number; y: number; z: number};
+export type GodotRect2 = {$godot: 'Rect2'; x: number; y: number; width: number; height: number};
+export type GodotTransform2D = {$godot: 'Transform2D'; xx: number; xy: number; yx: number; yy: number; ox: number; oy: number};
+export type GodotInt64 = {$godot: 'int64'; value: string};
+export type GodotObject = {$godot: 'Object'; handle: string};
+
 export type GodotContextMenuEntry =
   | {id: string; label: string; disabled?: boolean; separator?: false}
   | {separator: true; label?: string};

@@ -16,8 +16,11 @@ export type SceneBinding = {
   schemaVersion?: number,
 };
 
+// A change carries the rootTag of a root binding or the module name of an
+// application module.
 export type SceneChange = {
-  rootTag: number,
+  rootTag?: number,
+  module?: string,
   binding: ?string,
   ready: boolean,
   sequence: number,
@@ -30,6 +33,10 @@ export interface Spec extends TurboModule {
   +read: (rootTag: RootTag, binding: string) => UnsafeObject;
   +call: (rootTag: RootTag, binding: string, command: string, args: Array<UnsafeMixed>) => UnsafeMixed;
   +callAsync: (rootTag: RootTag, binding: string, command: string, args: Array<UnsafeMixed>) => Promise<UnsafeMixed>;
+  +getModule: (name: string) => SceneBinding;
+  +readModule: (name: string, binding: string) => UnsafeObject;
+  +callModule: (name: string, binding: string, command: string, args: Array<UnsafeMixed>) => UnsafeMixed;
+  +callModuleAsync: (name: string, binding: string, command: string, args: Array<UnsafeMixed>) => Promise<UnsafeMixed>;
   +onChanged: EventEmitter<SceneChange>;
 }
 

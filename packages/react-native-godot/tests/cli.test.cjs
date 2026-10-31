@@ -59,11 +59,12 @@ test('entries resolve with or without their extension', () => {
 
 test('the template refuses to overwrite files and fills its placeholders', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-template-'));
-  const values = {name: 'game', react: '1', reactNative: '2', reactNativeGodot: 'file:vendor/x.tgz', typesReact: '3', typescript: '4'};
+  const values = {contracts: 'res://react_native/contracts', name: 'game', react: '1', reactNative: '2', reactNativeGodot: 'file:vendor/x.tgz', typesReact: '3', typescript: '4'};
   writeTemplate(root, values);
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.equal(manifest.dependencies['react-native-godot'], 'file:vendor/x.tgz');
   assert.ok(fs.existsSync(path.join(root, '.gitignore')));
+  assert.match(fs.readFileSync(path.join(root, 'godot', 'registry.ts'), 'utf8'), /contracts in res:\/\/react_native\/contracts\. Do not edit/);
   assert.ok(!fs.existsSync(path.join(root, 'Main.tscn')));
   assert.throws(() => writeTemplate(root, values), /already exist/);
   assert.equal(packageName('/games/My Game!'), 'my-game-');

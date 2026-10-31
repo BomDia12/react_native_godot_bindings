@@ -1,4 +1,4 @@
-import {GodotAppRegistry} from 'react-native-godot/app-registry';
-import App from './App';
-
-GodotAppRegistry.registerComponent('App', () => App);
+// The generated registry registers last, so a contract component named like
+// one registered here, such as App, keeps its contract wrapper.
+import './register';
+import './godot/registry';

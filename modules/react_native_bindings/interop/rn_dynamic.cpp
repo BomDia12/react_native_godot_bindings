@@ -58,6 +58,27 @@ folly::dynamic rn_dynamic_from_variant(const Variant &p_value) {
 			}
 			return object;
 		}
+		// The same wrappers that react-native-godot/values builds and the value codec reads.
+		case Variant::COLOR: {
+			const Color color = p_value;
+			return folly::dynamic::object("$godot", "Color")("r", color.r)("g", color.g)("b", color.b)("a", color.a);
+		}
+		case Variant::VECTOR2: {
+			const Vector2 vector = p_value;
+			return folly::dynamic::object("$godot", "Vector2")("x", vector.x)("y", vector.y);
+		}
+		case Variant::VECTOR3: {
+			const Vector3 vector = p_value;
+			return folly::dynamic::object("$godot", "Vector3")("x", vector.x)("y", vector.y)("z", vector.z);
+		}
+		case Variant::RECT2: {
+			const Rect2 rect = p_value;
+			return folly::dynamic::object("$godot", "Rect2")("x", rect.position.x)("y", rect.position.y)("width", rect.size.x)("height", rect.size.y);
+		}
+		case Variant::TRANSFORM2D: {
+			const Transform2D transform = p_value;
+			return folly::dynamic::object("$godot", "Transform2D")("xx", transform.columns[0].x)("xy", transform.columns[0].y)("yx", transform.columns[1].x)("yy", transform.columns[1].y)("ox", transform.columns[2].x)("oy", transform.columns[2].y);
+		}
 		default:
 			return nullptr;
 	}

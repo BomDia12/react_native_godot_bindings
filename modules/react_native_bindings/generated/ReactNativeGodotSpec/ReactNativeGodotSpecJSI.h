@@ -369,6 +369,61 @@ private:
 };
 
 
+#pragma mark - NativeGodotHostGodotMessage
+
+template <typename P0, typename P1, typename P2>
+struct NativeGodotHostGodotMessage {
+  P0 rootTag{};
+  P1 name{};
+  P2 payload;
+  bool operator==(const NativeGodotHostGodotMessage &other) const {
+    return rootTag == other.rootTag && name == other.name && payload == other.payload;
+  }
+};
+
+template <typename T>
+struct NativeGodotHostGodotMessageBridging {
+  static T types;
+
+  static T fromJs(
+      jsi::Runtime &rt,
+      const jsi::Object &value,
+      const std::shared_ptr<CallInvoker> &jsInvoker) {
+    T result{
+      bridging::fromJs<decltype(types.rootTag)>(rt, value.getProperty(rt, "rootTag"), jsInvoker),
+      bridging::fromJs<decltype(types.name)>(rt, value.getProperty(rt, "name"), jsInvoker),
+      bridging::fromJs<decltype(types.payload)>(rt, value.getProperty(rt, "payload"), jsInvoker)};
+    return result;
+  }
+
+#ifdef DEBUG
+  static std::optional<double> rootTagToJs(jsi::Runtime &rt, decltype(types.rootTag) value) {
+    return bridging::toJs(rt, value);
+  }
+  static jsi::String nameToJs(jsi::Runtime &rt, decltype(types.name) value) {
+    return bridging::toJs(rt, value);
+  }
+  static jsi::Value payloadToJs(jsi::Runtime &rt, decltype(types.payload) value) {
+    return bridging::toJs(rt, value);
+  }
+#endif
+
+  static jsi::Object toJs(
+      jsi::Runtime &rt,
+      const T &value,
+      const std::shared_ptr<CallInvoker> &jsInvoker) {
+    auto result = facebook::jsi::Object(rt);
+    result.setProperty(rt, "rootTag", bridging::toJs(rt, value.rootTag, jsInvoker));
+    result.setProperty(rt, "name", bridging::toJs(rt, value.name, jsInvoker));
+    if (value.payload) {
+      result.setProperty(rt, "payload", bridging::toJs(rt, value.payload.value(), jsInvoker));
+    }
+    return result;
+  }
+};
+
+
+
 #pragma mark - NativeGodotHostRootState
 
 template <typename P0, typename P1, typename P2>
@@ -489,13 +544,22 @@ protected:
   NativeGodotHostCxxSpec(std::shared_ptr<CallInvoker> jsInvoker) : TurboModule(std::string{NativeGodotHostCxxSpec::kModuleName}, jsInvoker) {
     methodMap_["getRootState"] = MethodMetadata {.argCount = 1, .invoker = __getRootState};
     methodMap_["setBackHandlerEnabled"] = MethodMetadata {.argCount = 1, .invoker = __setBackHandlerEnabled};
+    methodMap_["postMessage"] = MethodMetadata {.argCount = 3, .invoker = __postMessage};
     methodMap_["invokeDefaultBackPressHandler"] = MethodMetadata {.argCount = 0, .invoker = __invokeDefaultBackPressHandler};
     eventEmitterMap_["onRootStateChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
+    eventEmitterMap_["onMessage"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
   }
   
   template <typename OnRootStateChangedType> void emitOnRootStateChanged(OnRootStateChangedType value) {
     static_assert(bridging::supportsFromJs<OnRootStateChangedType, jsi::Object>, "value cannnot be converted to jsi::Object");
     static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onRootStateChanged"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
+      return bridging::toJs(rt, eventValue, jsInvoker);
+    });
+  }
+
+  template <typename OnMessageType> void emitOnMessage(OnMessageType value) {
+    static_assert(bridging::supportsFromJs<OnMessageType, jsi::Object>, "value cannnot be converted to jsi::Object");
+    static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onMessage"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
       return bridging::toJs(rt, eventValue, jsInvoker);
     });
   }
@@ -514,6 +578,16 @@ private:
       "Expected setBackHandlerEnabled(...) to have 2 parameters");
     bridging::callFromJs<void>(rt, &T::setBackHandlerEnabled,  static_cast<NativeGodotHostCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
       count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asBool());return jsi::Value::undefined();
+  }
+
+  static jsi::Value __postMessage(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::postMessage) == 4,
+      "Expected postMessage(...) to have 4 parameters");
+    bridging::callFromJs<void>(rt, &T::postMessage,  static_cast<NativeGodotHostCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 || args[0].isNull() || args[0].isUndefined() ? std::nullopt : std::make_optional(args[0].asNumber()),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt),
+      count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : jsi::Value(rt, args[2]));return jsi::Value::undefined();
   }
 
   static jsi::Value __invokeDefaultBackPressHandler(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
@@ -753,16 +827,17 @@ struct NativeGodotSceneSceneBindingBridging {
 
 #pragma mark - NativeGodotSceneSceneChange
 
-template <typename P0, typename P1, typename P2, typename P3, typename P4, typename P5>
+template <typename P0, typename P1, typename P2, typename P3, typename P4, typename P5, typename P6>
 struct NativeGodotSceneSceneChange {
   P0 rootTag{};
-  P1 binding{};
-  P2 ready{};
-  P3 sequence{};
-  P4 event{};
-  P5 payload;
+  P1 module{};
+  P2 binding{};
+  P3 ready{};
+  P4 sequence{};
+  P5 event{};
+  P6 payload;
   bool operator==(const NativeGodotSceneSceneChange &other) const {
-    return rootTag == other.rootTag && binding == other.binding && ready == other.ready && sequence == other.sequence && event == other.event && payload == other.payload;
+    return rootTag == other.rootTag && module == other.module && binding == other.binding && ready == other.ready && sequence == other.sequence && event == other.event && payload == other.payload;
   }
 };
 
@@ -776,6 +851,7 @@ struct NativeGodotSceneSceneChangeBridging {
       const std::shared_ptr<CallInvoker> &jsInvoker) {
     T result{
       bridging::fromJs<decltype(types.rootTag)>(rt, value.getProperty(rt, "rootTag"), jsInvoker),
+      bridging::fromJs<decltype(types.module)>(rt, value.getProperty(rt, "module"), jsInvoker),
       bridging::fromJs<decltype(types.binding)>(rt, value.getProperty(rt, "binding"), jsInvoker),
       bridging::fromJs<decltype(types.ready)>(rt, value.getProperty(rt, "ready"), jsInvoker),
       bridging::fromJs<decltype(types.sequence)>(rt, value.getProperty(rt, "sequence"), jsInvoker),
@@ -786,6 +862,9 @@ struct NativeGodotSceneSceneChangeBridging {
 
 #ifdef DEBUG
   static double rootTagToJs(jsi::Runtime &rt, decltype(types.rootTag) value) {
+    return bridging::toJs(rt, value);
+  }
+  static jsi::String moduleToJs(jsi::Runtime &rt, decltype(types.module) value) {
     return bridging::toJs(rt, value);
   }
   static std::optional<jsi::String> bindingToJs(jsi::Runtime &rt, decltype(types.binding) value) {
@@ -810,7 +889,12 @@ struct NativeGodotSceneSceneChangeBridging {
       const T &value,
       const std::shared_ptr<CallInvoker> &jsInvoker) {
     auto result = facebook::jsi::Object(rt);
-    result.setProperty(rt, "rootTag", bridging::toJs(rt, value.rootTag, jsInvoker));
+    if (value.rootTag) {
+      result.setProperty(rt, "rootTag", bridging::toJs(rt, value.rootTag.value(), jsInvoker));
+    }
+    if (value.module) {
+      result.setProperty(rt, "module", bridging::toJs(rt, value.module.value(), jsInvoker));
+    }
     result.setProperty(rt, "binding", bridging::toJs(rt, value.binding, jsInvoker));
     result.setProperty(rt, "ready", bridging::toJs(rt, value.ready, jsInvoker));
     result.setProperty(rt, "sequence", bridging::toJs(rt, value.sequence, jsInvoker));
@@ -834,6 +918,10 @@ protected:
     methodMap_["read"] = MethodMetadata {.argCount = 2, .invoker = __read};
     methodMap_["call"] = MethodMetadata {.argCount = 4, .invoker = __call};
     methodMap_["callAsync"] = MethodMetadata {.argCount = 4, .invoker = __callAsync};
+    methodMap_["getModule"] = MethodMetadata {.argCount = 1, .invoker = __getModule};
+    methodMap_["readModule"] = MethodMetadata {.argCount = 2, .invoker = __readModule};
+    methodMap_["callModule"] = MethodMetadata {.argCount = 4, .invoker = __callModule};
+    methodMap_["callModuleAsync"] = MethodMetadata {.argCount = 4, .invoker = __callModuleAsync};
     eventEmitterMap_["onChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
   }
   
@@ -878,6 +966,45 @@ private:
       "Expected callAsync(...) to have 5 parameters");
     return bridging::callFromJs<jsi::Value>(rt, &T::callAsync,  static_cast<NativeGodotSceneCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
       count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asNumber(),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt),
+      count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : args[2].asString(rt),
+      count <= 3 ? throw jsi::JSError(rt, "Expected argument in position 3 to be passed") : args[3].asObject(rt).asArray(rt));
+  }
+
+  static jsi::Value __getModule(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::getModule) == 2,
+      "Expected getModule(...) to have 2 parameters");
+    return bridging::callFromJs<jsi::Object>(rt, &T::getModule,  static_cast<NativeGodotSceneCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt));
+  }
+
+  static jsi::Value __readModule(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::readModule) == 3,
+      "Expected readModule(...) to have 3 parameters");
+    return bridging::callFromJs<jsi::Object>(rt, &T::readModule,  static_cast<NativeGodotSceneCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt));
+  }
+
+  static jsi::Value __callModule(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::callModule) == 5,
+      "Expected callModule(...) to have 5 parameters");
+    return bridging::callFromJs<jsi::Value>(rt, &T::callModule,  static_cast<NativeGodotSceneCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt),
+      count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : args[2].asString(rt),
+      count <= 3 ? throw jsi::JSError(rt, "Expected argument in position 3 to be passed") : args[3].asObject(rt).asArray(rt));
+  }
+
+  static jsi::Value __callModuleAsync(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::callModuleAsync) == 5,
+      "Expected callModuleAsync(...) to have 5 parameters");
+    return bridging::callFromJs<jsi::Value>(rt, &T::callModuleAsync,  static_cast<NativeGodotSceneCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
       count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt),
       count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : args[2].asString(rt),
       count <= 3 ? throw jsi::JSError(rt, "Expected argument in position 3 to be passed") : args[3].asObject(rt).asArray(rt));
