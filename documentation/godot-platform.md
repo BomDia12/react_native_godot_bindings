@@ -272,7 +272,8 @@ root starts, so roots can run components that segments register. A runtime that 
 downloads them as modules-only bundles, and falls back to the files as it does for the
 bundle. `ReactNativeHost.load_segment(path)` evaluates a segment file at runtime, for
 example from a pack loaded with `ProjectSettings.load_resource_pack()`, and returns a
-signal that completes with whether it succeeded:
+signal that completes with whether it succeeded, which is `false` when a reload interrupts
+it:
 
 ```gdscript
 ProjectSettings.load_resource_pack("user://dlc/shop.pck")
@@ -287,11 +288,16 @@ a segment that wasn't built.
 
 A segment works only with a bundle that has the modules it was built against: build
 segments again against every bundle they ship with, such as a DLC for each game version.
-Builds mark each bundle with a fingerprint of its modules, and each segment with its base's,
-and a runtime rejects a segment built for another bundle before evaluating it. Bundles that
+Builds mark each bundle with a fingerprint of its module paths, and each segment with its
+base's, and a runtime rejects a segment built for another bundle before evaluating it. The
+fingerprint covers which modules a bundle holds, not their contents: a base whose modules
+change while keeping their paths still accepts its segments. Bundles that
 Metro serves have no fingerprint, so this check doesn't apply to them. Segments downloaded
 from Metro aren't part of the bundle the Fast Refresh client follows, so their edits apply
-at the next reload. Two module paths that hash to the same ID fail the build, naming both.
+at the next reload. Two module paths that hash to the same ID fail the build, naming both, including a segment
+module whose ID a base module already has. Segments built separately can't check each
+other: if two of them bring modules the base lacks under the same ID, the one loaded second
+gets the first one's module. Modules that several segments need belong in the base.
 Each build writes its assets list as `<bundle>.assets-manifest.json`.
 
 ## Colors

@@ -338,9 +338,13 @@ bool RNHostInstance::load_script(const String &p_bundle) {
 		}
 		// Surfaces wait for the bundle, so startup segments are downloaded
 		// before it loads to be there when they start.
-		_download_segments(p_bundle, {}, [this, bundle_url](std::vector<Segment> p_segments) {
+		_download_segments(p_bundle, {}, [this, p_bundle, bundle_url](std::vector<Segment> p_segments) {
 			source_url->set(bundle_url);
-			runtime.react_host->loadScript(bundle_url, "");
+			if (!runtime.react_host->loadScript(bundle_url, "")) {
+				const String error = vformat("React Native bundle '%s' could not be loaded from Metro.", p_bundle);
+				on_error(error);
+				ERR_PRINT(error);
+			}
 			_bundle_loaded(p_segments);
 		});
 	});

@@ -156,8 +156,10 @@ void ReactNativeHost::_retire() {
 			_stop_surface(root, false);
 		}
 	}
+	// A pending segment load fails with its runtime, and the next one loads
+	// only the segments that had loaded.
 	for (const KeyValue<uint64_t, Ref<RNEvaluation>> &entry : evaluations) {
-		callable_mp(this, &ReactNativeHost::_finish_evaluation).call_deferred(entry.key, Variant());
+		callable_mp(this, &ReactNativeHost::_finish_evaluation).call_deferred(entry.key, segment_loads.has(entry.key) ? Variant(false) : Variant());
 	}
 	instance->retire(std::move(stopped));
 	retiring.push_back(instance);
@@ -482,6 +484,7 @@ Signal ReactNativeHost::load_segment(const String &p_path) {
 	evaluation.instantiate();
 	const uint64_t id = next_evaluation++;
 	evaluations[id] = evaluation;
+	segment_loads.insert(id);
 	const Signal completed(evaluation.ptr(), "completed");
 	if (!_start()) {
 		callable_mp(this, &ReactNativeHost::_finish_evaluation).call_deferred(id, false);
@@ -517,6 +520,7 @@ void ReactNativeHost::_finish_evaluation(uint64_t p_id, const Variant &p_result)
 	}
 	const Ref<RNEvaluation> evaluation = *pending;
 	evaluations.erase(p_id);
+	segment_loads.erase(p_id);
 	evaluation->emit_signal("completed", p_result);
 }
 

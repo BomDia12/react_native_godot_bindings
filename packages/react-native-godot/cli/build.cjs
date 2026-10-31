@@ -71,10 +71,18 @@ function segmentConfig(config, projectRoot, base) {
   }
   const inBase = new Set(JSON.parse(fs.readFileSync(dependenciesFile, 'utf8')).map(file => path.resolve(projectRoot, file)));
   const {mergeConfig} = require('@react-native/metro-config');
+  const projectFilter = config.serializer?.processModuleFilter ?? (() => true);
   return mergeConfig(config, {
     serializer: {
+      // The base's modules take their IDs first, so a segment module whose ID
+      // one of them already has fails the build instead of resolving to it.
+      createModuleIdFactory: () => {
+        const ids = config.serializer.createModuleIdFactory();
+        inBase.forEach(file => ids(file));
+        return ids;
+      },
       getModulesRunBeforeMainModule: () => [],
-      processModuleFilter: module => module.path !== '__prelude__' && module.output.every(output => output.type !== 'js/script') && !inBase.has(module.path),
+      processModuleFilter: module => projectFilter(module) && module.path !== '__prelude__' && module.output.every(output => output.type !== 'js/script') && !inBase.has(module.path),
     },
   });
 }
@@ -92,9 +100,14 @@ async function buildBundle({projectRoot, entry, out, dev = false, minify = false
   const projectConfig = require(path.join(projectRoot, 'metro.config.js'));
   const config = base ? segmentConfig(projectConfig, projectRoot, path.resolve(projectRoot, base)) : projectConfig;
   // Staging beside the output keeps the final renames on one file system.
-  // Godot skips the hidden directory meanwhile.
+  // Godot skips the hidden directory meanwhile. A build that was killed leaves
+  // its staging behind, which the next build of the same output removes.
+  const stagingPrefix = `.${path.basename(outputDirectory)}-build-`;
   fs.mkdirSync(path.dirname(outputDirectory), {recursive: true});
-  const temporaryRoot = fs.mkdtempSync(path.join(path.dirname(outputDirectory), `.${path.basename(outputDirectory)}-build-`));
+  for (const stale of fs.readdirSync(path.dirname(outputDirectory)).filter(name => name.startsWith(stagingPrefix))) {
+    fs.rmSync(path.join(path.dirname(outputDirectory), stale), {recursive: true, force: true});
+  }
+  const temporaryRoot = fs.mkdtempSync(path.join(path.dirname(outputDirectory), stagingPrefix));
   const temporaryBundle = path.join(temporaryRoot, path.basename(output));
   const sourceMap = temporaryBundle + '.map';
   try {

@@ -7,6 +7,7 @@
 #include "core/object/object.h"
 #include "core/object/ref_counted.h"
 #include "core/templates/hash_map.h"
+#include "core/templates/hash_set.h"
 #include "core/variant/variant.h"
 #include "scene/main/node.h"
 
@@ -64,6 +65,7 @@ class ReactNativeHost : public Object {
 	bool processing_frame = false;
 	std::deque<std::function<void()>> deferred;
 	HashMap<uint64_t, Ref<RNEvaluation>> evaluations;
+	HashSet<uint64_t> segment_loads;
 	Vector<String> loaded_segments;
 	uint64_t next_evaluation = 1;
 	HashMap<String, std::shared_ptr<const RNSceneAttachment>> modules;

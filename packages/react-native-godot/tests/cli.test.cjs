@@ -304,3 +304,20 @@ test('module IDs are stable per path, and two paths with the same ID fail the bu
     seen.set(id, modulePath);
   }
 });
+
+test('a segment module that takes a base module ID fails the build', () => {
+  const packageRoot = path.resolve(__dirname, '..');
+  const config = require('../metro.cjs').createGodotMetroConfig(packageRoot);
+  const seen = new Map();
+  let pair = null;
+  for (let i = 0; pair == null; i++) {
+    const file = `tests/s${i}.js`;
+    const id = config.serializer.createModuleIdFactory()(path.join(packageRoot, file));
+    pair = seen.has(id) ? [seen.get(id), file] : null;
+    seen.set(id, file);
+  }
+  const base = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-base-')), 'index.bundle.js');
+  fs.writeFileSync(base + '.dependencies.json', JSON.stringify([pair[0]]));
+  const ids = segmentConfig(config, packageRoot, base).serializer.createModuleIdFactory();
+  assert.throws(() => ids(path.join(packageRoot, pair[1])), /have the same module ID/);
+});
