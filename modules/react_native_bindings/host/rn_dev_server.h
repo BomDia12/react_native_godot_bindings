@@ -31,7 +31,11 @@ public:
 	~RNDevServer();
 
 	std::string bundle_url() const;
+	// A segment's modules without Metro's prelude and polyfills, which the
+	// bundle already has.
+	std::string segment_url(const String &p_entry) const;
 	void configure(facebook::react::ReactInstanceConfig &r_config) const;
-	void download_bundle(RNHTTPService &p_http, std::function<void(bool p_downloaded)> p_done) const;
+	// Stores what p_url serves where rn_downloaded_resource_path(p_url) says.
+	void download(RNHTTPService &p_http, const std::string &p_url, std::function<void(bool p_downloaded)> p_done) const;
 	void connect(facebook::react::WebSocketClientFactory p_factory, std::function<void()> p_reload);
 };

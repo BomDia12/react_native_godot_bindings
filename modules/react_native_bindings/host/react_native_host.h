@@ -7,6 +7,7 @@
 #include "core/object/object.h"
 #include "core/object/ref_counted.h"
 #include "core/templates/hash_map.h"
+#include "core/templates/hash_set.h"
 #include "core/variant/variant.h"
 #include "scene/main/node.h"
 
@@ -31,7 +32,8 @@ protected:
 	void _notification(int p_what);
 };
 
-// Completes once with the value a ReactNativeHost.evaluate() call produced.
+// Completes once with the value a ReactNativeHost.evaluate() call produced,
+// or whether a load_segment() call succeeded.
 class RNEvaluation : public RefCounted {
 	GDCLASS(RNEvaluation, RefCounted);
 
@@ -63,6 +65,8 @@ class ReactNativeHost : public Object {
 	bool processing_frame = false;
 	std::deque<std::function<void()>> deferred;
 	HashMap<uint64_t, Ref<RNEvaluation>> evaluations;
+	HashSet<uint64_t> segment_loads;
+	Vector<String> loaded_segments;
 	uint64_t next_evaluation = 1;
 	HashMap<String, std::shared_ptr<const RNSceneAttachment>> modules;
 	uint64_t next_module_identity = 1;
@@ -103,6 +107,7 @@ public:
 	static ReactNativeHost *get_singleton() { return singleton; }
 
 	Signal evaluate(const String &p_code);
+	Signal load_segment(const String &p_path);
 	uint64_t get_generation() const { return generation; }
 	String get_last_error() const;
 	Dictionary get_service_stats() const;

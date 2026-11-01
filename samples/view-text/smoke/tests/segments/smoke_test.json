@@ -1,0 +1,27 @@
+{
+  "id": "segments",
+  "project_dir": "samples/view-text",
+  "scene": "res://smoke/tests/segments/Segments.tscn",
+  "timeout_seconds": 90,
+  "allowlist": "documentation/expected-warnings-segments.txt",
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/view-text",
+    "script": "build:segments",
+    "output": "samples/view-text/dist/segments/index.bundle.js"
+  },
+  "inputs": [
+    "samples/view-text/project.godot",
+    "samples/view-text/segments.entry.js",
+    "samples/view-text/startup_segment.js",
+    "samples/view-text/runtime_segment.js",
+    "samples/view-text/metro.config.js",
+    "samples/view-text/babel.config.js",
+    "samples/view-text/package.json",
+    "samples/view-text/package-lock.json",
+    "documentation/expected-warnings.txt",
+    "documentation/expected-warnings-segments.txt",
+    "samples/view-text/smoke/tests/segments/Segments.tscn",
+    "samples/view-text/smoke/tests/segments/segments.gd"
+  ]
+}

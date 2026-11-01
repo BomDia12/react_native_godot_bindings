@@ -55,6 +55,7 @@ ReactNativeHost::~ReactNativeHost() {
 
 void ReactNativeHost::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("evaluate", "code"), &ReactNativeHost::evaluate);
+	ClassDB::bind_method(D_METHOD("load_segment", "path"), &ReactNativeHost::load_segment);
 	ClassDB::bind_method(D_METHOD("get_generation"), &ReactNativeHost::get_generation);
 	ClassDB::bind_method(D_METHOD("get_last_error"), &ReactNativeHost::get_last_error);
 	ClassDB::bind_method(D_METHOD("get_service_stats"), &ReactNativeHost::get_service_stats);
@@ -135,6 +136,9 @@ bool ReactNativeHost::_start() {
 		_record_error(generation, vformat("React Native bundle '%s' could not be loaded.", bundle));
 		ERR_PRINT(get_last_error());
 	}
+	for (const String &segment : loaded_segments) {
+		instance->load_segment(segment, nullptr);
+	}
 	_update_suspension();
 	return true;
 }
@@ -152,8 +156,10 @@ void ReactNativeHost::_retire() {
 			_stop_surface(root, false);
 		}
 	}
+	// A pending segment load fails with its runtime, and the next one loads
+	// only the segments that had loaded.
 	for (const KeyValue<uint64_t, Ref<RNEvaluation>> &entry : evaluations) {
-		callable_mp(this, &ReactNativeHost::_finish_evaluation).call_deferred(entry.key, Variant());
+		callable_mp(this, &ReactNativeHost::_finish_evaluation).call_deferred(entry.key, segment_loads.has(entry.key) ? Variant(false) : Variant());
 	}
 	instance->retire(std::move(stopped));
 	retiring.push_back(instance);
@@ -471,6 +477,28 @@ void ReactNativeHost::_process_frame() {
 	processing_frame = false;
 }
 
+// Segments loaded at runtime, for example from a DLC pack, load again after
+// every hard reload, in the order they first loaded.
+Signal ReactNativeHost::load_segment(const String &p_path) {
+	Ref<RNEvaluation> evaluation;
+	evaluation.instantiate();
+	const uint64_t id = next_evaluation++;
+	evaluations[id] = evaluation;
+	segment_loads.insert(id);
+	const Signal completed(evaluation.ptr(), "completed");
+	if (!_start()) {
+		callable_mp(this, &ReactNativeHost::_finish_evaluation).call_deferred(id, false);
+		return completed;
+	}
+	instance->load_segment(p_path, [this, id, p_path](bool p_ok) {
+		if (p_ok && !loaded_segments.has(p_path)) {
+			loaded_segments.push_back(p_path);
+		}
+		_finish_evaluation(id, p_ok);
+	});
+	return completed;
+}
+
 Signal ReactNativeHost::evaluate(const String &p_code) {
 	Ref<RNEvaluation> evaluation;
 	evaluation.instantiate();
@@ -492,6 +520,7 @@ void ReactNativeHost::_finish_evaluation(uint64_t p_id, const Variant &p_result)
 	}
 	const Ref<RNEvaluation> evaluation = *pending;
 	evaluations.erase(p_id);
+	segment_loads.erase(p_id);
 	evaluation->emit_signal("completed", p_result);
 }
 

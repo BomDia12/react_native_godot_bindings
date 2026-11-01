@@ -65,13 +65,15 @@ tab clears when a new session starts.
 
 ## Exporting
 
-Exports build a release bundle first, minified, with `react-native-godot/scripts/build.cjs`
-and the project's `node`, after regenerating contracts. New assets are imported before the
-export collects its files, and the bundle is added to the export because a `.js` file is not
-a resource. Source maps, `.dependencies.json`, `assets-manifest.json` and the JavaScript
-project's `package.json`, `package-lock.json` and `tsconfig.json` stay out. Debug exports
-get the same release bundle; debug JavaScript in a game the editor runs. Export templates
-ignore the developer server.
+Exports build a release bundle and its startup
+[segments](godot-platform.md#bundle-segments) first, minified, with
+`react-native-godot/scripts/build.cjs` and the project's `node`, after regenerating
+contracts. New assets are imported before the export collects its files, and the bundle
+and its segments are added to the export because a `.js` file is not a resource. Source
+maps, `.dependencies.json`, `.assets-manifest.json` and the JavaScript project's
+`package.json`, `package-lock.json` and `tsconfig.json` stay out. Debug exports get the
+same release bundle; debug JavaScript in a game the editor runs. Export templates ignore
+the developer server.
 
 A failed build is reported as an export error, and the export then has no bundle. Godot
 doesn't let an export plugin stop an export: the export dialog shows it as failed, but

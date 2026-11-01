@@ -10,6 +10,7 @@ const SETTING_DEFAULTS = {
   'react_native/dev_server/host': 'localhost',
   'react_native/dev_server/port': 8081,
   'react_native/dev_server/entry': 'index',
+  'react_native/bundle/segments': 'PackedStringArray()',
 };
 
 function findGodotRoot(start) {
@@ -91,6 +92,10 @@ function resPath(godotRoot, resourcePath) {
   return path.join(godotRoot, resourcePath.slice('res://'.length));
 }
 
+function parseStringArray(value) {
+  return [...String(value).matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(match => JSON.parse(`"${match[1]}"`));
+}
+
 function loadGodotProject(start) {
   const godotRoot = findGodotRoot(start);
   if (godotRoot == null) {
@@ -102,6 +107,7 @@ function loadGodotProject(start) {
     jsRoot: resPath(godotRoot, settings['react_native/project/root']),
     bundlePath: resPath(godotRoot, settings['react_native/bundle/path']),
     entry: settings['react_native/dev_server/entry'],
+    segments: parseStringArray(settings['react_native/bundle/segments']),
     devServer: {
       enabled: settings['react_native/dev_server/enabled'],
       host: settings['react_native/dev_server/host'],
