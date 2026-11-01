@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rn_application_modules.h"
+#include "rn_game_modules.h"
 #include "rn_godot_host_module.h"
 #include "rn_godot_scene_module.h"
 #include "rn_host_module_context.h"
@@ -43,6 +44,7 @@ struct RNTurboModuleContext {
 	std::shared_ptr<RNSceneBindings> scenes;
 	std::shared_ptr<RNGodotHostEvents> host_events;
 	std::shared_ptr<IImageLoader> image_loader;
+	std::shared_ptr<RNGameServicesHandle> game_services;
 	std::map<std::string, RNTurboModuleFactory> extensions;
 	std::shared_ptr<RNSourceURL> source_url = std::make_shared<RNSourceURL>();
 	bool fast_refresh = true;

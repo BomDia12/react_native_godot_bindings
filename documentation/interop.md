@@ -134,6 +134,21 @@ use them, and they are revoked when the module is replaced or unregistered.
 module's signals, as asking for the module does. A module registered again needs a fresh
 `getGodotModule()`.
 
+## Viewports
+
+`ReactNativeHost.register_viewport(name, viewport)` gives a `SubViewport` a name that
+`GodotViewportView` shows, and `unregister_viewport(name)` removes it. JavaScript only ever
+holds the name. Names belong to the host, so they survive hard reloads, and views follow a
+name to whichever viewport it means next. The `viewport_changed(name)` signal reports both.
+
+## Drag data
+
+A drag from a React view hands Godot a Dictionary with a `type` String and the other fields
+of `godotDragData`, converted as the [values](#values) above are, including the Color and
+Vector wrappers. Payloads holding Objects are rejected, as messages reject them. GDScript
+controls read these Dictionaries in `_can_drop_data` and `_drop_data`. A GDScript control's
+`_get_drag_data` that returns a Dictionary with a `type` drops onto React views the same way.
+
 ## Messages
 
 Messages carry any value the codec carries, without a schema:

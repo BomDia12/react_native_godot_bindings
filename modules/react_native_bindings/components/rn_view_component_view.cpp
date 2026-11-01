@@ -1,6 +1,7 @@
 #include "rn_view_component_view.h"
 
 #include "../interop/rn_dynamic.h"
+#include "rn_resource_requests.h"
 
 #include <react/renderer/components/view/ViewEventEmitter.h>
 #include <react/renderer/components/view/accessibilityPropsConversions.h>
@@ -9,6 +10,125 @@
 
 RNViewComponentView::RNViewComponentView(facebook::react::Tag p_tag) :
 		RNComponentView(p_tag, memnew(RNViewControl)), view(Object::cast_to<RNViewControl>(get_control())) {
+}
+
+RNViewComponentView::~RNViewComponentView() {
+	RNResourceRequests::cancel(skin_request);
+	RNResourceRequests::cancel(material_request);
+	RNResourceRequests::cancel(drag_preview_request);
+}
+
+void RNViewComponentView::_load_drag_preview(const String &p_path) {
+	if (p_path == drag_preview_path) {
+		return;
+	}
+	drag_preview_path = p_path;
+	RNResourceRequests::cancel(drag_preview_request);
+	drag_preview_request = 0;
+	drag_preview.unref();
+	if (p_path.is_empty()) {
+		return;
+	}
+	drag_preview_request = RNResourceRequests::request(p_path, "Texture2D", [this](const Ref<Resource> &p_resource, const String &p_error) {
+		drag_preview_request = 0;
+		drag_preview = p_resource;
+		if (drag_preview.is_null()) {
+			ERR_PRINT(vformat("E_RESOURCE: godotDragPreview on React tag %d: %s", get_tag(), p_error.is_empty() ? vformat("'%s' is not a texture.", drag_preview_path) : p_error));
+		}
+		_apply_drag();
+	});
+}
+
+// Objects need a declared capability, which a drag has none of.
+static bool carries_godot_object(const folly::dynamic &p_value) {
+	if (p_value.isArray()) {
+		return std::any_of(p_value.begin(), p_value.end(), carries_godot_object);
+	}
+	if (!p_value.isObject()) {
+		return false;
+	}
+	for (const auto &[key, value] : p_value.items()) {
+		if ((key == "$godot" && value == "Object") || carries_godot_object(value)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void RNViewComponentView::_apply_drag() {
+	Dictionary data;
+	const folly::dynamic &declared = props->godotDragData;
+	if (declared.isObject()) {
+		const folly::dynamic *type = declared.get_ptr("type");
+		if (!type || !type->isString()) {
+			ERR_PRINT(vformat("E_VALIDATION: godotDragData on React tag %d needs a string 'type'.", get_tag()));
+		} else if (carries_godot_object(declared)) {
+			ERR_PRINT(vformat("E_VALIDATION: godotDragData on React tag %d cannot carry Godot objects.", get_tag()));
+		} else {
+			data = rn_typed_variant_from_dynamic(declared);
+		}
+	}
+	const Array drop_types = props->godotDropTypes.isArray() ? Array(rn_variant_from_dynamic(props->godotDropTypes)) : Array();
+	view->set_drag(data, drag_preview, drop_types);
+	if (effect) {
+		effect->get_painter()->set_drag(data, drag_preview, drop_types);
+	}
+}
+
+void RNViewComponentView::_load_skin(const String &p_path) {
+	if (p_path == skin_path) {
+		return;
+	}
+	skin_path = p_path;
+	RNResourceRequests::cancel(skin_request);
+	skin_request = 0;
+	skin.unref();
+	if (p_path.is_empty()) {
+		return;
+	}
+	skin_request = RNResourceRequests::request(p_path, "StyleBox", [this](const Ref<Resource> &p_resource, const String &p_error) {
+		skin_request = 0;
+		skin = p_resource;
+		if (skin.is_null()) {
+			ERR_PRINT(vformat("E_RESOURCE: godotStyleBox on React tag %d: %s", get_tag(), p_error.is_empty() ? vformat("'%s' is not a StyleBox.", skin_path) : p_error));
+		}
+		_apply_style();
+	});
+}
+
+void RNViewComponentView::_load_material(const String &p_path) {
+	if (p_path == material_path) {
+		return;
+	}
+	material_path = p_path;
+	RNResourceRequests::cancel(material_request);
+	material_request = 0;
+	material.unref();
+	if (p_path.is_empty()) {
+		return;
+	}
+	material_request = RNResourceRequests::request(p_path, "ShaderMaterial", [this](const Ref<Resource> &p_resource, const String &p_error) {
+		material_request = 0;
+		const Ref<ShaderMaterial> shared = p_resource;
+		if (shared.is_null()) {
+			ERR_PRINT(vformat("E_RESOURCE: godotMaterial on React tag %d: %s", get_tag(), p_error.is_empty() ? vformat("'%s' is not a ShaderMaterial.", material_path) : p_error));
+		} else {
+			// Views using one resource keep their own uniform values.
+			material = shared->duplicate();
+			_apply_shader_parameters();
+		}
+		_apply_style();
+	});
+}
+
+void RNViewComponentView::_apply_shader_parameters() {
+	if (material.is_null() || !props->godotShaderParameters.isObject()) {
+		return;
+	}
+	const Dictionary parameters = rn_typed_variant_from_dynamic(props->godotShaderParameters);
+	for (const KeyValue<Variant, Variant> &parameter : parameters) {
+		material->set_shader_parameter(parameter.key, parameter.value);
+	}
 }
 
 RNAccessibility rn_view_accessibility(const facebook::react::ViewProps &p_props) {
@@ -129,6 +249,7 @@ void RNViewComponentView::_restructure(bool p_effect, bool p_clip) {
 		} else {
 			effect = memnew(RNEffectHost);
 			view->add_child(effect, false, Node::INTERNAL_MODE_FRONT);
+			view->copy_drag_callbacks_to(effect->get_painter());
 		}
 	}
 	if (p_clip) {
@@ -150,15 +271,18 @@ void RNViewComponentView::_apply_style() {
 	using namespace facebook::react;
 	const RNStyleBox::Paint paint = rn_view_paint(*props, layout_metrics);
 	const ::Vector<RNFilterStage> stages = rn_filter_stages(props->filter);
-	const bool needs_effect = !stages.is_empty() || props->mixBlendMode != BlendMode::Normal || props->isolation == Isolation::Isolate;
+	const bool needs_effect = !stages.is_empty() || props->mixBlendMode != BlendMode::Normal || props->isolation == Isolation::Isolate || material.is_valid();
 	const bool needs_clip = props->getClipsContentToBounds();
 	_restructure(needs_effect, needs_clip);
 	view->set_clip_contents(false);
+	const StringName theme_type = String::utf8(props->godotThemeType.c_str());
+	view->set_skin(effect ? Ref<StyleBox>() : skin, effect ? StringName() : theme_type);
 	view->set_paint(paint, !effect);
 	const Size2 size = paint.border_box.rect.size;
 	if (effect) {
 		// Filters spread the painted box, shadows and outline included, so their reaches add up.
-		effect->configure(size, paint.extent() + rn_filter_extent(stages), stages, props->mixBlendMode);
+		effect->configure(size, paint.extent() + rn_filter_extent(stages), stages, props->mixBlendMode, material);
+		effect->get_painter()->set_skin(skin, theme_type);
 		effect->get_painter()->set_paint(paint);
 	}
 	if (clip) {
@@ -184,6 +308,12 @@ void RNViewComponentView::update_props(const facebook::react::Props::Shared &p_o
 	view->set_focus_mode(self_targetable && props->focusable ? Control::FOCUS_ALL : Control::FOCUS_NONE);
 	view->set_menu_entries(self_targetable ? Array(rn_variant_from_dynamic(props->godotContextMenu)) : Array());
 	view->set_accessibility(rn_view_accessibility(*props));
+	view->set_tooltip_text(String::utf8(props->tooltip.c_str()));
+	_load_skin(String::utf8(props->godotStyleBox.c_str()));
+	_load_material(String::utf8(props->godotMaterial.c_str()));
+	_apply_shader_parameters();
+	const folly::dynamic *preview_uri = props->godotDragPreview.isObject() ? props->godotDragPreview.get_ptr("uri") : nullptr;
+	_load_drag_preview(preview_uri && preview_uri->isString() ? String::utf8(preview_uri->getString().c_str()) : String());
 	auto old = std::static_pointer_cast<const facebook::react::ViewProps>(p_old);
 	preferred_focus_pending = props->hasTVPreferredFocus && (preferred_focus_pending || !(old && old->hasTVPreferredFocus));
 	// Neighbors that GDScript set through the native node stay until React
@@ -192,6 +322,7 @@ void RNViewComponentView::update_props(const facebook::react::Props::Shared &p_o
 		resolve_focus_references([](facebook::react::Tag) { return nullptr; });
 	}
 	_apply_style();
+	_apply_drag();
 }
 
 bool RNViewComponentView::has_focus_references() const {
@@ -228,7 +359,23 @@ void RNViewComponentView::update_event_emitter(const facebook::react::EventEmitt
 		view->set_menu_callbacks(nullptr, nullptr);
 		view->set_focus_callback(nullptr);
 		view->set_accessibility_callbacks(nullptr, nullptr);
+		view->set_drag_callbacks(nullptr, nullptr);
+		if (effect) {
+			effect->get_painter()->set_drag_callbacks(nullptr, nullptr);
+		}
 		return;
+	}
+	const auto emit_drop = [emitter, control = view](const Variant &p_data, const Point2 &p_point) {
+		const Point2 page = control->get_global_transform_with_canvas().xform(p_point);
+		emitter->onGodotDrop(rn_dynamic_from_variant(p_data), p_point.x, p_point.y, page.x, page.y);
+	};
+	const auto emit_drag_end = [emitter, control = view](bool p_successful) {
+		const Point2 page = control->get_global_mouse_position();
+		emitter->onGodotDragEnd(p_successful, page.x, page.y);
+	};
+	view->set_drag_callbacks(emit_drop, emit_drag_end);
+	if (effect) {
+		effect->get_painter()->set_drag_callbacks(emit_drop, emit_drag_end);
 	}
 	view->set_accessibility_callbacks([emitter]() { emitter->onKeyboardClick(); }, [emitter](const String &p_name) { emitter->onAccessibilityAction(p_name.utf8().get_data()); });
 	view->set_menu_callbacks([emitter](const String &p_id) { emitter->onGodotContextMenuAction(p_id.utf8().get_data()); }, nullptr);

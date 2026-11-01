@@ -37,6 +37,7 @@ void rn_register_service_settings() {
 		settings->set_custom_property_info(PropertyInfo(Variant::INT, key, PROPERTY_HINT_RANGE, vformat("%d,%d,1", entry.minimum, entry.maximum)));
 	}
 	GLOBAL_DEF("react_native/text/font_scale", 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "react_native/audio/max_polyphony", PROPERTY_HINT_RANGE, "1,32"), 8);
 	settings->set_custom_property_info(PropertyInfo(Variant::FLOAT, "react_native/text/font_scale", PROPERTY_HINT_RANGE, "0.01,16,0.01"));
 	GLOBAL_DEF("react_native/appearance/color_scheme", "light");
 	settings->set_custom_property_info(PropertyInfo(Variant::STRING, "react_native/appearance/color_scheme", PROPERTY_HINT_ENUM, "light,dark"));

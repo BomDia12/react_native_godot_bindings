@@ -40,6 +40,8 @@ class RNThemeMetricsStore;
 // One React Native runtime with the Godot services it reaches. ReactNativeHost
 // replaces the instance on a hard reload: the retired instance stops reaching
 // Godot at once and destroys its runtime on a thread of its own.
+class RNGameServicesHandle;
+
 class RNHostInstance {
 public:
 	struct Setup {
@@ -56,6 +58,7 @@ private:
 	std::function<void(const String &)> on_error;
 	std::atomic<bool> retired = false;
 	std::shared_ptr<RNMainThreadQueue> main_thread;
+	std::shared_ptr<RNGameServicesHandle> game_services;
 	std::shared_ptr<RNTextShaper> shaper;
 	std::shared_ptr<RNGodotApplication> application;
 	std::shared_ptr<RNBlobService> blobs;
@@ -107,6 +110,7 @@ public:
 	void set_paused(bool p_paused);
 	void set_suspended(bool p_suspended);
 	void root_state_changed(facebook::react::SurfaceId p_surface, const RNRootState &p_state);
+	void root_drag_changed(facebook::react::SurfaceId p_surface, const Variant &p_data);
 	bool handles_back_press() const;
 	void send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload);
 	void back_pressed();

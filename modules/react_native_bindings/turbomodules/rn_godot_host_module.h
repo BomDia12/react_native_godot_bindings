@@ -28,6 +28,7 @@ class RNGodotHostEvents {
 public:
 	void add_module(std::weak_ptr<facebook::react::RNGodotHostModule> p_module);
 	void root_state_changed(int p_root_tag, const RNRootState &p_state);
+	void drag_changed(int p_root_tag, const Variant &p_data);
 	// An empty root tag addresses the application instead of one root.
 	void send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload);
 	void set_back_handler_enabled(bool p_enabled) { back_handler_enabled = p_enabled; }
@@ -47,6 +48,7 @@ public:
 	void postMessage(jsi::Runtime &rt, std::optional<double> rootTag, jsi::String name, jsi::Value payload);
 	void invokeDefaultBackPressHandler(jsi::Runtime &rt);
 	void emit_root_state(int p_root_tag, const RNRootState &p_state);
+	void emit_drag(int p_root_tag, const Variant &p_data);
 	void emit_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload);
 };
 

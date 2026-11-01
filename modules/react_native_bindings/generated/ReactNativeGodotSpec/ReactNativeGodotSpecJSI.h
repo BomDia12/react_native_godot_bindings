@@ -271,6 +271,83 @@ private:
 };
 
 
+template <typename T>
+class JSI_EXPORT NativeGodotAudioCxxSpec : public TurboModule {
+public:
+  static constexpr std::string_view kModuleName = "GodotAudioCxx";
+
+protected:
+  NativeGodotAudioCxxSpec(std::shared_ptr<CallInvoker> jsInvoker) : TurboModule(std::string{NativeGodotAudioCxxSpec::kModuleName}, jsInvoker) {
+    methodMap_["play"] = MethodMetadata {.argCount = 4, .invoker = __play};
+    methodMap_["preload"] = MethodMetadata {.argCount = 1, .invoker = __preload};
+    methodMap_["stopAll"] = MethodMetadata {.argCount = 1, .invoker = __stopAll};
+    methodMap_["getBuses"] = MethodMetadata {.argCount = 0, .invoker = __getBuses};
+    methodMap_["setBusVolume"] = MethodMetadata {.argCount = 2, .invoker = __setBusVolume};
+    methodMap_["setBusMute"] = MethodMetadata {.argCount = 2, .invoker = __setBusMute};
+    eventEmitterMap_["onBusesChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
+  }
+  
+  template <typename OnBusesChangedType> void emitOnBusesChanged(OnBusesChangedType value) {
+    static_assert(bridging::supportsFromJs<OnBusesChangedType, jsi::Value>, "value cannnot be converted to jsi::Value");
+    static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onBusesChanged"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
+      return bridging::toJs(rt, eventValue, jsInvoker);
+    });
+  }
+private:
+  static jsi::Value __play(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::play) == 5,
+      "Expected play(...) to have 5 parameters");
+    bridging::callFromJs<void>(rt, &T::play,  static_cast<NativeGodotAudioCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt),
+      count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : args[2].asNumber(),
+      count <= 3 ? throw jsi::JSError(rt, "Expected argument in position 3 to be passed") : args[3].asNumber());return jsi::Value::undefined();
+  }
+
+  static jsi::Value __preload(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::preload) == 2,
+      "Expected preload(...) to have 2 parameters");
+    return bridging::callFromJs<jsi::Value>(rt, &T::preload,  static_cast<NativeGodotAudioCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : jsi::Value(rt, args[0]));
+  }
+
+  static jsi::Value __stopAll(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::stopAll) == 2,
+      "Expected stopAll(...) to have 2 parameters");
+    bridging::callFromJs<void>(rt, &T::stopAll,  static_cast<NativeGodotAudioCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 || args[0].isNull() || args[0].isUndefined() ? std::nullopt : std::make_optional(args[0].asString(rt)));return jsi::Value::undefined();
+  }
+
+  static jsi::Value __getBuses(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::getBuses) == 1,
+      "Expected getBuses(...) to have 1 parameters");
+    return bridging::callFromJs<jsi::Value>(rt, &T::getBuses,  static_cast<NativeGodotAudioCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));
+  }
+
+  static jsi::Value __setBusVolume(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::setBusVolume) == 3,
+      "Expected setBusVolume(...) to have 3 parameters");
+    bridging::callFromJs<void>(rt, &T::setBusVolume,  static_cast<NativeGodotAudioCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asNumber());return jsi::Value::undefined();
+  }
+
+  static jsi::Value __setBusMute(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::setBusMute) == 3,
+      "Expected setBusMute(...) to have 3 parameters");
+    bridging::callFromJs<void>(rt, &T::setBusMute,  static_cast<NativeGodotAudioCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asBool());return jsi::Value::undefined();
+  }
+};
+
+
 #pragma mark - NativeGodotHostGodotMessage
 
 template <typename P0, typename P1, typename P2>
@@ -450,6 +527,7 @@ protected:
     methodMap_["invokeDefaultBackPressHandler"] = MethodMetadata {.argCount = 0, .invoker = __invokeDefaultBackPressHandler};
     eventEmitterMap_["onRootStateChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
     eventEmitterMap_["onMessage"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
+    eventEmitterMap_["onDragChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
   }
   
   template <typename OnRootStateChangedType> void emitOnRootStateChanged(OnRootStateChangedType value) {
@@ -462,6 +540,13 @@ protected:
   template <typename OnMessageType> void emitOnMessage(OnMessageType value) {
     static_assert(bridging::supportsFromJs<OnMessageType, jsi::Object>, "value cannnot be converted to jsi::Object");
     static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onMessage"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
+      return bridging::toJs(rt, eventValue, jsInvoker);
+    });
+  }
+
+  template <typename OnDragChangedType> void emitOnDragChanged(OnDragChangedType value) {
+    static_assert(bridging::supportsFromJs<OnDragChangedType, jsi::Value>, "value cannnot be converted to jsi::Value");
+    static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onDragChanged"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
       return bridging::toJs(rt, eventValue, jsInvoker);
     });
   }
@@ -497,6 +582,149 @@ private:
       bridging::getParameterCount(&T::invokeDefaultBackPressHandler) == 1,
       "Expected invokeDefaultBackPressHandler(...) to have 1 parameters");
     bridging::callFromJs<void>(rt, &T::invokeDefaultBackPressHandler,  static_cast<NativeGodotHostCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));return jsi::Value::undefined();
+  }
+};
+
+
+template <typename T>
+class JSI_EXPORT NativeGodotInputCxxSpec : public TurboModule {
+public:
+  static constexpr std::string_view kModuleName = "GodotInputCxx";
+
+protected:
+  NativeGodotInputCxxSpec(std::shared_ptr<CallInvoker> jsInvoker) : TurboModule(std::string{NativeGodotInputCxxSpec::kModuleName}, jsInvoker) {
+    methodMap_["watchAction"] = MethodMetadata {.argCount = 1, .invoker = __watchAction};
+    methodMap_["unwatchAction"] = MethodMetadata {.argCount = 1, .invoker = __unwatchAction};
+    methodMap_["getActions"] = MethodMetadata {.argCount = 0, .invoker = __getActions};
+    methodMap_["getActionEvents"] = MethodMetadata {.argCount = 1, .invoker = __getActionEvents};
+    methodMap_["setActionEvents"] = MethodMetadata {.argCount = 2, .invoker = __setActionEvents};
+    methodMap_["resetAction"] = MethodMetadata {.argCount = 1, .invoker = __resetAction};
+    methodMap_["captureNextEvent"] = MethodMetadata {.argCount = 1, .invoker = __captureNextEvent};
+    methodMap_["cancelCapture"] = MethodMetadata {.argCount = 0, .invoker = __cancelCapture};
+    methodMap_["getLastDevice"] = MethodMetadata {.argCount = 0, .invoker = __getLastDevice};
+    methodMap_["getJoypads"] = MethodMetadata {.argCount = 0, .invoker = __getJoypads};
+    methodMap_["vibrateJoypad"] = MethodMetadata {.argCount = 4, .invoker = __vibrateJoypad};
+    methodMap_["stopJoypadVibration"] = MethodMetadata {.argCount = 1, .invoker = __stopJoypadVibration};
+    eventEmitterMap_["onAction"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
+    eventEmitterMap_["onLastDeviceChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
+    eventEmitterMap_["onJoypadsChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
+  }
+  
+  template <typename OnActionType> void emitOnAction(OnActionType value) {
+    static_assert(bridging::supportsFromJs<OnActionType, jsi::Value>, "value cannnot be converted to jsi::Value");
+    static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onAction"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
+      return bridging::toJs(rt, eventValue, jsInvoker);
+    });
+  }
+
+  template <typename OnLastDeviceChangedType> void emitOnLastDeviceChanged(OnLastDeviceChangedType value) {
+    static_assert(bridging::supportsFromJs<OnLastDeviceChangedType, jsi::String>, "value cannnot be converted to jsi::String");
+    static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onLastDeviceChanged"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
+      return bridging::toJs(rt, eventValue, jsInvoker);
+    });
+  }
+
+  template <typename OnJoypadsChangedType> void emitOnJoypadsChanged(OnJoypadsChangedType value) {
+    static_assert(bridging::supportsFromJs<OnJoypadsChangedType, jsi::Value>, "value cannnot be converted to jsi::Value");
+    static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onJoypadsChanged"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
+      return bridging::toJs(rt, eventValue, jsInvoker);
+    });
+  }
+private:
+  static jsi::Value __watchAction(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::watchAction) == 2,
+      "Expected watchAction(...) to have 2 parameters");
+    bridging::callFromJs<void>(rt, &T::watchAction,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt));return jsi::Value::undefined();
+  }
+
+  static jsi::Value __unwatchAction(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::unwatchAction) == 2,
+      "Expected unwatchAction(...) to have 2 parameters");
+    bridging::callFromJs<void>(rt, &T::unwatchAction,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt));return jsi::Value::undefined();
+  }
+
+  static jsi::Value __getActions(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::getActions) == 1,
+      "Expected getActions(...) to have 1 parameters");
+    return bridging::callFromJs<jsi::Value>(rt, &T::getActions,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));
+  }
+
+  static jsi::Value __getActionEvents(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::getActionEvents) == 2,
+      "Expected getActionEvents(...) to have 2 parameters");
+    return bridging::callFromJs<jsi::Value>(rt, &T::getActionEvents,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt));
+  }
+
+  static jsi::Value __setActionEvents(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::setActionEvents) == 3,
+      "Expected setActionEvents(...) to have 3 parameters");
+    bridging::callFromJs<void>(rt, &T::setActionEvents,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : jsi::Value(rt, args[1]));return jsi::Value::undefined();
+  }
+
+  static jsi::Value __resetAction(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::resetAction) == 2,
+      "Expected resetAction(...) to have 2 parameters");
+    bridging::callFromJs<void>(rt, &T::resetAction,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt));return jsi::Value::undefined();
+  }
+
+  static jsi::Value __captureNextEvent(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::captureNextEvent) == 2,
+      "Expected captureNextEvent(...) to have 2 parameters");
+    return bridging::callFromJs<jsi::Value>(rt, &T::captureNextEvent,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : jsi::Value(rt, args[0]));
+  }
+
+  static jsi::Value __cancelCapture(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::cancelCapture) == 1,
+      "Expected cancelCapture(...) to have 1 parameters");
+    bridging::callFromJs<void>(rt, &T::cancelCapture,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));return jsi::Value::undefined();
+  }
+
+  static jsi::Value __getLastDevice(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::getLastDevice) == 1,
+      "Expected getLastDevice(...) to have 1 parameters");
+    return bridging::callFromJs<jsi::String>(rt, &T::getLastDevice,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));
+  }
+
+  static jsi::Value __getJoypads(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::getJoypads) == 1,
+      "Expected getJoypads(...) to have 1 parameters");
+    return bridging::callFromJs<jsi::Value>(rt, &T::getJoypads,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));
+  }
+
+  static jsi::Value __vibrateJoypad(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::vibrateJoypad) == 5,
+      "Expected vibrateJoypad(...) to have 5 parameters");
+    bridging::callFromJs<void>(rt, &T::vibrateJoypad,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asNumber(),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asNumber(),
+      count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : args[2].asNumber(),
+      count <= 3 ? throw jsi::JSError(rt, "Expected argument in position 3 to be passed") : args[3].asNumber());return jsi::Value::undefined();
+  }
+
+  static jsi::Value __stopJoypadVibration(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::stopJoypadVibration) == 2,
+      "Expected stopJoypadVibration(...) to have 2 parameters");
+    bridging::callFromJs<void>(rt, &T::stopJoypadVibration,  static_cast<NativeGodotInputCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asNumber());return jsi::Value::undefined();
   }
 };
 
@@ -918,6 +1146,72 @@ private:
       count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt),
       count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : args[2].asString(rt),
       count <= 3 ? throw jsi::JSError(rt, "Expected argument in position 3 to be passed") : args[3].asObject(rt).asArray(rt));
+  }
+};
+
+
+template <typename T>
+class JSI_EXPORT NativeGodotTranslationCxxSpec : public TurboModule {
+public:
+  static constexpr std::string_view kModuleName = "GodotTranslation";
+
+protected:
+  NativeGodotTranslationCxxSpec(std::shared_ptr<CallInvoker> jsInvoker) : TurboModule(std::string{NativeGodotTranslationCxxSpec::kModuleName}, jsInvoker) {
+    methodMap_["translate"] = MethodMetadata {.argCount = 2, .invoker = __translate};
+    methodMap_["translatePlural"] = MethodMetadata {.argCount = 4, .invoker = __translatePlural};
+    methodMap_["getLocale"] = MethodMetadata {.argCount = 0, .invoker = __getLocale};
+    methodMap_["setLocale"] = MethodMetadata {.argCount = 1, .invoker = __setLocale};
+    methodMap_["getLoadedLocales"] = MethodMetadata {.argCount = 0, .invoker = __getLoadedLocales};
+    eventEmitterMap_["onLocaleChanged"] = std::make_shared<AsyncEventEmitter<jsi::Value>>();
+  }
+  
+  template <typename OnLocaleChangedType> void emitOnLocaleChanged(OnLocaleChangedType value) {
+    static_assert(bridging::supportsFromJs<OnLocaleChangedType, jsi::String>, "value cannnot be converted to jsi::String");
+    static_cast<AsyncEventEmitter<jsi::Value>&>(*eventEmitterMap_["onLocaleChanged"]).emit([jsInvoker = jsInvoker_, eventValue = value](jsi::Runtime& rt) -> jsi::Value {
+      return bridging::toJs(rt, eventValue, jsInvoker);
+    });
+  }
+private:
+  static jsi::Value __translate(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::translate) == 3,
+      "Expected translate(...) to have 3 parameters");
+    return bridging::callFromJs<jsi::String>(rt, &T::translate,  static_cast<NativeGodotTranslationCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt));
+  }
+
+  static jsi::Value __translatePlural(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::translatePlural) == 5,
+      "Expected translatePlural(...) to have 5 parameters");
+    return bridging::callFromJs<jsi::String>(rt, &T::translatePlural,  static_cast<NativeGodotTranslationCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt),
+      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asString(rt),
+      count <= 2 ? throw jsi::JSError(rt, "Expected argument in position 2 to be passed") : args[2].asNumber(),
+      count <= 3 ? throw jsi::JSError(rt, "Expected argument in position 3 to be passed") : args[3].asString(rt));
+  }
+
+  static jsi::Value __getLocale(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::getLocale) == 1,
+      "Expected getLocale(...) to have 1 parameters");
+    return bridging::callFromJs<jsi::String>(rt, &T::getLocale,  static_cast<NativeGodotTranslationCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));
+  }
+
+  static jsi::Value __setLocale(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+    static_assert(
+      bridging::getParameterCount(&T::setLocale) == 2,
+      "Expected setLocale(...) to have 2 parameters");
+    bridging::callFromJs<void>(rt, &T::setLocale,  static_cast<NativeGodotTranslationCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
+      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asString(rt));return jsi::Value::undefined();
+  }
+
+  static jsi::Value __getLoadedLocales(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* /*args*/, size_t /*count*/) {
+    static_assert(
+      bridging::getParameterCount(&T::getLoadedLocales) == 1,
+      "Expected getLoadedLocales(...) to have 1 parameters");
+    return bridging::callFromJs<jsi::Array>(rt, &T::getLoadedLocales,  static_cast<NativeGodotTranslationCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule));
   }
 };
 

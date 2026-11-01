@@ -10,3 +10,8 @@ const reactNativeRoot = path.dirname(require.resolve('react-native/package.json'
 
 generateLibrary('FBReactNativeSpec', path.join(reactNativeRoot, 'src'), outputRoot);
 generateLibrary('ReactNativeGodotSpec', path.join(packageRoot, 'specs'), outputRoot);
+
+// Applications import these community packages unchanged; Godot implements their native contracts.
+const communityRoot = name => path.dirname(require.resolve(`${name}/package.json`, {paths: [packageRoot]}));
+generateLibrary('RNCSlider', path.join(communityRoot('@react-native-community/slider'), 'src'), outputRoot);
+generateLibrary('AsyncStorageSpec', path.join(communityRoot('@react-native-async-storage/async-storage'), 'src'), outputRoot);

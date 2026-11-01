@@ -17,4 +17,10 @@ namespace facebook::react {
 
 using GodotSceneState = StateData;
 
+using GodotTextureProgressBarState = StateData;
+
+using GodotVideoState = StateData;
+
+using GodotViewportViewState = StateData;
+
 } // namespace facebook::react

@@ -26,3 +26,19 @@ export function useGodotRootState() {
   }, [rootTag]);
   return state;
 }
+
+// The data of the drag going on in the root the calling component renders in,
+// or null, so views can show where it can drop.
+export function useGodotDrag() {
+  const rootTag = useContext(RootTagContext);
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    const subscription = NativeGodotHost.onDragChanged(change => {
+      if (change.rootTag === rootTag) {
+        setData(change.data ?? null);
+      }
+    });
+    return () => subscription.remove();
+  }, [rootTag]);
+  return data;
+}

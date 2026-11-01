@@ -17,6 +17,9 @@
 namespace facebook::react {
 
 using GodotSceneComponentDescriptor = ConcreteComponentDescriptor<GodotSceneShadowNode>;
+using GodotTextureProgressBarComponentDescriptor = ConcreteComponentDescriptor<GodotTextureProgressBarShadowNode>;
+using GodotVideoComponentDescriptor = ConcreteComponentDescriptor<GodotVideoShadowNode>;
+using GodotViewportViewComponentDescriptor = ConcreteComponentDescriptor<GodotViewportViewShadowNode>;
 
 void ReactNativeGodotSpec_registerComponentDescriptorsFromCodegen(
   std::shared_ptr<const ComponentDescriptorProviderRegistry> registry);

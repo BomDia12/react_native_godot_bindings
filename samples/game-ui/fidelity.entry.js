@@ -1,6 +1,11 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Animated, AppRegistry, Easing, LayoutAnimation, ScrollView, Text, View} from 'react-native';
+import GodotProgressBar from 'react-native-godot/GodotProgressBar';
+import GodotRichText from 'react-native-godot/GodotRichText';
+import GodotTextureProgressBar from 'react-native-godot/GodotTextureProgressBar';
+import GodotViewportView from 'react-native-godot/GodotViewportView';
 import {fontFamily} from 'react-native-godot/fonts';
+import {color} from 'react-native-godot/values';
 import 'react-native-godot/setup';
 
 const rendered = global.__fidelity = {};
@@ -166,6 +171,34 @@ function AnimationGallery() {
 }
 
 AppRegistry.registerComponent('AnimationGallery', () => AnimationGallery);
+// The rendering of every Godot resource a view can take.
+function GameUIGallery() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
+  const box = {width: 96, height: 64, margin: 6};
+  const bar = {width: 96, height: 20, margin: 6};
+  return <Screen name="GameUIGallery" ready={ready}>
+    <View style={{width: 456, flexDirection: 'row', flexWrap: 'wrap'}}>
+      <View godotThemeType="GalleryPanel" style={box} />
+      <View godotStyleBox="res://smoke/visual/assets/frame.tres" style={box} />
+      <View godotStyleBox="res://smoke/visual/assets/frame.tres" style={{...box, outlineWidth: 2, outlineColor: '#d1495b', outlineStyle: 'solid'}} />
+      <View godotMaterial="res://smoke/visual/assets/tint.tres" godotShaderParameters={{tint: color(1, 0.5, 0.5)}} style={box}>
+        <View style={{flex: 1, backgroundColor: '#ffffff'}} />
+      </View>
+      <GodotProgressBar value={40} style={bar} />
+      <GodotProgressBar value={70} fillMode="endToBegin" showPercentage style={bar} />
+      <GodotTextureProgressBar value={0.6} maximumValue={1} step={0.01} fillMode="clockwise" underTexture={{uri: 'res://smoke/visual/assets/ring_bg.png'}} progressTexture={{uri: 'res://smoke/visual/assets/ring.png'}} style={{width: 32, height: 32, margin: 6}} />
+      <GodotViewportView viewport="gallery_viewport" resizeMode="stretch" style={box} />
+    </View>
+    <Text godotThemeType="GalleryTitle" style={{width: 456}}>Themed title <Text style={{fontSize: 12}}>and smaller span</Text></Text>
+    <GodotRichText bbcode="[b]Bold[/b] and [i]italic[/i] and [color=#d1495b]colored[/color] and [url=x]linked[/url] rich text that wraps past the end of its line to a second one." style={{width: 300}} />
+  </Screen>;
+}
+
+AppRegistry.registerComponent('GameUIGallery', () => GameUIGallery);
 AppRegistry.registerComponent('StyleGallery', () => StyleGallery);
 AppRegistry.registerComponent('EffectsGallery', () => EffectsGallery);
 AppRegistry.registerComponent('RTLGallery', () => RTLGallery);

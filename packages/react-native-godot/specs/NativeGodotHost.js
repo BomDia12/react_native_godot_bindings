@@ -35,6 +35,7 @@ export interface Spec extends TurboModule {
   +invokeDefaultBackPressHandler: () => void;
   +onRootStateChanged: EventEmitter<RootStateChange>;
   +onMessage: EventEmitter<GodotMessage>;
+  +onDragChanged: EventEmitter<UnsafeMixed>;
 }
 
 export default (TurboModuleRegistry.getEnforcing<Spec>('GodotHostCxx'): Spec);

@@ -4,6 +4,7 @@
 #include "../interop/rn_dynamic.h"
 #include "rn_accessibility_module.h"
 #include "rn_alert_modules.h"
+#include "rn_async_storage_module.h"
 #include "rn_dev_settings_module.h"
 #include "rn_godot_alerts.h"
 
@@ -67,6 +68,10 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 		return module;
 	});
 	add(RNAccessibilityManagerModule::kModuleName, [host, application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAccessibilityManagerModule>(p_invoker, host, application); });
+	add(RNGodotInputModule::kModuleName, [host, services = context.game_services](const std::shared_ptr<CallInvoker> &p_invoker) { return RNGodotInputModule::create(p_invoker, host, services); });
+	add(RNGodotAudioModule::kModuleName, [host, services = context.game_services](const std::shared_ptr<CallInvoker> &p_invoker) { return RNGodotAudioModule::create(p_invoker, host, services); });
+	add(RNGodotTranslationModule::kModuleName, [host, services = context.game_services](const std::shared_ptr<CallInvoker> &p_invoker) { return RNGodotTranslationModule::create(p_invoker, host, services); });
+	add(RNAsyncStorageModule::kModuleName, [storage = std::make_shared<RNAsyncStorageState>()](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAsyncStorageModule>(p_invoker, storage); });
 	add(RNDevSettingsModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNDevSettingsModule>(p_invoker, host); });
 	add(SourceCodeModule::kModuleName, [url = context.source_url](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<SourceCodeModule>(p_invoker, url->get()); });
 	add(ImageLoaderModule::kModuleName, [loader = std::weak_ptr<IImageLoader>(context.image_loader)](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<ImageLoaderModule>(p_invoker, loader); });

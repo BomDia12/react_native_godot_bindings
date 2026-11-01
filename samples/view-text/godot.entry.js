@@ -10,6 +10,7 @@ import './component_registry.entry';
 import './native_module.entry';
 import './native_animated.entry';
 import './engine_integration.entry';
+import './game_ui.entry';
 
 const styles = StyleSheet.create({
   container: {

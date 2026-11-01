@@ -3,6 +3,7 @@
 #include "rn_text_control.h"
 
 #include "core/object/callable_mp.h"
+#include "scene/gui/texture_rect.h"
 #include "scene/main/window.h"
 #include "servers/display/accessibility_server.h"
 
@@ -11,8 +12,80 @@ RNViewControl::RNViewControl() {
 	add_theme_style_override(SNAME("panel"), style);
 }
 
+void RNViewControl::set_skin(const Ref<StyleBox> &p_skin, const StringName &p_theme_type) {
+	if (p_skin == skin && p_theme_type == get_theme_type_variation()) {
+		return;
+	}
+	skin = p_skin;
+	set_theme_type_variation(p_theme_type);
+	skinned = p_skin.is_valid() || p_theme_type != StringName();
+	if (skinned && p_skin.is_null()) {
+		remove_theme_style_override(SNAME("panel"));
+	} else {
+		add_theme_style_override(SNAME("panel"), skinned ? p_skin : Ref<StyleBox>(style));
+	}
+	if (skinned && outline.is_null()) {
+		outline.instantiate();
+	}
+	queue_redraw();
+}
+
+void RNViewControl::set_drag(const Dictionary &p_data, const Ref<Texture2D> &p_preview, const Array &p_drop_types) {
+	drag_data = p_data;
+	drag_preview = p_preview;
+	drop_types = p_drop_types;
+}
+
+void RNViewControl::set_drag_callbacks(std::function<void(const Variant &, const Point2 &)> p_dropped, std::function<void(bool)> p_ended) {
+	dropped = std::move(p_dropped);
+	drag_ended = std::move(p_ended);
+}
+
+Variant RNViewControl::get_drag_data(const Point2 &p_point) {
+	if (drag_data.is_empty()) {
+		return Panel::get_drag_data(p_point);
+	}
+	drag_source = true;
+	if (drag_preview.is_valid()) {
+		// A drag preview follows the pointer at its origin, so this centers the image.
+		Control *preview = memnew(Control);
+		TextureRect *image = memnew(TextureRect);
+		image->set_texture(drag_preview);
+		image->set_position(-drag_preview->get_size() / 2);
+		// It follows the pointer, so anything but this would hide the drop target.
+		image->set_mouse_filter(MOUSE_FILTER_IGNORE);
+		preview->add_child(image);
+		set_drag_preview(preview);
+	}
+	return drag_data;
+}
+
+bool RNViewControl::can_drop_data(const Point2 &p_point, const Variant &p_data) const {
+	if (drop_types.is_empty() || p_data.get_type() != Variant::DICTIONARY) {
+		return Panel::can_drop_data(p_point, p_data);
+	}
+	return drop_types.has(Dictionary(p_data).get("type", Variant()));
+}
+
+void RNViewControl::drop_data(const Point2 &p_point, const Variant &p_data) {
+	if (dropped) {
+		dropped(p_data, p_point);
+	}
+}
+
 void RNViewControl::set_paint(const RNStyleBox::Paint &p_paint, bool p_visible) {
 	style->set_paint(p_visible ? p_paint : RNStyleBox::Paint());
+	if (outline.is_valid()) {
+		RNStyleBox::Paint outline_paint;
+		if (p_visible) {
+			outline_paint.border_box = p_paint.border_box;
+			outline_paint.outline_color = p_paint.outline_color;
+			outline_paint.outline_width = p_paint.outline_width;
+			outline_paint.outline_offset = p_paint.outline_offset;
+			outline_paint.outline_style = p_paint.outline_style;
+		}
+		outline->set_paint(outline_paint);
+	}
 	shadows.update(get_canvas_item(), p_visible ? p_paint : RNStyleBox::Paint());
 	set_notify_transform(!shadows.is_empty());
 	_update_shadow_clip();
@@ -125,6 +198,19 @@ void RNViewControl::_menu_selected(int p_id) {
 
 void RNViewControl::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_DRAG_END: {
+			if (drag_source) {
+				drag_source = false;
+				if (drag_ended) {
+					drag_ended(is_drag_successful());
+				}
+			}
+		} break;
+		case NOTIFICATION_DRAW: {
+			if (skinned) {
+				draw_style_box(outline, Rect2(Point2(), get_size()));
+			}
+		} break;
 		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
 			const RID element = get_accessibility_element();
 			ERR_FAIL_COND(element.is_null());

@@ -59,6 +59,8 @@ const bubblingEventTypes = {
 const directEventTypes = {
   topLayout: {registrationName: 'onLayout'},
   topGodotContextMenuAction: {registrationName: 'onGodotContextMenuAction'},
+  topGodotDrop: {registrationName: 'onGodotDrop'},
+  topGodotDragEnd: {registrationName: 'onGodotDragEnd'},
   topAccessibilityAction: {registrationName: 'onAccessibilityAction'},
 };
 
@@ -86,6 +88,16 @@ const validAttributes = {
   onRightClick: true,
   onRightClickCapture: true,
   godotContextMenu: true,
+  godotThemeType: true,
+  godotStyleBox: true,
+  godotMaterial: true,
+  godotShaderParameters: true,
+  tooltip: true,
+  godotDragData: true,
+  godotDragPreview: {process: source => require('react-native/Libraries/Image/resolveAssetSource').default(source)},
+  godotDropTypes: true,
+  onGodotDrop: true,
+  onGodotDragEnd: true,
   onGodotContextMenuAction: true,
   accessible: true,
   accessibilityLabel: true,

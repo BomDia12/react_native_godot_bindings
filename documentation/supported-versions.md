@@ -16,6 +16,8 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 | Boost | `1.83.0` headers | `bootstrap.sh` SHA-256 check |
 | AccessKit C SDK | `0.22.3`, selected by the pinned Godot commit | `bootstrap.sh` through Godot's `install_accesskit.py` |
 | Mesa | CI Ubuntu 24.04 `libgl1-mesa-dri`, llvmpipe under Xvfb, for the visual gate. The committed goldens were rendered with Mesa 26.2.5 llvmpipe; CI compares them within tolerance | Visual regression goldens |
+| `@react-native-community/slider` | `5.2.2`, whose `RNCSlider` contract Godot implements | `react-native-godot` dev dependency, committed codegen output |
+| `@react-native-async-storage/async-storage` | `3.1.1`, whose `RNAsyncStorage` contract Godot implements | `react-native-godot` dev dependency, committed codegen output |
 | Node.js | CI `22.13.0`; local `>=22.13.0` | `.nvmrc`, package engines |
 | Python | CI `3.12` | Workflow |
 | SCons | CI `4.8.1` | `requirements-ci.txt` |

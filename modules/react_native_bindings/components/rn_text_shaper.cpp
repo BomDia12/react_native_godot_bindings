@@ -11,8 +11,11 @@ namespace {
 
 using namespace facebook::react;
 
-float effective_font_size(const TextAttributes &p_attributes, float p_default_size) {
-	const float size = std::isnan(p_attributes.fontSize) ? p_default_size : p_attributes.fontSize;
+// Every span has a size, at least React's default, so with a theme type that
+// default counts as unset.
+float effective_font_size(const TextAttributes &p_attributes, float p_default_size, const std::string &p_theme_type = "") {
+	const bool unset = std::isnan(p_attributes.fontSize) || (!p_theme_type.empty() && p_attributes.fontSize == TextAttributes::defaultTextAttributes().fontSize);
+	const float size = unset ? p_default_size : p_attributes.fontSize;
 	if (!p_attributes.allowFontScaling.value_or(true) || std::isnan(p_attributes.fontSizeMultiplier)) {
 		return size;
 	}
@@ -139,7 +142,9 @@ Ref<Font> RNTextShaper::_font(const TextAttributes &p_attributes, const RNThemeM
 	const bool italic = p_attributes.fontStyle.value_or(FontStyle::Normal) != FontStyle::Normal;
 	const float spacing = std::isnan(p_attributes.letterSpacing) ? 0 : p_attributes.letterSpacing;
 	const int variant = int(p_attributes.fontVariant.value_or(FontVariant::Default));
-	const FontKey key(uint64_t(p_metrics.text_font.is_valid() ? p_metrics.text_font->get_instance_id() : ObjectID()), p_attributes.fontFamily, weight, italic, spacing, variant);
+	const RNThemedFontFamily themed = RNThemedFontFamily::parse(p_attributes.fontFamily);
+	const Ref<Font> theme_font = themed.theme_type.empty() ? p_metrics.text_font : p_metrics.get_type("RichTextLabel", themed.theme_type).font;
+	const FontKey key(uint64_t(theme_font.is_valid() ? theme_font->get_instance_id() : ObjectID()), p_attributes.fontFamily, weight, italic, spacing, variant);
 	{
 		std::lock_guard lock(mutex);
 		auto cached = fonts.find(key);
@@ -149,14 +154,14 @@ Ref<Font> RNTextShaper::_font(const TextAttributes &p_attributes, const RNThemeM
 	}
 	Ref<Font> font;
 	main_thread->run_sync([&]() {
-		Ref<Font> base = p_metrics.text_font;
+		Ref<Font> base = theme_font;
 		Dictionary variation;
-		if (!p_attributes.fontFamily.empty()) {
-			base = rn_load_font_family(String::utf8(p_attributes.fontFamily.c_str()), variation);
+		if (!themed.family.empty()) {
+			base = rn_load_font_family(String::utf8(themed.family.c_str()), variation);
 		}
 		if (base.is_null()) {
-			ERR_PRINT(vformat("fontFamily '%s' did not resolve to a registered alias or a res:// Godot Font.", String::utf8(p_attributes.fontFamily.c_str())));
-			base = p_metrics.text_font;
+			ERR_PRINT(vformat("fontFamily '%s' did not resolve to a registered alias or a res:// Godot Font.", String::utf8(themed.family.c_str())));
+			base = theme_font;
 		}
 		const String variation_weight = variation.get("weight", "normal");
 		const int alias_weight = variation_weight == "bold" ? 700 : variation_weight.is_valid_int() ? variation_weight.to_int()
@@ -171,7 +176,7 @@ Ref<Font> RNTextShaper::_font(const TextAttributes &p_attributes, const RNThemeM
 		font = rn_font_variation(base, style);
 	});
 	if (font.is_null()) {
-		return p_metrics.text_font;
+		return theme_font;
 	}
 	std::lock_guard lock(mutex);
 	fonts[key] = font;
@@ -185,8 +190,10 @@ SurfaceId RNTextShaper::surface_of(const AttributedString &p_string) {
 
 Ref<Font> RNTextShaper::resolve_font(const TextAttributes &p_attributes, SurfaceId p_surface, int &r_size, ::Color &r_color) const {
 	const std::shared_ptr<const RNThemeMetrics> metrics = theme->get(p_surface);
-	r_size = MAX(1, int(Math::round(effective_font_size(p_attributes, metrics->text_font_size))));
-	r_color = godot_color(p_attributes.foregroundColor, metrics->text_color);
+	const std::string theme_type = RNThemedFontFamily::parse(p_attributes.fontFamily).theme_type;
+	const RNThemeTypeMetrics &type = metrics->get_type("RichTextLabel", theme_type);
+	r_size = MAX(1, int(Math::round(effective_font_size(p_attributes, theme_type.empty() ? metrics->text_font_size : type.font_size, theme_type))));
+	r_color = godot_color(p_attributes.foregroundColor, theme_type.empty() ? metrics->text_color : type.color);
 	return _font(p_attributes, *metrics);
 }
 
@@ -207,9 +214,11 @@ void RNTextShaper::_shape(const AttributedString &p_string, const ParagraphAttri
 		RNParagraphLayout::Fragment output;
 		output.text = transformed(String::utf8(fragment.string.c_str()), attributes.textTransform);
 		output.font = _font(attributes, *metrics);
-		const float size = effective_font_size(attributes, metrics->text_font_size);
+		const std::string theme_type = RNThemedFontFamily::parse(attributes.fontFamily).theme_type;
+		const RNThemeTypeMetrics &type = metrics->get_type("RichTextLabel", theme_type);
+		const float size = effective_font_size(attributes, theme_type.empty() ? metrics->text_font_size : type.font_size, theme_type);
 		output.font_size = MAX(1, int(Math::round(size * p_scale)));
-		output.color = godot_color(attributes.foregroundColor, metrics->text_color);
+		output.color = godot_color(attributes.foregroundColor, theme_type.empty() ? metrics->text_color : type.color);
 		output.background = godot_color(attributes.backgroundColor, ::Color(0, 0, 0, 0));
 		output.line_height = std::isnan(attributes.lineHeight) ? 0 : attributes.lineHeight * font_multiplier(attributes, size) * p_scale;
 		const TextDecorationLineType decoration = attributes.textDecorationLineType.value_or(TextDecorationLineType::None);

@@ -13,6 +13,43 @@
 
 namespace facebook::react {
 
+
+void GodotRichTextEventEmitter::onMetaClick(OnMetaClick event) const {
+  dispatchEvent("metaClick", [event=std::move(event)](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    payload.setProperty(runtime, "meta", event.meta);
+    return payload;
+  });
+}
+
+
+void GodotRichTextEventEmitter::onMetaHoverStarted(OnMetaHoverStarted event) const {
+  dispatchEvent("metaHoverStarted", [event=std::move(event)](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    payload.setProperty(runtime, "meta", event.meta);
+    return payload;
+  });
+}
+
+
+void GodotRichTextEventEmitter::onMetaHoverEnded(OnMetaHoverEnded event) const {
+  dispatchEvent("metaHoverEnded", [event=std::move(event)](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    payload.setProperty(runtime, "meta", event.meta);
+    return payload;
+  });
+}
+
+
+void GodotRichTextEventEmitter::onRevealFinished(OnRevealFinished event) const {
+  dispatchEvent("revealFinished", [](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    
+    return payload;
+  });
+}
+
+
 void GodotSceneEventEmitter::onLoad(OnLoad event) const {
   dispatchEvent("load", [](jsi::Runtime &runtime) {
     auto payload = jsi::Object(runtime);
@@ -23,6 +60,52 @@ void GodotSceneEventEmitter::onLoad(OnLoad event) const {
 
 
 void GodotSceneEventEmitter::onError(OnError event) const {
+  dispatchEvent("error", [event=std::move(event)](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    payload.setProperty(runtime, "message", event.message);
+    return payload;
+  });
+}
+
+
+
+void GodotVideoEventEmitter::onLoad(OnLoad event) const {
+  dispatchEvent("load", [](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    
+    return payload;
+  });
+}
+
+
+void GodotVideoEventEmitter::onEnd(OnEnd event) const {
+  dispatchEvent("end", [](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    
+    return payload;
+  });
+}
+
+
+void GodotVideoEventEmitter::onError(OnError event) const {
+  dispatchEvent("error", [event=std::move(event)](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    payload.setProperty(runtime, "message", event.message);
+    return payload;
+  });
+}
+
+
+void GodotViewportViewEventEmitter::onLoad(OnLoad event) const {
+  dispatchEvent("load", [](jsi::Runtime &runtime) {
+    auto payload = jsi::Object(runtime);
+    
+    return payload;
+  });
+}
+
+
+void GodotViewportViewEventEmitter::onError(OnError event) const {
   dispatchEvent("error", [event=std::move(event)](jsi::Runtime &runtime) {
     auto payload = jsi::Object(runtime);
     payload.setProperty(runtime, "message", event.message);
