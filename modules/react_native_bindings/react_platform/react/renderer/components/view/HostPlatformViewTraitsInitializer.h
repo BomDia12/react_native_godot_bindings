@@ -5,8 +5,9 @@
 
 namespace facebook::react::HostPlatformViewTraitsInitializer {
 
-inline bool formsStackingContext(const ViewProps &) {
-	return false;
+// A material shades the View's subtree, so its children can't be hoisted out of it.
+inline bool formsStackingContext(const ViewProps &props) {
+	return !props.godotMaterial.empty();
 }
 
 // These Views need a Control of their own to receive focus, right clicks, hover and drags, or to paint a Godot resource.

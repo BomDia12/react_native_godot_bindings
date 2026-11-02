@@ -78,19 +78,25 @@ func _run() -> void:
 	await js("__godotStyling.setStrength(0.5)")
 	if not await wait_until(func(): return is_equal_approx(shader_material("shaded").get_shader_parameter("strength"), 0.5), "the new shader parameter"):
 		return
-	# The shaded children stay reachable through the stage.
-	if not await js("__godotStyling.layouts.inner != null"):
-		fail("the shaded view's child did not lay out")
+	# A view that only draws would be hoisted out of its parent, and out of the shader.
+	var child: Node = root.get_native_node("shaded_child")
+	var stage: Node = shaded_stage("shaded")
+	if child == null or not stage.is_ancestor_of(child):
+		fail("the shaded view's child is not inside the shader stage")
 		return
 
 	print("RN_SMOKE_OK: %s" % TEST_ID)
 	get_tree().quit(0)
 
-func shader_material(native_id: String) -> ShaderMaterial:
+func shaded_stage(native_id: String) -> SubViewportContainer:
 	var pending: Array[Node] = [root.get_native_node(native_id)]
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
 		if node is SubViewportContainer and node.material is ShaderMaterial and node.material.shader.resource_path.ends_with("tint.gdshader"):
-			return node.material
+			return node
 		pending.append_array(node.get_children(true))
 	return null
+
+func shader_material(native_id: String) -> ShaderMaterial:
+	var stage := shaded_stage(native_id)
+	return stage.material if stage else null

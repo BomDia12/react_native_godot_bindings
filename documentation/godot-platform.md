@@ -450,7 +450,7 @@ until its native dismiss event.
 
 React Native flattens Views that only lay out, and it mounts a View that only draws
 without nesting its children, so a Text can be a sibling of its bordered parent View in
-the Godot tree. Views that clip, transform, change opacity or set `pointerEvents` to `none` or `box-only` keep
+the Godot tree. Views that clip, transform, change opacity, take a `godotMaterial` or set `pointerEvents` to `none` or `box-only` keep
 their children nested; `pointerEvents="none"` disables input for that Godot subtree.
 A press that opens a Godot popup, such as a `godotContextMenu` or a text input's context
 menu, hands the release to the popup, so the root cancels that mouse pointer

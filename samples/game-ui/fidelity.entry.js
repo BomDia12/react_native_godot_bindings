@@ -175,7 +175,7 @@ AppRegistry.registerComponent('AnimationGallery', () => AnimationGallery);
 function GameUIGallery() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setReady(true), 1500);
+    const timer = setTimeout(() => setReady(true), 500);
     return () => clearTimeout(timer);
   }, []);
   const box = {width: 96, height: 64, margin: 6};

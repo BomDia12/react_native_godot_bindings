@@ -40,7 +40,7 @@ function GameStylingApp() {
         godotMaterial="res://smoke/tests/game_styling/tint.tres"
         godotShaderParameters={{strength, tint: color(1, 0, 0)}}
         style={styles.box}>
-        <View onLayout={record('inner')} style={styles.inner} />
+        <View nativeID="shaded_child" onLayout={record('inner')} style={styles.inner} />
       </View>
       <View
         nativeID="shaded_other"
