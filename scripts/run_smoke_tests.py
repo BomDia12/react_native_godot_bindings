@@ -3,6 +3,7 @@ import os
 from contextlib import nullcontext
 from network_fixture import FIXTURES
 import resource
+import signal
 import subprocess
 import sys
 import threading
@@ -17,6 +18,7 @@ from smoke_manifest import BundleGroup, ManifestError, SmokeManifest, discover_m
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+IMPORT_TIMEOUT_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,27 @@ def find_godot_binary(godot_source_dir: Path) -> Path:
         f"expected one Godot dev editor executable, found {len(dev_candidates)} "
         f"among {len(candidates)} editor binaries"
     )
+
+
+# Godot's crash handler starts addr2line, which keeps the output pipes open after
+# Godot dies, so a timeout has to end the whole process group or it never returns.
+def run_captured(command: list[str], timeout: float, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        env=env,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        os.killpg(process.pid, signal.SIGKILL)
+        error.stdout, error.stderr = process.communicate()
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def run_bundle_command(command: list[str], cwd: Path) -> tuple[float, float]:
@@ -97,10 +120,14 @@ def prepare_project_imports(
             "--import",
             "--quit",
         ]
-        completed = subprocess.run(command, capture_output=True, text=True, errors="replace", check=False)
-        log = completed.stdout + completed.stderr
         safe_name = project_dir.as_posix().replace("/", "-")
         log_path = log_dir / f"import-{safe_name}.log"
+        try:
+            completed = run_captured(command, IMPORT_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as error:
+            log_path.write_text((error.stdout or "") + (error.stderr or ""), encoding="utf-8")
+            raise RuntimeError(f"Godot import timed out for {project_dir.as_posix()}; see {log_path}") from error
+        log = completed.stdout + completed.stderr
         log_path.write_text(log, encoding="utf-8")
         import_errors = [
             line
@@ -139,23 +166,13 @@ def run_test(
                 environment = os.environ.copy()
                 if server:
                     environment["GODOT_SMOKE_NETWORK_FIXTURE"] = str(server.readiness_path)
-                completed = subprocess.run(
-                    command,
-                    capture_output=True,
-                    text=True,
-                    errors="replace",
-                    timeout=manifest.timeout_seconds,
-                    check=False,
-                    env=environment,
-                )
+                completed = run_captured(command, manifest.timeout_seconds, environment)
             exit_code = completed.returncode
             log = completed.stdout + completed.stderr
         except subprocess.TimeoutExpired as error:
             timed_out = True
             exit_code = 124
-            stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else error.stdout or ""
-            stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr or ""
-            log = stdout + stderr
+            log = (error.stdout or "") + (error.stderr or "")
 
     duration = time.monotonic() - started
     log_path.write_text(log, encoding="utf-8")
@@ -226,7 +243,9 @@ def main() -> int:
         }
         for future in as_completed(futures):
             try:
-                results.append(future.result())
+                result = future.result()
+                results.append(result)
+                print(f"Finished {result.test_id} in {result.duration:.1f}s", flush=True)
             except Exception as error:
                 test_id = futures[future]
                 results.append(

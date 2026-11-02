@@ -170,7 +170,6 @@ jobs:
             module_raycast_enabled=no \
             module_lightmapper_rd_enabled=no \
             module_basis_universal_enabled=no \
-            module_theora_enabled=no \
             module_webrtc_enabled=no \
             module_mobile_vr_enabled=no \
             2>&1 | tee godot-build.log
