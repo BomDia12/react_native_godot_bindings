@@ -175,7 +175,7 @@ AppRegistry.registerComponent('AnimationGallery', () => AnimationGallery);
 function GameUIGallery() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setReady(true), 500);
+    const timer = setTimeout(() => setReady(true), 1500);
     return () => clearTimeout(timer);
   }, []);
   const box = {width: 96, height: 64, margin: 6};
@@ -194,7 +194,7 @@ function GameUIGallery() {
       <GodotViewportView viewport="gallery_viewport" resizeMode="stretch" style={box} />
     </View>
     <Text godotThemeType="GalleryTitle" style={{width: 456}}>Themed title <Text style={{fontSize: 12}}>and smaller span</Text></Text>
-    <GodotRichText bbcode="[b]Bold[/b] and [i]italic[/i] and [color=#d1495b]colored[/color] and [url=x]linked[/url] rich text that wraps past the end of its line to a second one." style={{width: 300}} />
+    <GodotRichText bbcode="[color=#003d5b][b]Bold[/b] and [i]italic[/i] and [color=#d1495b]colored[/color] and [url=x]linked[/url] rich text that wraps past the end of its line to a second one.[/color]" style={{width: 300}} />
   </Screen>;
 }
 

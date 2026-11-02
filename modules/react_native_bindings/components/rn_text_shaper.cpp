@@ -38,6 +38,12 @@ float font_multiplier(const TextAttributes &p_attributes, float p_size) {
 	return ::Color(components.red, components.green, components.blue, components.alpha);
 }
 
+// Every span has a color, at least React's default, so with a theme type that
+// default counts as unset.
+::Color themed_color(const SharedColor &p_color, const RNThemeTypeMetrics &p_type) {
+	return p_color && p_color != TextAttributes::defaultTextAttributes().foregroundColor ? godot_color(p_color, p_type.color) : p_type.color;
+}
+
 // Natural, start and end follow the layout direction, as I18nManager RTL
 // applications expect. Left and right swap in right-to-left layouts too, as
 // iOS's RCTResolveTextAlignment and Android's text layout do.
@@ -193,7 +199,7 @@ Ref<Font> RNTextShaper::resolve_font(const TextAttributes &p_attributes, Surface
 	const std::string theme_type = RNThemedFontFamily::parse(p_attributes.fontFamily).theme_type;
 	const RNThemeTypeMetrics &type = metrics->get_type("RichTextLabel", theme_type);
 	r_size = MAX(1, int(Math::round(effective_font_size(p_attributes, theme_type.empty() ? metrics->text_font_size : type.font_size, theme_type))));
-	r_color = godot_color(p_attributes.foregroundColor, theme_type.empty() ? metrics->text_color : type.color);
+	r_color = theme_type.empty() ? godot_color(p_attributes.foregroundColor, metrics->text_color) : themed_color(p_attributes.foregroundColor, type);
 	return _font(p_attributes, *metrics);
 }
 
@@ -218,7 +224,7 @@ void RNTextShaper::_shape(const AttributedString &p_string, const ParagraphAttri
 		const RNThemeTypeMetrics &type = metrics->get_type("RichTextLabel", theme_type);
 		const float size = effective_font_size(attributes, theme_type.empty() ? metrics->text_font_size : type.font_size, theme_type);
 		output.font_size = MAX(1, int(Math::round(size * p_scale)));
-		output.color = godot_color(attributes.foregroundColor, theme_type.empty() ? metrics->text_color : type.color);
+		output.color = theme_type.empty() ? godot_color(attributes.foregroundColor, metrics->text_color) : themed_color(attributes.foregroundColor, type);
 		output.background = godot_color(attributes.backgroundColor, ::Color(0, 0, 0, 0));
 		output.line_height = std::isnan(attributes.lineHeight) ? 0 : attributes.lineHeight * font_multiplier(attributes, size) * p_scale;
 		const TextDecorationLineType decoration = attributes.textDecorationLineType.value_or(TextDecorationLineType::None);

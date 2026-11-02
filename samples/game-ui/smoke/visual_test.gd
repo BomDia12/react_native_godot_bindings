@@ -34,6 +34,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	var failure := await _settle()
+	_diagnose(self)
 	if failure.is_empty():
 		failure = compare(_capture(), "res://smoke/visual/goldens/%s.png" % application)
 	if failure.is_empty():
@@ -82,3 +83,10 @@ func compare(actual: Image, golden_path: String) -> String:
 		actual.save_png(output_dir.path_join(golden_path.get_file()))
 		return "%s differs in %d pixels" % [golden_path.get_file(), differing]
 	return ""
+
+func _diagnose(node: Node) -> void:
+	if node is SubViewportContainer:
+		var shader_path: String = node.material.shader.resource_path if node.material is ShaderMaterial and node.material.shader else "builtin"
+		print("DIAG ", node.get_path(), " shader=", shader_path, " tint=", node.material.get_shader_parameter("tint") if node.material is ShaderMaterial else null, " size=", node.size, " parent_material=", node.use_parent_material)
+	for child in node.get_children(true):
+		_diagnose(child)
