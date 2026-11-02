@@ -42,6 +42,9 @@ env_rn.Prepend(CPPPATH=[react_native_sources.REACT_PLATFORM_DIR])
 # Godot platform headers under react_platform/ include module headers by module-relative path.
 env_rn.Append(CPPPATH=[module_dir])
 env_rn.Append(CPPDEFINES=react_native_sources.REACT_NATIVE_DEFINES)
+# These objects reach the platform's props through -isystem headers, which SCons
+# doesn't scan. A props change has to rebuild them, or they read the old layout.
+env_rn.Append(CPPDEFINES=[("RN_PLATFORM_HEADERS_HASH", react_native_sources.platform_headers_hash())])
 
 env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
 env.AppendUnique(LIBS=["hermesvm", "jsi"])

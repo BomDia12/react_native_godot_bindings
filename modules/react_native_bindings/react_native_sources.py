@@ -1,5 +1,6 @@
 """Source and include lists for the upstream React Native and third-party code the module compiles."""
 
+import hashlib
 import os
 import shutil
 
@@ -163,6 +164,18 @@ def cpp_sources(root):
 
 def generated_sources():
     return cpp_sources(GENERATED_DIR)
+
+
+def platform_headers_hash():
+    digest = hashlib.sha256()
+    for root in (REACT_PLATFORM_DIR, GENERATED_DIR):
+        for directory, subdirectories, files in os.walk(root):
+            subdirectories.sort()
+            for name in sorted(files):
+                if name.endswith(".h"):
+                    with open(os.path.join(directory, name), "rb") as header:
+                        digest.update(header.read())
+    return digest.hexdigest()[:16]
 
 
 def react_platform_sources():
