@@ -75,6 +75,9 @@ func _run() -> void:
 	# The preview texture loads on a loader thread.
 	await get_tree().create_timer(0.2).timeout
 
+	if not root.get_native_node("source").is_ancestor_of(root.get_native_node("source_child")) or not root.get_native_node("target").is_ancestor_of(root.get_native_node("target_child")):
+		fail("a drag source or target has its children hoisted out of it")
+		return
 	var started := []
 	root.godot_drag_started.connect(func(data): started.append(data))
 	await drag(center("source"), center("target"))

@@ -118,6 +118,11 @@ TEST_CASE("[ReactNativeBindings][GameUI] storage files replace themselves and re
 	RNStorageFile corrupt(path);
 	CHECK_FALSE(corrupt.load().is_empty());
 	ERR_PRINT_ON;
+	// Clearing is how an application recovers from a corrupt database.
+	CHECK(corrupt.reset().is_empty());
+	RNStorageFile recovered(path);
+	CHECK(recovered.load().is_empty());
+	CHECK(recovered.get_values().is_empty());
 	DirAccess::remove_absolute(path);
 	DirAccess::remove_absolute("user://rn_game_ui_test");
 }

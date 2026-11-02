@@ -51,6 +51,12 @@ func _run() -> void:
 	if (root.get_native_node("tooltip") as Control).get_tooltip(Vector2.ZERO) != "Restores 50 HP":
 		fail("the tooltip prop did not reach the control")
 		return
+	if not root.get_native_node("tooltip").is_ancestor_of(root.get_native_node("tooltip_child")):
+		fail("hovering a child can't find its parent's tooltip, because it was hoisted out")
+		return
+	if not (root.get_native_node("title").call("get_text_color") as Color).is_equal_approx(Color(1, 0.5, 0)):
+		fail("the Text theme type's color did not apply: %s" % root.get_native_node("title").call("get_text_color"))
+		return
 
 	var title_height: float = await js("__godotStyling.layouts.title.height")
 	var plain_height: float = await js("__godotStyling.layouts.plain.height")

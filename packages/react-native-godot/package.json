@@ -104,6 +104,7 @@
     "types",
     "scripts/start.cjs",
     "scripts/build.cjs",
+    "asset-path.cjs",
     "asset-scale.cjs",
     "assets.cjs",
     "babel.cjs",

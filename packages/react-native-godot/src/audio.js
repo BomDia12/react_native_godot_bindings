@@ -1,14 +1,12 @@
 'use strict';
 
 import {useEffect, useState} from 'react';
-import resolveAssetSource from 'react-native/Libraries/Image/resolveAssetSource';
 import NativeGodotAudio from '../specs/NativeGodotAudio';
-
-const sourceUri = source => (typeof source === 'string' ? source : resolveAssetSource(source)?.uri ?? '');
+import {godotResourcePath} from './asset-source';
 
 export const GodotAudio = {
-  play: (source, {bus = 'Master', volumeDb = 0, pitchScale = 1} = {}) => NativeGodotAudio.play(sourceUri(source), bus, volumeDb, pitchScale),
-  preload: sources => NativeGodotAudio.preload(sources.map(sourceUri)),
+  play: (source, {bus = 'Master', volumeDb = 0, pitchScale = 1} = {}) => NativeGodotAudio.play(godotResourcePath(source), bus, volumeDb, pitchScale),
+  preload: sources => NativeGodotAudio.preload(sources.map(godotResourcePath)),
   stopAll: bus => NativeGodotAudio.stopAll(bus ?? null),
   getBuses: () => NativeGodotAudio.getBuses(),
   setBusVolume: (bus, linear) => NativeGodotAudio.setBusVolume(bus, linear),

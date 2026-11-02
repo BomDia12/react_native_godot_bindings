@@ -55,20 +55,38 @@ void RNViewportViewControl::set_forward_input(bool p_forward) {
 	set_focus_mode(forward_input ? FOCUS_CLICK : FOCUS_NONE);
 }
 
+void RNViewportViewControl::_follow_viewport(SubViewport *p_viewport, bool p_follow) {
+	const Callable exiting = callable_mp(this, &RNViewportViewControl::_viewport_exiting);
+	const Callable entered = callable_mp(this, &RNViewportViewControl::_resolve);
+	if (p_viewport->is_connected(SceneStringName(tree_exiting), exiting)) {
+		p_viewport->disconnect(SceneStringName(tree_exiting), exiting);
+	}
+	if (p_viewport->is_connected(SceneStringName(tree_entered), entered)) {
+		p_viewport->disconnect(SceneStringName(tree_entered), entered);
+	}
+	if (p_follow) {
+		p_viewport->connect(SceneStringName(tree_exiting), exiting);
+		p_viewport->connect(SceneStringName(tree_entered), entered);
+	}
+}
+
 void RNViewportViewControl::_resolve() {
 	ReactNativeHost *host = ReactNativeHost::get_singleton();
 	SubViewport *next = host ? host->find_viewport(viewport_name) : nullptr;
-	if (resolved && (next ? next->get_instance_id() : ObjectID()) == shown) {
+	SubViewport *shown_next = next && next->is_inside_tree() ? next : nullptr;
+	if (resolved && (shown_next ? shown_next->get_instance_id() : ObjectID()) == shown) {
 		return;
 	}
 	resolved = true;
-	if (SubViewport *previous = _viewport()) {
-		previous->disconnect(SceneStringName(tree_exiting), callable_mp(this, &RNViewportViewControl::_viewport_exiting));
+	if (SubViewport *previous = _viewport(); previous && previous != next) {
+		_follow_viewport(previous, false);
 	}
-	shown = next ? next->get_instance_id() : ObjectID();
-	set_texture(next ? Ref<Texture2D>(next->get_texture()) : Ref<Texture2D>());
 	if (next) {
-		next->connect(SceneStringName(tree_exiting), callable_mp(this, &RNViewportViewControl::_viewport_exiting));
+		_follow_viewport(next, true);
+	}
+	shown = shown_next ? shown_next->get_instance_id() : ObjectID();
+	set_texture(shown_next ? Ref<Texture2D>(shown_next->get_texture()) : Ref<Texture2D>());
+	if (shown_next) {
 		_update_viewport_size();
 		if (loaded) {
 			loaded();
@@ -84,6 +102,7 @@ void RNViewportViewControl::_registration_changed(const String &p_name) {
 	}
 }
 
+// The connections stay, so the view shows the viewport again when it comes back.
 void RNViewportViewControl::_viewport_exiting() {
 	shown = ObjectID();
 	set_texture(Ref<Texture2D>());

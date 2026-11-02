@@ -10,7 +10,7 @@ GodotRichTextShadowNode::GodotRichTextShadowNode(const ShadowNode &source, const
 		ConcreteViewShadowNode(source, fragment) {
 	const auto &previous = static_cast<const GodotRichTextProps &>(*source.getProps());
 	const GodotRichTextProps &next = getConcreteProps();
-	if (previous.bbcode != next.bbcode || previous.godotThemeType != next.godotThemeType) {
+	if (previous.bbcode != next.bbcode || previous.customEffects != next.customEffects || previous.godotThemeType != next.godotThemeType) {
 		dirtyLayout();
 	}
 }
@@ -21,7 +21,7 @@ Size GodotRichTextShadowNode::measureContent(const LayoutContext &, const Layout
 	}
 	const GodotRichTextProps &props = getConcreteProps();
 	const std::shared_ptr<const RNThemeMetrics> metrics = theme_->get(getSurfaceId());
-	const Size2 size = measurer_->measure(String::utf8(props.bbcode.c_str()), props.godotThemeType, metrics, layoutConstraints.maximumSize.width);
+	const Size2 size = measurer_->measure(String::utf8(props.bbcode.c_str()), props.customEffects, props.godotThemeType, metrics, layoutConstraints.maximumSize.width);
 	return layoutConstraints.clamp({ .width = size.x, .height = size.y });
 }
 

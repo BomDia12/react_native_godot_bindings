@@ -8,6 +8,7 @@
 #include "scene/gui/rich_text_label.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
+#include "scene/resources/audio_stream_polyphonic.h"
 #include "servers/audio/audio_server.h"
 
 namespace {
@@ -53,8 +54,14 @@ void RNGameServices::_notification(int p_what) {
 			AudioServer::get_singleton()->connect("bus_layout_changed", callable_mp(this, &RNGameServices::_buses_changed));
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			// Polyphonic voices keep their streams until they stop.
+			stop_audio(StringName());
 			Input::get_singleton()->disconnect("joy_connection_changed", callable_mp(this, &RNGameServices::_joy_connection_changed));
 			AudioServer::get_singleton()->disconnect("bus_layout_changed", callable_mp(this, &RNGameServices::_buses_changed));
+		} break;
+		case NOTIFICATION_APPLICATION_FOCUS_OUT:
+		case NOTIFICATION_WM_WINDOW_FOCUS_OUT: {
+			_release_pressed_actions();
 		} break;
 		case NOTIFICATION_TRANSLATION_CHANGED: {
 			if (translation_changed) {
@@ -124,14 +131,33 @@ void RNGameServices::unhandled_input(const Ref<InputEvent> &p_event) {
 		if (!InputMap::get_singleton()->has_action(watched.key) || !p_event->is_action(watched.key)) {
 			continue;
 		}
-		const bool pressed = p_event->is_action_pressed(watched.key, true);
+		// Input tracks every event bound to the action. This event alone can't say:
+		// a stick's small move reads as not pressed while a key still holds the action.
+		const bool pressed = Input::get_singleton()->is_action_pressed(watched.key);
+		const bool echo = pressed && p_event->is_echo();
 		bool *previous = pressed_actions.getptr(watched.key);
-		// A joypad axis reports every small move as the same action.
-		if ((previous ? *previous : false) == pressed && !p_event->is_echo()) {
+		if ((previous ? *previous : false) == pressed && !echo) {
 			continue;
 		}
 		pressed_actions[watched.key] = pressed;
-		action_changed(watched.key, pressed, p_event->get_action_strength(watched.key), p_event->is_echo());
+		action_changed(watched.key, pressed, Input::get_singleton()->get_action_strength(watched.key), echo);
+	}
+}
+
+// Godot forgets pressed keys when focus leaves, without sending their releases.
+void RNGameServices::_release_pressed_actions() {
+	Vector<StringName> released;
+	for (const KeyValue<StringName, bool> &action : pressed_actions) {
+		if (action.value) {
+			released.push_back(action.key);
+		}
+	}
+	pressed_actions.clear();
+	if (!action_changed) {
+		return;
+	}
+	for (const StringName &action : released) {
+		action_changed(action, false, 0, false);
 	}
 }
 
@@ -147,26 +173,30 @@ void RNGameServices::_buses_changed() {
 	}
 }
 
-void RNGameServices::play_audio(const String &p_path, const Ref<AudioStream> &p_stream, const StringName &p_bus, float p_volume_db, float p_pitch_scale) {
-	const PlayerKey key{ p_path, p_bus };
-	AudioStreamPlayer **found = players.getptr(key);
+void RNGameServices::play_audio(const Ref<AudioStream> &p_stream, const StringName &p_bus, float p_volume_db, float p_pitch_scale) {
+	AudioStreamPlayer **found = players.getptr(p_bus);
 	AudioStreamPlayer *player = found ? *found : nullptr;
 	if (!player) {
+		Ref<AudioStreamPolyphonic> voices;
+		voices.instantiate();
+		voices->set_polyphony(GLOBAL_GET("react_native/audio/max_polyphony"));
 		player = memnew(AudioStreamPlayer);
-		player->set_stream(p_stream);
+		player->set_stream(voices);
 		player->set_bus(p_bus);
-		player->set_max_polyphony(GLOBAL_GET("react_native/audio/max_polyphony"));
 		add_child(player, false, INTERNAL_MODE_BACK);
-		players.insert(key, player);
+		players.insert(p_bus, player);
 	}
-	player->set_volume_db(p_volume_db);
-	player->set_pitch_scale(p_pitch_scale);
-	player->play();
+	if (!player->is_playing()) {
+		player->play();
+	}
+	const Ref<AudioStreamPlaybackPolyphonic> playback = player->get_stream_playback();
+	ERR_FAIL_COND(playback.is_null());
+	playback->play_stream(p_stream, 0, p_volume_db, p_pitch_scale, AudioServer::PLAYBACK_TYPE_DEFAULT, p_bus);
 }
 
 void RNGameServices::stop_audio(const StringName &p_bus) {
-	for (const KeyValue<PlayerKey, AudioStreamPlayer *> &entry : players) {
-		if (p_bus == StringName() || entry.key.bus == p_bus) {
+	for (const KeyValue<StringName, AudioStreamPlayer *> &entry : players) {
+		if (p_bus == StringName() || entry.key == p_bus) {
 			entry.value->stop();
 		}
 	}

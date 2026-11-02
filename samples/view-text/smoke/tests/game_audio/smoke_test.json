@@ -24,6 +24,8 @@
     "samples/view-text/game_ui.entry.js",
     "samples/view-text/smoke/tests/game_audio/GameAudio.tscn",
     "samples/view-text/smoke/tests/game_audio/game_audio.gd",
-    "samples/view-text/smoke/tests/game_audio/click.tres"
+    "samples/view-text/smoke/tests/game_audio/click.tres",
+    "samples/view-text/smoke/tests/game_audio/beep.wav",
+    "samples/view-text/smoke/tests/game_audio/beep.ogg"
   ]
 }

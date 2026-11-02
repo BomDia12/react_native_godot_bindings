@@ -166,9 +166,11 @@ def generated_sources():
     return cpp_sources(GENERATED_DIR)
 
 
-def platform_headers_hash():
+def platform_headers_hash(extra_dirs=()):
     digest = hashlib.sha256()
-    for root in (REACT_PLATFORM_DIR, GENERATED_DIR):
+    with open(os.path.join(MODULE_DIR, "..", "..", "baseline.env"), "rb") as pins:
+        digest.update(pins.read())
+    for root in (REACT_PLATFORM_DIR, GENERATED_DIR, *extra_dirs):
         for directory, subdirectories, files in os.walk(root):
             subdirectories.sort()
             for name in sorted(files):

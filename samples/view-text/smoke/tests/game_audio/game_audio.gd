@@ -54,14 +54,22 @@ func _run() -> void:
 	if not await wait_until(func(): return players().size() == 1, "the player"):
 		return
 	var player: AudioStreamPlayer = players()[0]
-	if not is_equal_approx(player.volume_db, -6.0) or not is_equal_approx(player.pitch_scale, 1.5) or player.max_polyphony != 8 or player.process_mode != Node.PROCESS_MODE_INHERIT or player.get_parent().process_mode != Node.PROCESS_MODE_ALWAYS:
-		fail("the player was not configured: %s %s %s" % [player.volume_db, player.pitch_scale, player.max_polyphony])
+	if not player.stream is AudioStreamPolyphonic or player.stream.polyphony != 8 or player.get_parent().process_mode != Node.PROCESS_MODE_ALWAYS:
+		fail("the bus player is not set up for overlapping voices: %s" % player.stream)
+		return
+	if not player.is_playing() or not player.get_stream_playback() is AudioStreamPlaybackPolyphonic:
+		fail("the bus player is not playing")
 		return
 	await js("__godotAudio.GodotAudio.play('res://smoke/tests/game_audio/click.tres', {volumeDb: -6, pitchScale: 1.5})")
 	await get_tree().create_timer(0.1).timeout
 	if players().size() != 1:
-		fail("a second play of one sound made a second player")
+		fail("a second sound on one bus made a second player")
 		return
+
+	await js("__godotAudio.assets = null; __godotAudio.GodotAudio.preload([__godotAudio.wav, __godotAudio.ogg]).then(() => { __godotAudio.assets = 'loaded'; })")
+	if not await wait_until(func(): return await js("__godotAudio.assets === 'loaded'"), "required assets to load as streams"):
+		return
+	await js("__godotAudio.GodotAudio.play(__godotAudio.ogg)")
 
 	await js("__godotAudio.music.setVolume(0.5)")
 	if not is_equal_approx(AudioServer.get_bus_volume_linear(0), 0.5):
@@ -77,4 +85,10 @@ func _run() -> void:
 	if not await js("(() => { try { __godotAudio.GodotAudio.setBusVolume('Missing', 1); return false; } catch (error) { return error.code === 'E_VALIDATION'; } })()"):
 		fail("an unknown bus did not throw E_VALIDATION")
 		return
+
+	await js("__godotAudio.GodotAudio.stopAll()")
+	if not await wait_until(func(): return not player.is_playing(), "the sounds to stop"):
+		return
+	# Godot releases a stopped voice's stream on a later mix.
+	await get_tree().create_timer(0.3).timeout
 	done()

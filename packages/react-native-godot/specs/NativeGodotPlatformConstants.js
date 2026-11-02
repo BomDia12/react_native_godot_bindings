@@ -22,6 +22,7 @@ export type PlatformConstants = {
   godotVersion: string,
   hostOS: string,
   assetScale: number,
+  projectRoot: string,
   fastRefresh?: boolean,
 };
 

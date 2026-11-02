@@ -337,7 +337,7 @@ void RNGodotAudioModule::play(jsi::Runtime &rt, jsi::String source, jsi::String 
 				return;
 			}
 			if (RNGameServices *node = services->get()) {
-				node->play_audio(path, stream, bus_name, volumeDb, pitchScale);
+				node->play_audio(stream, bus_name, volumeDb, pitchScale);
 			}
 		});
 	});

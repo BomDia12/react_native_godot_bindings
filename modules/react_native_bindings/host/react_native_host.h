@@ -21,6 +21,7 @@
 
 class ReactNativeRootView;
 class RNHostInstance;
+class RNAsyncStorageState;
 class RNThemeMetricsStore;
 class SubViewport;
 
@@ -52,6 +53,7 @@ class ReactNativeHost : public Object {
 	static ReactNativeHost *singleton;
 
 	std::shared_ptr<RNThemeMetricsStore> theme;
+	std::shared_ptr<RNAsyncStorageState> async_storage;
 	RNServiceSettings settings;
 	std::shared_ptr<RNHostInstance> instance;
 	Vector<std::shared_ptr<RNHostInstance>> retiring;

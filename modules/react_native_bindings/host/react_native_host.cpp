@@ -4,6 +4,7 @@
 #include "../components/rn_theme_metrics.h"
 #include "../root_view/react_native_root_view.h"
 #include "../singletons/react_native_file_singleton.h"
+#include "../turbomodules/rn_async_storage_module.h"
 #include "rn_host_instance.h"
 
 #include "core/config/project_settings.h"
@@ -131,6 +132,10 @@ bool ReactNativeHost::_start() {
 	RNHostInstance::Setup setup;
 	setup.settings = settings;
 	setup.theme = theme;
+	if (!async_storage) {
+		async_storage = std::make_shared<RNAsyncStorageState>();
+	}
+	setup.async_storage = async_storage;
 	setup.generation = generation;
 	setup.find_root = [this](SurfaceId p_surface) { return find_root(p_surface); };
 	setup.find_module = [this](const String &p_name) { return find_module(p_name); };
@@ -567,6 +572,7 @@ void ReactNativeHost::shutdown() {
 		retired->finish();
 	}
 	retiring.clear();
+	async_storage.reset();
 	if (frame_connected) {
 		if (SceneTree *tree = SceneTree::get_singleton()) {
 			tree->disconnect("process_frame", callable_mp(this, &ReactNativeHost::_process_frame));

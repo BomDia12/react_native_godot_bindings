@@ -73,6 +73,9 @@ func _run() -> void:
 	if not skinned.has_theme_stylebox_override("grabber_area"):
 		fail("the minimum track color did not apply")
 		return
+	if not skinned.modulate.is_equal_approx(Color.WHITE):
+		fail("the thumb tint also tinted the track")
+		return
 
 	var rect := slider.get_global_rect()
 	var y := rect.get_center().y
@@ -88,6 +91,11 @@ func _run() -> void:
 	if names.find("start") == -1 or names.find("change") == -1 or names.find("start") > names.find("complete"):
 		fail("the slider's events came out of order: %s" % [events])
 		return
+	var changes := events.filter(func(event): return event[0] == "change")
+	for index in range(1, changes.size()):
+		if is_equal_approx(changes[index][1], changes[index - 1][1]):
+			fail("onValueChange fired twice for one change: %s" % [changes])
+			return
 	if not is_equal_approx(slider.value, 0.8):
 		fail("upperLimit did not stop the drag: %s" % slider.value)
 		return

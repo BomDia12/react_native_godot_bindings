@@ -336,8 +336,9 @@ server, so Godot does the work.
 `godotThemeType` selects a Theme type variation, of `Panel` on a View and of `RichTextLabel`
 on a Text. On a View, the variation's `panel` StyleBox replaces the React Native background
 and borders. On a Text, the variation sets the font, size and color that the style leaves
-unset. Every span counts React's default `fontSize` of 14 as unset, so a Text with a theme
-type can't explicitly ask for exactly 14. Spans inherit text attributes and nothing else
+unset. Every span counts React's default `fontSize` of 14 and default black as unset, so a Text
+with a theme type can't explicitly ask for exactly those. A nested Text with a `fontFamily` of
+its own replaces the theme type for its text. Spans inherit text attributes and nothing else
 from their paragraph, so the theme type travels as a `godot-theme:` `fontFamily`, which is
 why it reaches nested spans.
 
@@ -374,6 +375,10 @@ animates `visible_ratio` with a Tween, Godot's typewriter effect, and ends with
 label on the main thread measures for layout. The JS thread waits for it unless the result
 is among the recent measurements, as it does when it first loads a font.
 
+The main thread answers these synchronous calls when it drains its queue once per frame. So
+that a loop of them doesn't take one frame each, it then waits up to 200 microseconds for the
+next call, within 4 milliseconds per frame. That's the only time it waits for JavaScript.
+
 `react-native-godot/GodotViewportView` shows a viewport GDScript registered with
 `ReactNativeHost.register_viewport(name, viewport)`, see
 [interop](interop.md#viewports). Unlike `GodotScene`, the game keeps owning the viewport,
@@ -397,23 +402,26 @@ save what `getActionEvents` returns and pass it back to `setActionEvents`.
 and `stopJoypadVibration` cover controllers.
 
 `react-native-godot/audio` plays streams with `GodotAudio.play(source, {bus, volumeDb,
-pitchScale})`, where `source` is a `res://` path or a required asset. One player serves each
-stream and bus, with `react_native/audio/max_polyphony` overlapping voices (default 8), and
-keeps playing while the tree is paused. A failed `play` is only logged, because it never
+pitchScale})`, where `source` is a `res://` path or a required asset. Under Metro a required
+asset loads from its file in the project, which the editor has imported. One polyphonic player
+serves each bus, with `react_native/audio/max_polyphony` overlapping voices (default 8), each
+with its own volume and pitch, and keeps playing while the tree is paused. A failed `play` is only logged, because it never
 holds JavaScript up. `useAudioBus(name)` and `getBuses`, `setBusVolume` and `setBusMute` read
 and write `AudioServer` buses, with linear volumes.
 
 `react-native-godot/i18n` reads Godot's translation catalogs with `tr`, `trN` and
 `useTranslation()`. `TranslationServer` isn't safe to read from another thread, so each
-string crosses to the main thread once per locale and is cached in JavaScript. A locale
+string crosses to the main thread once per locale and is cached in JavaScript, up to 2048
+strings. A locale
 changed from either side rerenders `useTranslation()`. Layout direction keeps the existing
 `I18nManager` rule and applies on the next host start.
 
 `@react-native-async-storage/async-storage` works unchanged. Each database is one JSON object
 in `user://react_native/async_storage/<name>.json`, with names limited to letters, numbers,
 `_`, `-` and `.`, and the legacy storage is under `legacy/storage.json` in that directory.
-Reads and writes run in order on a thread of their own, every write replaces the file
-atomically through a temporary one, and a reload finishes queued writes.
+Reads and writes run in order on one thread that outlives reloads, and every write replaces the
+file atomically through a temporary one, so a failed write leaves the old file. Clearing a storage
+doesn't read it, which recovers a corrupt database.
 
 ### Controls
 
@@ -450,7 +458,7 @@ until its native dismiss event.
 
 React Native flattens Views that only lay out, and it mounts a View that only draws
 without nesting its children, so a Text can be a sibling of its bordered parent View in
-the Godot tree. Views that clip, transform, change opacity, take a `godotMaterial` or set `pointerEvents` to `none` or `box-only` keep
+the Godot tree. Views that clip, transform, change opacity, take a `godotMaterial`, `tooltip`, `godotContextMenu`, drag or drop props, or set `pointerEvents` to `none` or `box-only` keep
 their children nested; `pointerEvents="none"` disables input for that Godot subtree.
 A press that opens a Godot popup, such as a `godotContextMenu` or a text input's context
 menu, hands the release to the popup, so the root cancels that mouse pointer

@@ -118,6 +118,8 @@ void RNViewComponentView::_load_material(const String &p_path) {
 			_apply_shader_parameters();
 		}
 		_apply_style();
+		// The painter of a new effect host takes the view's drag props.
+		_apply_drag();
 	});
 }
 

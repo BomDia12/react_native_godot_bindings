@@ -43,6 +43,12 @@ String RNStorageFile::load() {
 	return String();
 }
 
+String RNStorageFile::reset() {
+	values.clear();
+	loaded = true;
+	return save();
+}
+
 String RNStorageFile::save() {
 	const Error directory_error = DirAccess::make_dir_recursive_absolute(path.get_base_dir());
 	if (directory_error != OK && directory_error != ERR_ALREADY_EXISTS) {
@@ -54,7 +60,14 @@ String RNStorageFile::save() {
 		if (file.is_null()) {
 			return vformat("Could not write '%s'.", temporary);
 		}
-		file->store_string(JSON::stringify(values, "", false));
+		// A short write, as on a full disk, must not replace the good file.
+		const bool stored = file->store_string(JSON::stringify(values, "", false));
+		file->flush();
+		if (!stored || file->get_error() != OK) {
+			file.unref();
+			DirAccess::remove_absolute(temporary);
+			return vformat("Could not write '%s'.", temporary);
+		}
 	}
 	return DirAccess::rename_absolute(temporary, path) == OK ? String() : vformat("Could not replace '%s'.", path);
 }
@@ -132,8 +145,13 @@ namespace facebook::react {
 
 namespace {
 
+// Godot strings can't carry NUL, and cutting a value short would lose data silently.
 String to_godot(jsi::Runtime &rt, const jsi::String &p_string) {
-	return String::utf8(p_string.utf8(rt).c_str());
+	const std::string text = p_string.utf8(rt);
+	if (text.find('\0') != std::string::npos) {
+		rn_throw_js_error(rt, RNErrorCode::VALIDATION, "Stored strings can't contain NUL characters.");
+	}
+	return String::utf8(text.c_str());
 }
 
 std::vector<String> strings_from_js(jsi::Runtime &rt, const jsi::Array &p_array) {
@@ -180,15 +198,15 @@ RNJSValueFactory keys_value(const Dictionary &p_values) {
 // Runs p_work on the storage thread once the database is loaded, then settles
 // the promise with what p_work returns. No database name means the legacy one.
 template <typename Work>
-jsi::Value RNAsyncStorageModule::_run(jsi::Runtime &rt, const std::optional<String> &p_database, Work p_work) {
+jsi::Value RNAsyncStorageModule::_run(jsi::Runtime &rt, const std::optional<String> &p_database, Work p_work, bool p_load) {
 	if (p_database && !rn_storage_name_is_valid(*p_database)) {
 		const std::string message = vformat("'%s' is not a valid database name; use letters, numbers, '_', '-' and '.'.", *p_database).utf8().get_data();
 		return RNJSPromise::create(rt, jsInvoker_, [&message](std::shared_ptr<RNJSPromise> p_promise) { p_promise->reject(RNErrorCode::VALIDATION, message); });
 	}
-	return RNJSPromise::create(rt, jsInvoker_, [state = storage.get(), p_database, work = std::move(p_work)](std::shared_ptr<RNJSPromise> p_promise) {
-		state->thread.post([state, p_database, work, p_promise] {
+	return RNJSPromise::create(rt, jsInvoker_, [state = storage.get(), p_database, work = std::move(p_work), p_load](std::shared_ptr<RNJSPromise> p_promise) {
+		state->thread.post([state, p_database, work, p_load, p_promise] {
 			RNStorageFile &file = state->file(p_database);
-			String error = file.load();
+			String error = p_load ? file.load() : String();
 			RNJSValueFactory result;
 			if (error.is_empty()) {
 				result = work(file, error);
@@ -252,10 +270,8 @@ jsi::Value RNAsyncStorageModule::getKeys(jsi::Runtime &rt, jsi::String dbName) {
 
 jsi::Value RNAsyncStorageModule::clearStorage(jsi::Runtime &rt, jsi::String dbName) {
 	return _run(rt, to_godot(rt, dbName), [](RNStorageFile &p_file, String &r_error) {
-		p_file.get_values().clear();
-		r_error = p_file.save();
-		return no_value();
-	});
+		r_error = p_file.reset();
+		return no_value(); }, false);
 }
 
 jsi::Value RNAsyncStorageModule::legacy_multiGet(jsi::Runtime &rt, jsi::Array keys) {
@@ -311,9 +327,9 @@ jsi::Value RNAsyncStorageModule::legacy_multiMerge(jsi::Runtime &rt, jsi::Array 
 	return _run(rt, std::nullopt, [pairs = std::move(pairs)](RNStorageFile &p_file, String &r_error) {
 		for (const auto &[key, value] : pairs) {
 			const Variant next = JSON::parse_string(value);
-			const Variant current = JSON::parse_string(String(p_file.get_values().get(key, String())));
+			const Variant current = p_file.get_values().has(key) ? JSON::parse_string(p_file.get_values()[key]) : Variant();
 			if (next.get_type() == Variant::DICTIONARY && current.get_type() == Variant::DICTIONARY) {
-				p_file.get_values()[key] = JSON::stringify(rn_storage_merge(current, next), "", false);
+				p_file.get_values()[key] = JSON::stringify(rn_storage_merge(current, next), "", false, true);
 			} else {
 				p_file.get_values()[key] = value;
 			}
@@ -329,10 +345,8 @@ jsi::Value RNAsyncStorageModule::legacy_getAllKeys(jsi::Runtime &rt) {
 
 jsi::Value RNAsyncStorageModule::legacy_clear(jsi::Runtime &rt) {
 	return _run(rt, std::nullopt, [](RNStorageFile &p_file, String &r_error) {
-		p_file.get_values().clear();
-		r_error = p_file.save();
-		return no_value();
-	});
+		r_error = p_file.reset();
+		return no_value(); }, false);
 }
 
 } // namespace facebook::react

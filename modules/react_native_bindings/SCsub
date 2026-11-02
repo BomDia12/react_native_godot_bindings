@@ -42,10 +42,6 @@ env_rn.Prepend(CPPPATH=[react_native_sources.REACT_PLATFORM_DIR])
 # Godot platform headers under react_platform/ include module headers by module-relative path.
 env_rn.Append(CPPPATH=[module_dir])
 env_rn.Append(CPPDEFINES=react_native_sources.REACT_NATIVE_DEFINES)
-# These objects reach the platform's props through -isystem headers, which SCons
-# doesn't scan. A props change has to rebuild them, or they read the old layout.
-platform_headers_hash = react_native_sources.platform_headers_hash()
-env_rn.Append(CPPDEFINES=[("RN_PLATFORM_HEADERS_HASH", platform_headers_hash)])
 
 env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
 env.AppendUnique(LIBS=["hermesvm", "jsi"])
@@ -66,6 +62,10 @@ if env["react_native_autolinking"]:
 	with open(env["react_native_autolinking"], encoding="utf-8") as manifest:
 		autolinked_codegen = json.load(manifest)["codegen"]
 env_rn.Append(CXXFLAGS=["-isystem%s" % path for path in autolinked_codegen])
+# These objects reach the platform's props through -isystem headers, which SCons
+# doesn't scan. A props change has to rebuild them, or they read the old layout.
+platform_headers_hash = react_native_sources.platform_headers_hash(autolinked_codegen)
+env_rn.Append(CPPDEFINES=[("RN_PLATFORM_HEADERS_HASH", platform_headers_hash)])
 
 # Modules that extend React Native build with this environment.
 env_react_native = env_rn.Clone()

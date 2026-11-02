@@ -23,6 +23,7 @@ class RNViewportViewControl : public TextureRect {
 
 	SubViewport *_viewport() const;
 	void _resolve();
+	void _follow_viewport(SubViewport *p_viewport, bool p_follow);
 	void _registration_changed(const String &p_name);
 	void _viewport_exiting();
 	void _update_viewport_size();

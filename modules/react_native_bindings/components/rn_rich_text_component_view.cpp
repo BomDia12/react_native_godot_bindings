@@ -147,11 +147,13 @@ void RNRichTextComponentView::update_props(const Props::Shared &p_old, const Pro
 	label->set_visible_characters_behavior(TextServer::VisibleCharactersBehavior(int(next.visibleCharactersBehavior)));
 	const bool effects_changed = next.customEffects != effect_paths;
 	_load_effects(next.customEffects);
-	if (effects_changed || !old || old->bbcode != next.bbcode) {
+	const bool text_changed = !old || old->bbcode != next.bbcode;
+	if (effects_changed || text_changed) {
 		_apply_text();
 	}
-	// Only a changed prop stops a reveal, so rerenders leave it running.
-	if (!old || old->visibleRatio != next.visibleRatio) {
+	// Only new text or a changed prop stops a reveal, so rerenders leave it
+	// running. A new dialogue line starts over from the prop.
+	if (text_changed || old->visibleRatio != next.visibleRatio) {
 		host->stop_reveal();
 		label->set_visible_ratio(next.visibleRatio);
 	}

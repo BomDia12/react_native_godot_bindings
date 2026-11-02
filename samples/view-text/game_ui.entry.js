@@ -8,7 +8,7 @@ import GodotTextureProgressBar from 'react-native-godot/GodotTextureProgressBar'
 import GodotVideo from 'react-native-godot/GodotVideo';
 import GodotViewportView from 'react-native-godot/GodotViewportView';
 import {GodotAudio, useAudioBus} from 'react-native-godot/audio';
-import {getLoadedLocales, setLocale, useTranslation} from 'react-native-godot/i18n';
+import {getLoadedLocales, setLocale, tr, useTranslation} from 'react-native-godot/i18n';
 import {GodotInput, useInputAction, useLastInputDevice} from 'react-native-godot/input';
 import {useGodotDrag} from 'react-native-godot/root';
 import {color} from 'react-native-godot/values';
@@ -27,7 +27,10 @@ function GameStylingApp() {
       <View nativeID="framed" godotStyleBox="res://smoke/tests/game_styling/frame.tres" style={styles.box} />
       <View nativeID="outlined" godotThemeType="FramedPanel" style={[styles.box, styles.outline]} />
       <View nativeID="themed_filtered" godotThemeType="FramedPanel" style={[styles.box, styles.filtered]} />
-      <Pressable nativeID="tooltip" tooltip="Restores 50 HP" style={styles.box} />
+      <Pressable nativeID="tooltip" tooltip="Restores 50 HP" style={styles.box}>
+        <Text nativeID="tooltip_child">Potion</Text>
+      </Pressable>
+      <Text nativeID="title" godotThemeType="TitleText">Colored</Text>
       <Text onLayout={record('plain')}>Plain</Text>
       <Text godotThemeType="TitleText" onLayout={record('title')}>
         Title <Text>nested</Text>
@@ -64,6 +67,7 @@ const styles = StyleSheet.create({
   panBox: {width: 200, height: 200},
   minimap: {width: 100, height: 100},
   narrow: {width: 80},
+  alignStart: {alignItems: 'flex-start'},
   slider: {width: 200, height: 24},
   verticalSlider: {width: 24, height: 100},
 });
@@ -75,7 +79,11 @@ global.__godotComponents = {layouts: {}, viewportErrors: [], viewportLoads: 0, r
 function GameComponentsApp() {
   const [value, setValue] = useState(30);
   const rich = useRef(null);
+  const dialogue = useRef(null);
+  const [line, setLine] = useState('The first line of the dialogue.');
   const state = global.__godotComponents;
+  state.setLine = setLine;
+  state.revealDialogue = () => GodotRichTextCommands.reveal(dialogue.current, 1, 0.05);
   state.setValue = setValue;
   state.reveal = () => GodotRichTextCommands.reveal(rich.current, 1, 0.05);
   const record = name => event => {
@@ -110,6 +118,15 @@ function GameComponentsApp() {
         }}
       />
       <GodotRichText bbcode="Short" onLayout={record('richShort')} />
+      <View style={styles.alignStart}>
+        <GodotRichText bbcode="Effect" onLayout={record('plainWord')} />
+        <GodotRichText
+          bbcode="[smoke]Effect[/smoke]"
+          customEffects={['res://smoke/tests/game_components/wave_effect.tres']}
+          onLayout={record('effectWord')}
+        />
+      </View>
+      <GodotRichText ref={dialogue} nativeID="dialogue" bbcode={line} visibleRatio={0} />
       <View style={styles.narrow}>
         <GodotRichText bbcode={'Wrapping text. '.repeat(8)} onLayout={record('richNarrow')} />
       </View>
@@ -172,6 +189,7 @@ function GameSliderApp() {
         nativeID="skinned"
         style={styles.slider}
         thumbImage={{uri: 'res://smoke/tests/game_components/fill.png'}}
+        thumbTintColor="#00ff00"
         minimumTrackTintColor="#ff0000"
       />
       <Slider
@@ -198,7 +216,7 @@ function GameInputApp() {
 
 AppRegistry.registerComponent('GameInputApp', () => GameInputApp);
 
-global.__godotAudio = {GodotAudio, renders: 0};
+global.__godotAudio = {GodotAudio, renders: 0, wav: require('./smoke/tests/game_audio/beep.wav'), ogg: require('./smoke/tests/game_audio/beep.ogg')};
 
 function GameAudioApp() {
   const state = global.__godotAudio;
@@ -209,7 +227,7 @@ function GameAudioApp() {
 
 AppRegistry.registerComponent('GameAudioApp', () => GameAudioApp);
 
-global.__godotI18n = {setLocale, getLoadedLocales, renders: 0};
+global.__godotI18n = {setLocale, getLoadedLocales, tr, renders: 0};
 
 function GameI18nApp() {
   const {tr: translate, trN: translatePlural, locale} = useTranslation();
@@ -246,14 +264,16 @@ function GameDragApp() {
         godotDragData={{type: 'item', id: 7}}
         godotDragPreview={{uri: 'res://smoke/tests/game_components/fill.png'}}
         onGodotDragEnd={event => state.ends.push(event.nativeEvent)}
-        style={styles.dropBox}
-      />
+        style={styles.dropBox}>
+        <View nativeID="source_child" style={styles.fill} />
+      </View>
       <View
         nativeID="target"
         godotDropTypes={['item']}
         onGodotDrop={event => state.drops.push(event.nativeEvent)}
-        style={styles.dropBox}
-      />
+        style={styles.dropBox}>
+        <View nativeID="target_child" style={styles.fill} />
+      </View>
       <View nativeID="refuses" godotDropTypes={['spell']} style={styles.dropBox} />
     </View>
   );

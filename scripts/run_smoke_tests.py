@@ -19,6 +19,7 @@ from smoke_manifest import BundleGroup, ManifestError, SmokeManifest, discover_m
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IMPORT_TIMEOUT_SECONDS = 300
+LOG_TAIL_LINES = 30
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,15 @@ def run_captured(command: list[str], timeout: float, env: dict[str, str] | None 
         error.stdout, error.stderr = process.communicate()
         raise
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+# Reported as each test ends, so results reach the CI log even if the runner dies.
+def report_finished(result: SmokeResult) -> None:
+    outcome = "FAIL" if result.failures else "PASS"
+    print(f"Finished {result.test_id}: {outcome}, {result.duration:.1f}s, exit {result.exit_code}", flush=True)
+    if result.failures:
+        log = (REPO_ROOT / result.log_path).read_text(encoding="utf-8", errors="replace")
+        print("\n".join(log.splitlines()[-LOG_TAIL_LINES:]), flush=True)
 
 
 def run_bundle_command(command: list[str], cwd: Path) -> tuple[float, float]:
@@ -155,12 +165,12 @@ def run_test(
         str(repo_root / manifest.project_dir),
         manifest.scene,
     ]
-    started = time.monotonic()
     timed_out = False
     # Two Godot processes in one project directory would race on its shared .godot import
     # cache, so tests are parallel across projects and serial within one.
     with project_lock:
         print(f"Starting {manifest.id}", flush=True)
+        started = time.monotonic()
         try:
             fixture = FIXTURES[manifest.fixture.kind](repo_root, manifest.fixture.config, log_dir / (manifest.id + "-fixture")) if manifest.fixture else nullcontext()
             with fixture as server:
@@ -246,7 +256,7 @@ def main() -> int:
             try:
                 result = future.result()
                 results.append(result)
-                print(f"Finished {result.test_id} in {result.duration:.1f}s", flush=True)
+                report_finished(result)
             except Exception as error:
                 test_id = futures[future]
                 results.append(

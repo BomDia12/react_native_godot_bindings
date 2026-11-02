@@ -68,10 +68,31 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 		return module;
 	});
 	add(RNAccessibilityManagerModule::kModuleName, [host, application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAccessibilityManagerModule>(p_invoker, host, application); });
-	add(RNGodotInputModule::kModuleName, [host, services = context.game_services](const std::shared_ptr<CallInvoker> &p_invoker) { return RNGodotInputModule::create(p_invoker, host, services); });
-	add(RNGodotAudioModule::kModuleName, [host, services = context.game_services](const std::shared_ptr<CallInvoker> &p_invoker) { return RNGodotAudioModule::create(p_invoker, host, services); });
-	add(RNGodotTranslationModule::kModuleName, [host, services = context.game_services](const std::shared_ptr<CallInvoker> &p_invoker) { return RNGodotTranslationModule::create(p_invoker, host, services); });
-	add(RNAsyncStorageModule::kModuleName, [storage = std::make_shared<RNAsyncStorageState>()](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAsyncStorageModule>(p_invoker, storage); });
+	add(RNGodotInputModule::kModuleName, [host, services = context.game_services, instance = std::make_shared<std::weak_ptr<RNGodotInputModule>>()](const std::shared_ptr<CallInvoker> &p_invoker) -> std::shared_ptr<TurboModule> {
+		auto existing = instance->lock();
+		if (!existing) {
+			existing = RNGodotInputModule::create(p_invoker, host, services);
+			*instance = existing;
+		}
+		return existing;
+	});
+	add(RNGodotAudioModule::kModuleName, [host, services = context.game_services, instance = std::make_shared<std::weak_ptr<RNGodotAudioModule>>()](const std::shared_ptr<CallInvoker> &p_invoker) -> std::shared_ptr<TurboModule> {
+		auto existing = instance->lock();
+		if (!existing) {
+			existing = RNGodotAudioModule::create(p_invoker, host, services);
+			*instance = existing;
+		}
+		return existing;
+	});
+	add(RNGodotTranslationModule::kModuleName, [host, services = context.game_services, instance = std::make_shared<std::weak_ptr<RNGodotTranslationModule>>()](const std::shared_ptr<CallInvoker> &p_invoker) -> std::shared_ptr<TurboModule> {
+		auto existing = instance->lock();
+		if (!existing) {
+			existing = RNGodotTranslationModule::create(p_invoker, host, services);
+			*instance = existing;
+		}
+		return existing;
+	});
+	add(RNAsyncStorageModule::kModuleName, [storage = context.async_storage](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAsyncStorageModule>(p_invoker, storage); });
 	add(RNDevSettingsModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNDevSettingsModule>(p_invoker, host); });
 	add(SourceCodeModule::kModuleName, [url = context.source_url](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<SourceCodeModule>(p_invoker, url->get()); });
 	add(ImageLoaderModule::kModuleName, [loader = std::weak_ptr<IImageLoader>(context.image_loader)](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<ImageLoaderModule>(p_invoker, loader); });

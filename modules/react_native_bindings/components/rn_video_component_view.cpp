@@ -57,11 +57,8 @@ void RNVideoComponentView::_loaded(const Ref<Resource> &p_resource, const String
 		return;
 	}
 	video->set_stream(stream);
-	if (static_cast<const GodotVideoProps &>(*props).autoplay) {
-		video->set_autoplay(true);
-		if (video->is_inside_tree()) {
-			video->play();
-		}
+	if (video->has_autoplay() && video->is_inside_tree()) {
+		video->play();
 	}
 	if (emitter) {
 		emitter->onLoad({});
@@ -72,6 +69,7 @@ void RNVideoComponentView::update_props(const Props::Shared &p_old, const Props:
 	RNComponentView::update_props(p_old, p_new);
 	const auto &next = static_cast<const GodotVideoProps &>(*p_new);
 	video->set_expand(next.expand);
+	video->set_autoplay(next.autoplay);
 	video->set_loop(next.loop);
 	video->set_volume(next.volume);
 	video->set_bus(String::utf8(next.bus.c_str()));

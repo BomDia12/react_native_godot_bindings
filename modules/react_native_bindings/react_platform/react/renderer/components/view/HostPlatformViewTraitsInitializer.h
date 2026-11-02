@@ -5,9 +5,11 @@
 
 namespace facebook::react::HostPlatformViewTraitsInitializer {
 
-// A material shades the View's subtree, so its children can't be hoisted out of it.
+// A material shades the View's subtree, and Godot finds tooltips, drag data, drop
+// targets and context menus by walking up from the control under the pointer, so
+// these Views can't have their children hoisted out of them.
 inline bool formsStackingContext(const ViewProps &props) {
-	return !props.godotMaterial.empty();
+	return !props.godotMaterial.empty() || !props.tooltip.empty() || !props.godotDragData.isNull() || !props.godotDropTypes.isNull() || !props.godotContextMenu.empty();
 }
 
 // These Views need a Control of their own to receive focus, right clicks, hover and drags, or to paint a Godot resource.

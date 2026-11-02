@@ -40,6 +40,7 @@ class RNThemeMetricsStore;
 // One React Native runtime with the Godot services it reaches. ReactNativeHost
 // replaces the instance on a hard reload: the retired instance stops reaching
 // Godot at once and destroys its runtime on a thread of its own.
+class RNAsyncStorageState;
 class RNGameServicesHandle;
 
 class RNHostInstance {
@@ -52,6 +53,7 @@ public:
 		std::function<std::shared_ptr<const RNSceneAttachment>(const String &p_name)> find_module;
 		std::function<void(const String &p_error)> on_error;
 		std::function<void()> reload;
+		std::shared_ptr<RNAsyncStorageState> async_storage;
 	};
 
 private:

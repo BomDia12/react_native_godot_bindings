@@ -135,24 +135,53 @@ void RNSliderComponentView::_apply_appearance() {
 	}
 	const auto &next = static_cast<const RNCSliderProps &>(*props);
 	Slider *slider = host->get_slider();
-	Ref<Texture2D> thumb = thumb_texture;
-	if (thumb.is_valid() && next.thumbSize > 0 && thumb->get_size() != Size2(next.thumbSize, next.thumbSize)) {
-		Ref<Image> image = thumb->get_image();
-		if (image.is_valid()) {
-			image = image->duplicate();
-			image->resize(int(next.thumbSize), int(next.thumbSize));
-			thumb = ImageTexture::create_from_image(image);
-		}
-	}
-	for (const char *icon : { "grabber", "grabber_highlight", "grabber_disabled" }) {
-		override_icon(slider, icon, thumb);
-	}
+	_apply_thumb(slider, next);
 	const Ref<StyleBox> minimum_track = track_style(minimum_track_texture, next.minimumTrackTintColor);
 	const Ref<Texture2D> background = maximum_track_texture.is_valid() ? maximum_track_texture : track_texture;
 	override_style(slider, SNAME("slider"), track_style(background, next.maximumTrackTintColor));
 	override_style(slider, SNAME("grabber_area"), minimum_track);
 	override_style(slider, SNAME("grabber_area_highlight"), minimum_track);
-	slider->set_modulate(rn_godot_color(next.thumbTintColor, ::Color(1, 1, 1)));
+}
+
+// Resizing and tinting read the image back and upload a new texture, so a dragged
+// slider, which gets new props on every tick, only does it when an input changed.
+void RNSliderComponentView::_apply_thumb(Slider *p_slider, const RNCSliderProps &p_props) {
+	const ::Color no_tint(1, 1, 1);
+	const ::Color tint = rn_godot_color(p_props.thumbTintColor, no_tint);
+	if (p_slider->get_instance_id() == thumb_slider && thumb_texture == thumb_source && p_props.thumbSize == thumb_built_size && tint == thumb_built_tint) {
+		return;
+	}
+	thumb_slider = p_slider->get_instance_id();
+	thumb_source = thumb_texture;
+	thumb_built_size = p_props.thumbSize;
+	thumb_built_tint = tint;
+	const StringName icons[] = { SNAME("grabber"), SNAME("grabber_highlight"), SNAME("grabber_disabled") };
+	for (const StringName &icon : icons) {
+		p_slider->remove_theme_icon_override(icon);
+	}
+	const bool resizes = p_props.thumbSize > 0;
+	for (const StringName &icon : icons) {
+		Ref<Texture2D> base = thumb_texture.is_valid() ? thumb_texture : p_slider->get_theme_icon(icon);
+		Ref<Image> image = (resizes || tint != no_tint) && base.is_valid() ? base->get_image() : Ref<Image>();
+		if (image.is_null()) {
+			override_icon(p_slider, icon, thumb_texture);
+			continue;
+		}
+		image = image->duplicate();
+		if (image->is_compressed()) {
+			image->decompress();
+		}
+		image->convert(Image::FORMAT_RGBA8);
+		if (resizes) {
+			image->resize(int(p_props.thumbSize), int(p_props.thumbSize));
+		}
+		for (int y = 0; y < image->get_height(); ++y) {
+			for (int x = 0; x < image->get_width(); ++x) {
+				image->set_pixel(x, y, image->get_pixel(x, y) * tint);
+			}
+		}
+		override_icon(p_slider, icon, ImageTexture::create_from_image(image));
+	}
 }
 
 // Godot sliders can't run backwards, so an inverted slider shows the mirrored value.
@@ -208,7 +237,7 @@ void RNSliderComponentView::update_event_emitter(const EventEmitter::Shared &p_e
 					host->get_slider()->set_value_no_signal(_slider_value(clamped));
 				}
 				const Float value = Float(clamped);
+				// The package's JS sends onChange to the same handler, so one event is enough.
 				emitter->onRNCSliderValueChange({ .value = value, .fromUser = true });
-				emitter->onChange({ .value = value, .fromUser = true });
 			});
 }

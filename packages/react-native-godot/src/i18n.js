@@ -3,13 +3,24 @@
 import {useEffect, useMemo, useState} from 'react';
 import NativeGodotTranslation from '../specs/NativeGodotTranslation';
 
-// Each string crosses to the main thread once per locale.
+// Each string crosses to the main thread once per locale, up to a limit that keeps
+// counters and interpolated text from growing the cache for as long as a locale lasts.
+const MAX_CACHED_TRANSLATIONS = 2048;
 let translations = new Map();
+
+// Subscribed once for the whole bundle, so nothing reads old strings when GDScript
+// changes the locale while no component is listening.
+NativeGodotTranslation.onLocaleChanged(() => {
+  translations = new Map();
+});
 
 function cached(key, translate) {
   let value = translations.get(key);
   if (value === undefined) {
     value = translate();
+    if (translations.size >= MAX_CACHED_TRANSLATIONS) {
+      translations = new Map();
+    }
     translations.set(key, value);
   }
   return value;
@@ -32,10 +43,7 @@ export function setLocale(locale) {
 }
 
 export function onLocaleChanged(handler) {
-  return NativeGodotTranslation.onLocaleChanged(locale => {
-    translations = new Map();
-    handler(locale);
-  });
+  return NativeGodotTranslation.onLocaleChanged(handler);
 }
 
 export function useTranslation() {

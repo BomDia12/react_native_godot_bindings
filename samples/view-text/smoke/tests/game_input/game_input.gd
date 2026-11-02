@@ -38,20 +38,57 @@ func press(keycode: Key, pressed: bool) -> void:
 	key.physical_keycode = keycode
 	key.unicode = keycode if keycode == KEY_SPACE else 0
 	key.pressed = pressed
-	get_viewport().push_input(key)
+	Input.parse_input_event(key)
+	Input.flush_buffered_events()
+
+func services() -> Node:
+	for child in get_tree().root.get_children(true):
+		if child.name == "RNGameServices":
+			return child
+	return null
+
+# One event can't say what state an action is in.
+func check_action_state() -> void:
+	await js("__godotInput.actions.length = 0")
+	press(KEY_SPACE, true)
+	var motion := InputEventJoypadMotion.new()
+	motion.axis = JOY_AXIS_LEFT_X
+	motion.axis_value = 0.1
+	Input.parse_input_event(motion)
+	Input.flush_buffered_events()
+	await get_tree().create_timer(0.1).timeout
+	var held: Array = await js("__godotInput.actions")
+	if held.size() != 1 or not held[0].pressed:
+		fail("a small stick move released an action a key still holds: %s" % [held])
+		return
+	# Godot forgets pressed keys when focus leaves, and sends no release.
+	services().notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	Input.action_release("smoke_jump")
+	if not await wait_until(func(): return await js("__godotInput.actions.length === 2 && !__godotInput.actions[1].pressed"), "the release when focus leaves"):
+		return
+	press(KEY_SPACE, true)
+	if not await wait_until(func(): return await js("__godotInput.actions.length === 3 && __godotInput.actions[2].pressed"), "the press after focus returns"):
+		return
+	press(KEY_SPACE, false)
+	await get_tree().create_timer(0.1).timeout
 
 func _run() -> void:
-	InputMap.add_action("smoke_jump")
+	InputMap.add_action("smoke_jump", 0.5)
 	var space := InputEventKey.new()
 	space.physical_keycode = KEY_SPACE
 	InputMap.action_add_event("smoke_jump", space)
+	var stick := InputEventJoypadMotion.new()
+	stick.axis = JOY_AXIS_LEFT_X
+	stick.axis_value = 1.0
+	stick.device = -1
+	InputMap.action_add_event("smoke_jump", stick)
 	if not await wait_until(func(): return root.get_native_node("field") != null and await js("__godotInput.device === 'keyboard'"), "the app to mount"):
 		return
 	if not await js("__godotInput.GodotInput.getActions().includes('smoke_jump')"):
 		fail("getActions does not list the action")
 		return
 	var listed: Array = await js("__godotInput.GodotInput.getActionEvents('smoke_jump')")
-	if listed.size() != 1 or listed[0].type != "key" or int(listed[0].physicalKeycode) != KEY_SPACE:
+	if listed.size() != 2 or listed[0].type != "key" or int(listed[0].physicalKeycode) != KEY_SPACE:
 		fail("getActionEvents returned %s" % [listed])
 		return
 
@@ -67,6 +104,7 @@ func _run() -> void:
 		fail("the action events are wrong: %s" % [actions])
 		return
 
+	await check_action_state()
 	var editor: Control = root.get_native_node("field").find_children("*", "LineEdit", true, false)[0]
 	editor.grab_focus()
 	await get_tree().process_frame
@@ -101,7 +139,8 @@ func _run() -> void:
 	var joypad := InputEventJoypadButton.new()
 	joypad.button_index = JOY_BUTTON_A
 	joypad.pressed = true
-	get_viewport().push_input(joypad)
+	Input.parse_input_event(joypad)
+	Input.flush_buffered_events()
 	if not await wait_until(func(): return await js("__godotInput.device === 'joypad'"), "the last device to change"):
 		return
 	if not await js("(() => { try { __godotInput.GodotInput.getActionEvents('missing'); return false; } catch (error) { return error.code === 'E_VALIDATION'; } })()"):

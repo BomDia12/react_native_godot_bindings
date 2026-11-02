@@ -29,6 +29,8 @@ public:
 	// Both return an error message, which is empty on success.
 	String load();
 	String save();
+	// Starts empty without reading the file, so a corrupt database can be cleared.
+	String reset();
 	Dictionary &get_values() { return values; }
 };
 
@@ -46,9 +48,10 @@ public:
 	void post(std::function<void()> p_task);
 };
 
-// The databases of one runtime. Module lookups can make several module instances,
-// which must read each other's writes. Only the storage thread reads the
-// databases, and it stops before they go.
+// The databases of the application. Runtimes share them, because an old runtime
+// can still be writing while its reload starts the next one, and module lookups can
+// make several instances. Only the storage thread reads the databases, and it stops
+// before they go.
 class RNAsyncStorageState {
 	std::map<std::string, std::unique_ptr<RNStorageFile>> databases;
 
@@ -68,7 +71,7 @@ class RNAsyncStorageModule : public NativeAsyncStorageCxxSpec<RNAsyncStorageModu
 	std::shared_ptr<RNAsyncStorageState> storage;
 
 	template <typename Work>
-	jsi::Value _run(jsi::Runtime &rt, const std::optional<String> &p_database, Work p_work);
+	jsi::Value _run(jsi::Runtime &rt, const std::optional<String> &p_database, Work p_work, bool p_load = true);
 
 public:
 	RNAsyncStorageModule(std::shared_ptr<CallInvoker> jsInvoker, std::shared_ptr<RNAsyncStorageState> p_storage);

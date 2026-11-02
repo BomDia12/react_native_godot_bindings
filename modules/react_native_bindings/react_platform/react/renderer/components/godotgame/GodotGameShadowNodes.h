@@ -11,6 +11,8 @@
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 #include <react/renderer/core/LayoutConstraints.h>
 
+#include <cstring>
+
 namespace facebook::react {
 
 constexpr const char *GODOT_THEME_METRICS_KEY = "GodotThemeMetrics";
@@ -22,7 +24,16 @@ class GodotThemeSizedShadowNode final : public ConcreteViewShadowNode<ComponentN
 	using Base = ConcreteViewShadowNode<ComponentName, PropsType, EmitterType>;
 
 public:
-	using Base::Base;
+	GodotThemeSizedShadowNode(const ShadowNodeFragment &fragment, const ShadowNodeFamily::Shared &family, ShadowNodeTraits traits) :
+			Base(fragment, family, traits) {}
+	GodotThemeSizedShadowNode(const ShadowNode &source, const ShadowNodeFragment &fragment) :
+			Base(source, fragment) {
+		const auto &previous = static_cast<const PropsType &>(*source.getProps());
+		const PropsType &next = this->getConcreteProps();
+		if (previous.godotThemeType != next.godotThemeType || strcmp(ThemeClass(previous), ThemeClass(next)) != 0) {
+			this->dirtyLayout();
+		}
+	}
 
 	static ShadowNodeTraits BaseTraits() {
 		auto traits = Base::BaseTraits();

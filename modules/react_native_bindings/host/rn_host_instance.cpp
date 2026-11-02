@@ -263,6 +263,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	modules.host_events = host_events;
 	modules.image_loader = image_loader;
 	modules.game_services = game_services;
+	modules.async_storage = p_setup.async_storage;
 	modules.extensions = RNExtensionRegistry::get_turbo_modules();
 
 	ReactInstanceConfig config;

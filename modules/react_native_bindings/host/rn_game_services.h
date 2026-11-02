@@ -27,12 +27,6 @@ public:
 	using CaptureCallback = std::function<void(const Ref<InputEvent> &p_event)>;
 
 private:
-	struct PlayerKey {
-		String stream;
-		StringName bus;
-		bool operator==(const PlayerKey &p_other) const { return stream == p_other.stream && bus == p_other.bus; }
-		static uint32_t hash(const PlayerKey &p_key) { return p_key.stream.hash() ^ String(p_key.bus).hash(); }
-	};
 	HashMap<StringName, int> watched_actions;
 	HashMap<StringName, bool> pressed_actions;
 	String last_device = "keyboard";
@@ -44,11 +38,13 @@ private:
 	JoypadsCallback joypads_changed;
 	TranslationCallback translation_changed;
 	BusesCallback buses_changed;
-	HashMap<PlayerKey, AudioStreamPlayer *, PlayerKey> players;
+	// One per bus. Polyphonic streams keep each voice's volume and pitch its own.
+	HashMap<StringName, AudioStreamPlayer *> players;
 	RichTextLabel *measuring_label = nullptr;
 
 	void _joy_connection_changed(int p_device, bool p_connected);
 	void _buses_changed();
+	void _release_pressed_actions();
 
 protected:
 	static void _bind_methods() {}
@@ -71,7 +67,7 @@ public:
 
 	void set_buses_callback(BusesCallback p_changed) { buses_changed = std::move(p_changed); }
 	void notify_buses_changed() { _buses_changed(); }
-	void play_audio(const String &p_path, const Ref<AudioStream> &p_stream, const StringName &p_bus, float p_volume_db, float p_pitch_scale);
+	void play_audio(const Ref<AudioStream> &p_stream, const StringName &p_bus, float p_volume_db, float p_pitch_scale);
 	void stop_audio(const StringName &p_bus);
 
 	RichTextLabel *get_measuring_label();

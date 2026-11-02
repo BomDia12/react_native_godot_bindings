@@ -60,4 +60,12 @@ func _run() -> void:
 	TranslationServer.set_locale("en")
 	if not await wait_until(func(): return await js("__godotI18n.greeting === 'Hello'"), "a locale set from GDScript to rerender"):
 		return
+	# Nothing listens any more, and tr() must still not read old strings.
+	root.queue_free()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await js("__godotI18n.tr('GREETING')")
+	TranslationServer.set_locale("pt_BR")
+	if not await wait_until(func(): return (await js("__godotI18n.tr('GREETING')")) == "Ola", "tr() to follow a locale nothing is listening to"):
+		return
 	done()

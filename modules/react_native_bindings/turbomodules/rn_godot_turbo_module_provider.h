@@ -11,6 +11,8 @@
 #include <react/nativemodule/TurboModuleProvider.h>
 
 #include <map>
+
+class RNAsyncStorageState;
 #include <mutex>
 #include <string>
 
@@ -45,6 +47,7 @@ struct RNTurboModuleContext {
 	std::shared_ptr<RNGodotHostEvents> host_events;
 	std::shared_ptr<IImageLoader> image_loader;
 	std::shared_ptr<RNGameServicesHandle> game_services;
+	std::shared_ptr<RNAsyncStorageState> async_storage;
 	std::map<std::string, RNTurboModuleFactory> extensions;
 	std::shared_ptr<RNSourceURL> source_url = std::make_shared<RNSourceURL>();
 	bool fast_refresh = true;

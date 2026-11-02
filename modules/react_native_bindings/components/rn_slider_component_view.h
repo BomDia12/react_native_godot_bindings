@@ -5,6 +5,8 @@
 
 #include "scene/gui/slider.h"
 
+#include <react/renderer/components/RNCSlider/Props.h>
+
 #include <functional>
 
 template <typename SliderType>
@@ -64,8 +66,12 @@ class RNSliderComponentView : public RNComponentView {
 	Ref<Texture2D> track_texture;
 	Ref<Texture2D> minimum_track_texture;
 	Ref<Texture2D> maximum_track_texture;
-	double thumb_size = 0;
+	ObjectID thumb_slider;
+	Ref<Texture2D> thumb_source;
+	float thumb_built_size = 0;
+	Color thumb_built_tint;
 
+	void _apply_thumb(Slider *p_slider, const facebook::react::RNCSliderProps &p_props);
 	void _set_texture(int p_slot, const Ref<Texture2D> &p_texture);
 	void _apply_appearance();
 	double _react_value(double p_slider_value) const;

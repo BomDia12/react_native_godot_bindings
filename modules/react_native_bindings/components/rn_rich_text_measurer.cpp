@@ -3,6 +3,8 @@
 #include "../host/rn_game_services.h"
 #include "../host/rn_main_thread_queue.h"
 
+#include "core/io/resource_loader.h"
+#include "scene/gui/rich_text_effect.h"
 #include "scene/gui/rich_text_label.h"
 
 #include <cmath>
@@ -32,9 +34,9 @@ RNRichTextMeasurer::RNRichTextMeasurer(std::shared_ptr<RNMainThreadQueue> p_main
 		main_thread(std::move(p_main_thread)), services(std::move(p_services)) {
 }
 
-Size2 RNRichTextMeasurer::measure(const String &p_bbcode, const std::string &p_theme_type, const std::shared_ptr<const RNThemeMetrics> &p_metrics, float p_max_width) {
+Size2 RNRichTextMeasurer::measure(const String &p_bbcode, const std::vector<std::string> &p_effects, const std::string &p_theme_type, const std::shared_ptr<const RNThemeMetrics> &p_metrics, float p_max_width) {
 	const float width = std::isfinite(p_max_width) ? p_max_width : UNBOUNDED_WIDTH;
-	const Key key(p_bbcode.utf8().get_data(), p_theme_type, width, p_metrics.get());
+	const Key key(p_bbcode.utf8().get_data(), p_effects, p_theme_type, width, p_metrics->revision);
 	{
 		std::lock_guard lock(mutex);
 		for (auto entry = recent.begin(); entry != recent.end(); ++entry) {
@@ -54,6 +56,19 @@ Size2 RNRichTextMeasurer::measure(const String &p_bbcode, const std::string &p_t
 		RichTextLabel *label = node->get_measuring_label();
 		apply_theme(label, type);
 		label->set_size(Size2(width, 1));
+		// Tags of effects that aren't installed count as literal text.
+		if (installed_effects != p_effects) {
+			installed_effects = p_effects;
+			Array effects;
+			for (const std::string &path : p_effects) {
+				const Ref<RichTextEffect> effect = ResourceLoader::load(String::utf8(path.c_str()));
+				if (effect.is_valid()) {
+					effects.push_back(effect);
+				}
+			}
+			label->set_effects(effects);
+			label->set_text(String());
+		}
 		label->set_text(p_bbcode);
 		const Size2 margins = type.rich_style.is_valid() ? type.rich_style->get_minimum_size() : Size2();
 		size = Size2(label->get_content_width(), label->get_content_height()) + margins;

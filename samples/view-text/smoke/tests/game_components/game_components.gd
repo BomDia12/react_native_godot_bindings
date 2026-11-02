@@ -88,6 +88,21 @@ func _check_rich_text() -> bool:
 	if label.custom_effects.size() != 1 or label.get_parsed_text().contains("[smoke]"):
 		fail("the custom effect's tag did not parse: %s" % label.get_parsed_text())
 		return false
+	var plain_word: float = await js("__godotComponents.layouts.plainWord.width")
+	var effect_word: float = await js("__godotComponents.layouts.effectWord.width")
+	if not is_equal_approx(plain_word, effect_word):
+		fail("a custom effect's tags were measured as text: %s against %s" % [effect_word, plain_word])
+		return false
+	var dialogue: RichTextLabel = root.get_native_node("dialogue")
+	await js("__godotComponents.revealDialogue()")
+	if not await wait_until(func(): return is_equal_approx(dialogue.visible_ratio, 1.0), "the dialogue to reveal"):
+		return false
+	await js("__godotComponents.setLine('The second line starts over.')")
+	if not await wait_until(func(): return dialogue.get_parsed_text().begins_with("The second"), "the next dialogue line"):
+		return false
+	if not is_equal_approx(dialogue.visible_ratio, 0.0):
+		fail("new dialogue text kept the last reveal: %s" % dialogue.visible_ratio)
+		return false
 	await js("__godotComponents.reveal()")
 	if not await wait_until(func(): return await js("__godotComponents.revealed === 1"), "the reveal to finish"):
 		return false
