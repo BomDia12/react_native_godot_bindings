@@ -103,6 +103,10 @@ func _check_rich_text() -> bool:
 	if not is_equal_approx(dialogue.visible_ratio, 0.0):
 		fail("new dialogue text kept the last reveal: %s" % dialogue.visible_ratio)
 		return false
+	var half: RichTextLabel = root.get_native_node("half")
+	if half.visible_characters != int(half.get_total_character_count() * 0.5):
+		fail("a partial ratio kept the old text's character count: %s of %s" % [half.visible_characters, half.get_total_character_count()])
+		return false
 	await js("__godotComponents.reveal()")
 	if not await wait_until(func(): return await js("__godotComponents.revealed === 1"), "the reveal to finish"):
 		return false
@@ -137,6 +141,21 @@ func _check_viewport() -> bool:
 		return false
 	if not pointer_position.is_equal_approx(Vector2(10, 20)):
 		fail("the forwarded click landed at %s" % pointer_position)
+		return false
+	# The name moves on while its viewport is away, and the old one can't affect it after.
+	var minimap: SubViewport = $Minimap
+	remove_child(minimap)
+	if not await wait_until(func(): return view.texture == null, "the view to clear when its viewport leaves"):
+		return false
+	ReactNativeHost.register_viewport("minimap", $Other)
+	if not await wait_until(func(): return view.texture == $Other.get_texture(), "the name to move to another viewport"):
+		return false
+	add_child(minimap)
+	remove_child(minimap)
+	add_child(minimap)
+	await get_tree().process_frame
+	if view.texture != $Other.get_texture():
+		fail("a viewport the name left still changes the view")
 		return false
 	ReactNativeHost.unregister_viewport("minimap")
 	if not await wait_until(func(): return view.texture == null, "the viewport to clear"):

@@ -61,9 +61,15 @@ func check_action_state() -> void:
 	if held.size() != 1 or not held[0].pressed:
 		fail("a small stick move released an action a key still holds: %s" % [held])
 		return
-	# Godot forgets pressed keys when focus leaves, and sends no release.
-	services().notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	# Focus moving to another window of the game holds the key.
+	services().notification(Node.NOTIFICATION_WM_WINDOW_FOCUS_OUT)
+	await get_tree().create_timer(0.1).timeout
+	if await js("__godotInput.actions.length") != 1:
+		fail("focus moving between windows released a held action")
+		return
+	# The application losing focus forgets pressed keys, and sends no release.
 	Input.action_release("smoke_jump")
+	services().notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 	if not await wait_until(func(): return await js("__godotInput.actions.length === 2 && !__godotInput.actions[1].pressed"), "the release when focus leaves"):
 		return
 	press(KEY_SPACE, true)

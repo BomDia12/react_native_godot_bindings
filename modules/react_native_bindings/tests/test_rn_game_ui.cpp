@@ -8,6 +8,12 @@
 #include "scene/resources/style_box_flat.h"
 #include "tests/test_macros.h"
 
+#ifdef UNIX_ENABLED
+#include <sys/resource.h>
+
+#include <csignal>
+#endif
+
 namespace TestRNGameUI {
 
 TEST_CASE("[ReactNativeBindings][GameUI] input events round trip through their JavaScript form") {
@@ -126,6 +132,37 @@ TEST_CASE("[ReactNativeBindings][GameUI] storage files replace themselves and re
 	DirAccess::remove_absolute(path);
 	DirAccess::remove_absolute("user://rn_game_ui_test");
 }
+
+#ifdef UNIX_ENABLED
+TEST_CASE("[ReactNativeBindings][GameUI] a write the disk cuts short keeps the old file") {
+	const String path = "user://rn_game_ui_short_write/settings.json";
+	RNStorageFile file(path);
+	CHECK(file.load().is_empty());
+	file.get_values()["volume"] = "0.5";
+	CHECK(file.save().is_empty());
+	// Under stdio's buffer, so the failure only happens when the file closes.
+	file.get_values()["long"] = String("x").repeat(3000);
+
+	struct rlimit original;
+	getrlimit(RLIMIT_FSIZE, &original);
+	struct rlimit limited = original;
+	limited.rlim_cur = 1024;
+	const sighandler_t previous = signal(SIGXFSZ, SIG_IGN);
+	setrlimit(RLIMIT_FSIZE, &limited);
+	const String error = file.save();
+	setrlimit(RLIMIT_FSIZE, &original);
+	signal(SIGXFSZ, previous);
+
+	CHECK_FALSE(error.is_empty());
+	CHECK_FALSE(FileAccess::exists(path + ".tmp"));
+	RNStorageFile kept(path);
+	CHECK(kept.load().is_empty());
+	CHECK(String(kept.get_values()["volume"]) == "0.5");
+	CHECK_FALSE(kept.get_values().has("long"));
+	DirAccess::remove_absolute(path);
+	DirAccess::remove_absolute("user://rn_game_ui_short_write");
+}
+#endif
 
 TEST_CASE("[ReactNativeBindings][GameUI] shader parameters and drag data read Godot value wrappers") {
 	folly::dynamic color = folly::dynamic::object("$godot", "Color")("r", 1)("g", 0.5)("b", 0);

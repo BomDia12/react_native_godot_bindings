@@ -7,6 +7,8 @@
 #include "core/io/file_access.h"
 #include "core/io/json.h"
 
+#include <future>
+
 namespace {
 
 constexpr const char *STORAGE_DIRECTORY = "user://react_native/async_storage";
@@ -55,19 +57,20 @@ String RNStorageFile::save() {
 		return vformat("Could not create '%s'.", path.get_base_dir());
 	}
 	const String temporary = path + ".tmp";
+	const String text = JSON::stringify(values, "", false);
 	{
 		Ref<FileAccess> file = FileAccess::open(temporary, FileAccess::WRITE);
 		if (file.is_null()) {
 			return vformat("Could not write '%s'.", temporary);
 		}
-		// A short write, as on a full disk, must not replace the good file.
-		const bool stored = file->store_string(JSON::stringify(values, "", false));
-		file->flush();
-		if (!stored || file->get_error() != OK) {
-			file.unref();
-			DirAccess::remove_absolute(temporary);
-			return vformat("Could not write '%s'.", temporary);
-		}
+		file->store_string(text);
+	}
+	// A short write, as on a full disk, must not replace the good file. Nothing
+	// reports one that fails when the file closes, so this reads back the size.
+	const Ref<FileAccess> written = FileAccess::open(temporary, FileAccess::READ);
+	if (written.is_null() || written->get_length() != uint64_t(text.utf8().length())) {
+		DirAccess::remove_absolute(temporary);
+		return vformat("Could not write all of '%s'.", temporary);
 	}
 	return DirAccess::rename_absolute(temporary, path) == OK ? String() : vformat("Could not replace '%s'.", path);
 }
@@ -113,6 +116,12 @@ RNStorageFile &RNAsyncStorageState::file(const std::optional<String> &p_database
 		found = std::make_unique<RNStorageFile>(path);
 	}
 	return *found;
+}
+
+void RNStorageThread::wait_until_idle() {
+	std::promise<void> done;
+	post([&done] { done.set_value(); });
+	done.get_future().wait();
 }
 
 bool rn_storage_name_is_valid(const String &p_name) {

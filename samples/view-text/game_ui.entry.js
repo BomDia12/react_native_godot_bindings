@@ -127,6 +127,7 @@ function GameComponentsApp() {
         />
       </View>
       <GodotRichText ref={dialogue} nativeID="dialogue" bbcode={line} visibleRatio={0} />
+      <GodotRichText nativeID="half" bbcode={line} visibleRatio={0.5} />
       <View style={styles.narrow}>
         <GodotRichText bbcode={'Wrapping text. '.repeat(8)} onLayout={record('richNarrow')} />
       </View>

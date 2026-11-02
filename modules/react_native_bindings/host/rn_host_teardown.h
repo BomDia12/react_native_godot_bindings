@@ -16,6 +16,8 @@ class GodotTimerRegistry;
 class ReactHost;
 } // namespace facebook::react
 
+class RNAsyncStorageState;
+
 // One upstream runtime, with the handles that stop it while JavaScript may
 // still be running. The JS thread publishes the Hermes pointer once the
 // runtime is initialized.
@@ -34,6 +36,7 @@ struct RNHostRuntime {
 class RNHostTeardown {
 	RNHostRuntime &runtime;
 	std::vector<facebook::react::SurfaceId> surfaces;
+	std::shared_ptr<RNAsyncStorageState> async_storage;
 	std::atomic<bool> finished = false;
 	std::thread thread;
 
@@ -41,7 +44,7 @@ class RNHostTeardown {
 	void _wait_until_idle();
 
 public:
-	RNHostTeardown(RNHostRuntime &p_runtime, std::vector<facebook::react::SurfaceId> p_surfaces);
+	RNHostTeardown(RNHostRuntime &p_runtime, std::vector<facebook::react::SurfaceId> p_surfaces, std::shared_ptr<RNAsyncStorageState> p_async_storage);
 	~RNHostTeardown();
 
 	bool is_finished() const { return finished; }

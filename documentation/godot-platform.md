@@ -405,7 +405,8 @@ and `stopJoypadVibration` cover controllers.
 pitchScale})`, where `source` is a `res://` path or a required asset. Under Metro a required
 asset loads from its file in the project, which the editor has imported. One polyphonic player
 serves each bus, with `react_native/audio/max_polyphony` overlapping voices (default 8), each
-with its own volume and pitch, and keeps playing while the tree is paused. A failed `play` is only logged, because it never
+with its own volume and pitch, and keeps playing while the tree is paused. All sounds on a bus
+share those voices, and a sound played with none free is dropped with an `E_LIMIT` warning. A failed `play` is only logged, because it never
 holds JavaScript up. `useAudioBus(name)` and `getBuses`, `setBusVolume` and `setBusMute` read
 and write `AudioServer` buses, with linear volumes.
 

@@ -61,6 +61,7 @@ private:
 	std::atomic<bool> retired = false;
 	std::shared_ptr<RNMainThreadQueue> main_thread;
 	std::shared_ptr<RNGameServicesHandle> game_services;
+	std::shared_ptr<RNAsyncStorageState> async_storage;
 	std::shared_ptr<RNTextShaper> shaper;
 	std::shared_ptr<RNGodotApplication> application;
 	std::shared_ptr<RNBlobService> blobs;

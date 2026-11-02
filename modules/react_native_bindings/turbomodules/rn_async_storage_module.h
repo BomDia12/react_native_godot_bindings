@@ -46,6 +46,8 @@ class RNStorageThread {
 public:
 	~RNStorageThread();
 	void post(std::function<void()> p_task);
+	// Queued work holds JS promises, which must not outlive their runtime.
+	void wait_until_idle();
 };
 
 // The databases of the application. Runtimes share them, because an old runtime

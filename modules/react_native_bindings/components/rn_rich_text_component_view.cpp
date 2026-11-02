@@ -155,6 +155,9 @@ void RNRichTextComponentView::update_props(const Props::Shared &p_old, const Pro
 	// running. A new dialogue line starts over from the prop.
 	if (text_changed || old->visibleRatio != next.visibleRatio) {
 		host->stop_reveal();
+		// Setting an unchanged ratio does nothing, and would keep the old text's
+		// character count.
+		label->set_visible_characters(-1);
 		label->set_visible_ratio(next.visibleRatio);
 	}
 }

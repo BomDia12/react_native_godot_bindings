@@ -263,7 +263,8 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	modules.host_events = host_events;
 	modules.image_loader = image_loader;
 	modules.game_services = game_services;
-	modules.async_storage = p_setup.async_storage;
+	async_storage = p_setup.async_storage;
+	modules.async_storage = async_storage;
 	modules.extensions = RNExtensionRegistry::get_turbo_modules();
 
 	ReactInstanceConfig config;
@@ -634,7 +635,7 @@ void RNHostInstance::retire(std::vector<SurfaceId> p_surfaces) {
 	if (GodotAlerts *alerts = GodotAlerts::get_singleton()) {
 		alerts->clear_presenters();
 	}
-	teardown = std::make_unique<RNHostTeardown>(runtime, std::move(p_surfaces));
+	teardown = std::make_unique<RNHostTeardown>(runtime, std::move(p_surfaces), async_storage);
 }
 
 bool RNHostInstance::is_finished() const {

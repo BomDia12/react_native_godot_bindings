@@ -15,6 +15,7 @@ class RNViewportViewControl : public TextureRect {
 
 	String viewport_name;
 	ObjectID shown;
+	ObjectID followed;
 	bool match_size = false;
 	bool forward_input = false;
 	bool resolved = false;
@@ -23,7 +24,7 @@ class RNViewportViewControl : public TextureRect {
 
 	SubViewport *_viewport() const;
 	void _resolve();
-	void _follow_viewport(SubViewport *p_viewport, bool p_follow);
+	void _follow_viewport(SubViewport *p_viewport);
 	void _registration_changed(const String &p_name);
 	void _viewport_exiting();
 	void _update_viewport_size();

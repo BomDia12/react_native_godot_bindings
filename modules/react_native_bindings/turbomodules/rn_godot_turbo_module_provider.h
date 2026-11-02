@@ -11,10 +11,10 @@
 #include <react/nativemodule/TurboModuleProvider.h>
 
 #include <map>
-
-class RNAsyncStorageState;
 #include <mutex>
 #include <string>
+
+class RNAsyncStorageState;
 
 namespace facebook::react {
 

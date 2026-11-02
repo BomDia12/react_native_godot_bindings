@@ -59,8 +59,7 @@ void RNGameServices::_notification(int p_what) {
 			Input::get_singleton()->disconnect("joy_connection_changed", callable_mp(this, &RNGameServices::_joy_connection_changed));
 			AudioServer::get_singleton()->disconnect("bus_layout_changed", callable_mp(this, &RNGameServices::_buses_changed));
 		} break;
-		case NOTIFICATION_APPLICATION_FOCUS_OUT:
-		case NOTIFICATION_WM_WINDOW_FOCUS_OUT: {
+		case NOTIFICATION_APPLICATION_FOCUS_OUT: {
 			_release_pressed_actions();
 		} break;
 		case NOTIFICATION_TRANSLATION_CHANGED: {
@@ -144,20 +143,20 @@ void RNGameServices::unhandled_input(const Ref<InputEvent> &p_event) {
 	}
 }
 
-// Godot forgets pressed keys when focus leaves, without sending their releases.
+// Godot forgets pressed keys when the application loses focus, without sending
+// their releases, and has done so by now. A held joypad can stay pressed.
 void RNGameServices::_release_pressed_actions() {
 	Vector<StringName> released;
 	for (const KeyValue<StringName, bool> &action : pressed_actions) {
-		if (action.value) {
+		if (action.value && !Input::get_singleton()->is_action_pressed(action.key)) {
 			released.push_back(action.key);
 		}
 	}
-	pressed_actions.clear();
-	if (!action_changed) {
-		return;
-	}
 	for (const StringName &action : released) {
-		action_changed(action, false, 0, false);
+		pressed_actions.erase(action);
+		if (action_changed) {
+			action_changed(action, false, 0, false);
+		}
 	}
 }
 
@@ -191,7 +190,9 @@ void RNGameServices::play_audio(const Ref<AudioStream> &p_stream, const StringNa
 	}
 	const Ref<AudioStreamPlaybackPolyphonic> playback = player->get_stream_playback();
 	ERR_FAIL_COND(playback.is_null());
-	playback->play_stream(p_stream, 0, p_volume_db, p_pitch_scale, AudioServer::PLAYBACK_TYPE_DEFAULT, p_bus);
+	if (playback->play_stream(p_stream, 0, p_volume_db, p_pitch_scale, AudioServer::PLAYBACK_TYPE_DEFAULT, p_bus) == AudioStreamPlaybackPolyphonic::INVALID_ID) {
+		WARN_PRINT(vformat("E_LIMIT: GodotAudio.play dropped a sound: bus '%s' already plays react_native/audio/max_polyphony voices.", p_bus));
+	}
 }
 
 void RNGameServices::stop_audio(const StringName &p_bus) {

@@ -55,16 +55,21 @@ void RNViewportViewControl::set_forward_input(bool p_forward) {
 	set_focus_mode(forward_input ? FOCUS_CLICK : FOCUS_NONE);
 }
 
-void RNViewportViewControl::_follow_viewport(SubViewport *p_viewport, bool p_follow) {
+// The connections stay while a viewport is out of the tree, so the view shows it
+// again when it comes back, and they end when its name means another viewport.
+void RNViewportViewControl::_follow_viewport(SubViewport *p_viewport) {
+	const ObjectID next = p_viewport ? p_viewport->get_instance_id() : ObjectID();
+	if (next == followed) {
+		return;
+	}
 	const Callable exiting = callable_mp(this, &RNViewportViewControl::_viewport_exiting);
 	const Callable entered = callable_mp(this, &RNViewportViewControl::_resolve);
-	if (p_viewport->is_connected(SceneStringName(tree_exiting), exiting)) {
-		p_viewport->disconnect(SceneStringName(tree_exiting), exiting);
+	if (SubViewport *previous = Object::cast_to<SubViewport>(ObjectDB::get_instance(followed))) {
+		previous->disconnect(SceneStringName(tree_exiting), exiting);
+		previous->disconnect(SceneStringName(tree_entered), entered);
 	}
-	if (p_viewport->is_connected(SceneStringName(tree_entered), entered)) {
-		p_viewport->disconnect(SceneStringName(tree_entered), entered);
-	}
-	if (p_follow) {
+	followed = next;
+	if (p_viewport) {
 		p_viewport->connect(SceneStringName(tree_exiting), exiting);
 		p_viewport->connect(SceneStringName(tree_entered), entered);
 	}
@@ -74,16 +79,11 @@ void RNViewportViewControl::_resolve() {
 	ReactNativeHost *host = ReactNativeHost::get_singleton();
 	SubViewport *next = host ? host->find_viewport(viewport_name) : nullptr;
 	SubViewport *shown_next = next && next->is_inside_tree() ? next : nullptr;
+	_follow_viewport(next);
 	if (resolved && (shown_next ? shown_next->get_instance_id() : ObjectID()) == shown) {
 		return;
 	}
 	resolved = true;
-	if (SubViewport *previous = _viewport(); previous && previous != next) {
-		_follow_viewport(previous, false);
-	}
-	if (next) {
-		_follow_viewport(next, true);
-	}
 	shown = shown_next ? shown_next->get_instance_id() : ObjectID();
 	set_texture(shown_next ? Ref<Texture2D>(shown_next->get_texture()) : Ref<Texture2D>());
 	if (shown_next) {
@@ -92,7 +92,7 @@ void RNViewportViewControl::_resolve() {
 			loaded();
 		}
 	} else if (failed && !viewport_name.is_empty()) {
-		failed(vformat("No viewport is registered as '%s'.", viewport_name));
+		failed(next ? vformat("The viewport registered as '%s' isn't in the scene tree.", viewport_name) : vformat("No viewport is registered as '%s'.", viewport_name));
 	}
 }
 
@@ -102,7 +102,6 @@ void RNViewportViewControl::_registration_changed(const String &p_name) {
 	}
 }
 
-// The connections stay, so the view shows the viewport again when it comes back.
 void RNViewportViewControl::_viewport_exiting() {
 	shown = ObjectID();
 	set_texture(Ref<Texture2D>());
