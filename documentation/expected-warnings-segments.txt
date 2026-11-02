@@ -1,3 +1,6 @@
-# The fixture intentionally loads a segment that doesn't exist and one built for another bundle.
+# The fixture intentionally loads a segment that doesn't exist, one built for another bundle,
+# one that throws and one that needs a module its bundle lacks.
 ^ERROR: React Native segment 'res://dist/segments/missing\.segment\.js' is missing\.$
 ^ERROR: React Native segment 'user://stale\.segment\.js' was built for another bundle; build it again against this one\.$
+^ERROR: React Native segment 'res://dist/segments/throwing_segment\.segment\.js' failed: Godot segment smoke$
+^ERROR: React Native segment 'user://unknown_module\.segment\.js' failed: Requiring unknown module "1234567"\.$

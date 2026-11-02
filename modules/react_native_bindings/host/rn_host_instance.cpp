@@ -166,6 +166,46 @@ String file_tail(const String &p_path) {
 	return tail_of(file->get_buffer(length - file->get_position()));
 }
 
+String js_error_text(const jsi::JSError &p_error) {
+	return String::utf8(p_error.getMessage().c_str()) + "\n" + String::utf8(p_error.getStack().c_str());
+}
+
+// Metro hands what a module throws to ErrorUtils instead of rethrowing it, and
+// upstream reports only a runtime's first fatal error. A handler of its own
+// keeps a failure with the segment that caused it, and a broken segment from
+// hiding the game's later errors. A handler the segment installs stays in place.
+String evaluate_segment(jsi::Runtime &p_runtime, const std::shared_ptr<const jsi::Buffer> &p_script, const std::string &p_source_url) {
+	auto thrown = std::make_shared<String>();
+	try {
+		const jsi::Object error_utils = p_runtime.global().getPropertyAsObject(p_runtime, "ErrorUtils");
+		const jsi::Function get_handler = error_utils.getPropertyAsFunction(p_runtime, "getGlobalHandler");
+		const jsi::Function set_handler = error_utils.getPropertyAsFunction(p_runtime, "setGlobalHandler");
+		const jsi::Value previous = get_handler.call(p_runtime);
+		const jsi::Function handler = jsi::Function::createFromHostFunction(p_runtime, jsi::PropNameID::forAscii(p_runtime, "handleSegmentError"), 2, [thrown](jsi::Runtime &p_handler_runtime, const jsi::Value &, const jsi::Value *p_arguments, size_t) {
+			*thrown = js_error_text(jsi::JSError(p_handler_runtime, jsi::Value(p_handler_runtime, p_arguments[0])));
+			return jsi::Value::undefined();
+		});
+		const auto restore_handler = [&] {
+			if (jsi::Value::strictEquals(p_runtime, get_handler.call(p_runtime), jsi::Value(p_runtime, handler))) {
+				set_handler.call(p_runtime, previous);
+			}
+		};
+		set_handler.call(p_runtime, handler);
+		try {
+			p_runtime.evaluateJavaScript(p_script, p_source_url);
+		} catch (...) {
+			restore_handler();
+			throw;
+		}
+		restore_handler();
+	} catch (const jsi::JSError &p_error) {
+		return js_error_text(p_error);
+	} catch (const std::exception &p_error) {
+		return String::utf8(p_error.what());
+	}
+	return *thrown;
+}
+
 String processed_error(const JsErrorHandler::ProcessedError &p_error) {
 	String result = String::utf8(p_error.message.c_str());
 	for (const JsErrorHandler::ProcessedError::StackFrame &frame : p_error.stack) {
@@ -310,7 +350,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 RNHostInstance::~RNHostInstance() = default;
 
 // A Metro bundle loads under its URL, which ResourceLoader resolves to the
-// downloaded copy. Surfaces started meanwhile wait for the bundle in ReactHost.
+// downloaded copy. Surfaces started meanwhile wait for _bundle_loaded.
 bool RNHostInstance::load_script(const String &p_bundle) {
 	const std::string bundle_file = p_bundle.utf8().get_data();
 	if (!dev_server) {
@@ -336,8 +376,8 @@ bool RNHostInstance::load_script(const String &p_bundle) {
 			_bundle_loaded(_segment_files(p_bundle));
 			return;
 		}
-		// Surfaces wait for the bundle, so startup segments are downloaded
-		// before it loads to be there when they start.
+		// Startup segments are downloaded before the bundle loads, so they can
+		// run right after it.
 		_download_segments(p_bundle, {}, [this, p_bundle, bundle_url](std::vector<Segment> p_segments) {
 			source_url->set(bundle_url);
 			if (!runtime.react_host->loadScript(bundle_url, "")) {
@@ -387,6 +427,10 @@ void RNHostInstance::_bundle_loaded(const std::vector<Segment> &p_startup) {
 		_evaluate_segment(segment);
 	}
 	waiting_segments.clear();
+	for (const std::function<void()> &work : waiting_surface_work) {
+		work();
+	}
+	waiting_surface_work.clear();
 }
 
 void RNHostInstance::load_segment(const String &p_path, std::function<void(bool)> p_done) {
@@ -416,14 +460,7 @@ void RNHostInstance::_evaluate_segment(const Segment &p_segment) {
 	}
 	auto script = std::make_shared<jsi::StringBuffer>(std::string(reinterpret_cast<const char *>(bytes.ptr()), bytes.size()));
 	runtime.react_host->runOnRuntimeScheduler([this, script, segment = p_segment](jsi::Runtime &p_runtime) {
-		String error;
-		try {
-			p_runtime.evaluateJavaScript(script, segment.source_url);
-		} catch (const jsi::JSError &p_error) {
-			error = String::utf8(p_error.getMessage().c_str()) + "\n" + String::utf8(p_error.getStack().c_str());
-		} catch (const std::exception &p_error) {
-			error = String::utf8(p_error.what());
-		}
+		String error = evaluate_segment(p_runtime, script, segment.source_url);
 		if (!error.is_empty() && !retired) {
 			error = vformat("React Native segment '%s' failed: %s", segment.file, error);
 			on_error(error);
@@ -451,12 +488,23 @@ void RNHostInstance::_on_js_thread(std::function<void()> p_task, SchedulerPriori
 	runtime.react_host->runOnRuntimeScheduler([task = std::move(p_task)](jsi::Runtime &) { task(); }, p_priority);
 }
 
+// ReactHost releases surfaces as soon as a bundle finishes evaluating, which
+// can be before the main thread has queued the startup segments behind it. Roots
+// run components those segments register, so surface work is queued after them.
+void RNHostInstance::_on_js_thread_after_segments(std::function<void()> p_task, SchedulerPriority p_priority) {
+	if (script_loaded) {
+		_on_js_thread(std::move(p_task), p_priority);
+		return;
+	}
+	waiting_surface_work.push_back([this, task = std::move(p_task), p_priority] { _on_js_thread(task, p_priority); });
+}
+
 void RNHostInstance::start_surface(ReactNativeRootView *p_root, SurfaceId p_surface) {
 	mounting->register_surface(p_surface, p_root->_attach_surface(p_surface, mounting->get_factories()));
 	LayoutConstraints constraints;
 	LayoutContext context;
 	layout_for(p_root, *application, constraints, context);
-	_on_js_thread([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(p_root->get_surface_properties()), constraints, context] {
+	_on_js_thread_after_segments([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(p_root->get_surface_properties()), constraints, context] {
 		host->startSurface(p_surface, key, properties, constraints, context);
 	});
 }
@@ -476,7 +524,7 @@ void RNHostInstance::stop_surface(ReactNativeRootView *p_root, bool p_stop_react
 		run_loop_observers->onRender();
 		// React unmounts at higher priorities, so roots that leave together stop
 		// one at a time, each after React has finished with the previous one.
-		_on_js_thread([host = runtime.react_host.get(), surface] { host->stopSurface(surface); }, SchedulerPriority::LowPriority);
+		_on_js_thread_after_segments([host = runtime.react_host.get(), surface] { host->stopSurface(surface); }, SchedulerPriority::LowPriority);
 	}
 }
 
@@ -484,7 +532,7 @@ void RNHostInstance::update_layout(ReactNativeRootView *p_root) {
 	LayoutConstraints constraints;
 	LayoutContext context;
 	layout_for(p_root, *application, constraints, context);
-	_on_js_thread([host = runtime.react_host.get(), surface = p_root->get_root_tag(), constraints, context] {
+	_on_js_thread_after_segments([host = runtime.react_host.get(), surface = p_root->get_root_tag(), constraints, context] {
 		host->setSurfaceConstraints(surface, constraints, context);
 	});
 }
