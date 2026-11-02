@@ -25,10 +25,7 @@ class RNVideoComponentView : public RNComponentView {
 	RNVideoControl *video;
 	String source;
 	uint64_t request = 0;
-	bool load_pending = false;
-	String failure_pending;
 
-	void _report();
 	void _load(const String &p_source);
 	void _loaded(const Ref<Resource> &p_resource, const String &p_error);
 

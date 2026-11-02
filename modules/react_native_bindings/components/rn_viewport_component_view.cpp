@@ -32,20 +32,6 @@ TextureRect::StretchMode stretch_mode(GodotViewportViewResizeMode p_mode) {
 void RNViewportViewControl::set_callbacks(std::function<void()> p_loaded, std::function<void(const String &)> p_failed) {
 	loaded = std::move(p_loaded);
 	failed = std::move(p_failed);
-	_report();
-}
-
-// Mounting sets props before the event emitter, so an outcome waits for it.
-void RNViewportViewControl::_report() {
-	if (load_pending && loaded) {
-		load_pending = false;
-		loaded();
-	}
-	if (!failure_pending.is_empty() && failed) {
-		const String message = failure_pending;
-		failure_pending = String();
-		failed(message);
-	}
 }
 
 SubViewport *RNViewportViewControl::_viewport() const {
@@ -84,11 +70,12 @@ void RNViewportViewControl::_resolve() {
 	if (next) {
 		next->connect(SceneStringName(tree_exiting), callable_mp(this, &RNViewportViewControl::_viewport_exiting));
 		_update_viewport_size();
-		load_pending = true;
-	} else if (!viewport_name.is_empty()) {
-		failure_pending = vformat("No viewport is registered as '%s'.", viewport_name);
+		if (loaded) {
+			loaded();
+		}
+	} else if (failed && !viewport_name.is_empty()) {
+		failed(vformat("No viewport is registered as '%s'.", viewport_name));
 	}
-	_report();
 }
 
 void RNViewportViewControl::_registration_changed(const String &p_name) {
@@ -100,8 +87,9 @@ void RNViewportViewControl::_registration_changed(const String &p_name) {
 void RNViewportViewControl::_viewport_exiting() {
 	shown = ObjectID();
 	set_texture(Ref<Texture2D>());
-	failure_pending = vformat("The viewport registered as '%s' left the scene tree.", viewport_name);
-	_report();
+	if (failed) {
+		failed(vformat("The viewport registered as '%s' left the scene tree.", viewport_name));
+	}
 }
 
 void RNViewportViewControl::_update_viewport_size() {

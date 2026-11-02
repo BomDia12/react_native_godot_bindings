@@ -18,13 +18,10 @@ class RNViewportViewControl : public TextureRect {
 	bool match_size = false;
 	bool forward_input = false;
 	bool resolved = false;
-	bool load_pending = false;
-	String failure_pending;
 	std::function<void()> loaded;
 	std::function<void(const String &)> failed;
 
 	SubViewport *_viewport() const;
-	void _report();
 	void _resolve();
 	void _registration_changed(const String &p_name);
 	void _viewport_exiting();

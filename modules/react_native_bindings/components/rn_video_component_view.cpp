@@ -46,11 +46,14 @@ void RNVideoComponentView::_load(const String &p_source) {
 
 void RNVideoComponentView::_loaded(const Ref<Resource> &p_resource, const String &p_error) {
 	request = 0;
+	const auto emitter = std::static_pointer_cast<const GodotVideoEventEmitter>(event_emitter);
 	const Ref<VideoStream> stream = p_resource;
 	if (stream.is_null()) {
-		failure_pending = p_error.is_empty() ? vformat("'%s' is not a VideoStream.", source) : p_error;
-		ERR_PRINT(vformat("E_RESOURCE: GodotVideo on React tag %d: %s", get_tag(), failure_pending));
-		_report();
+		const String message = p_error.is_empty() ? vformat("'%s' is not a VideoStream.", source) : p_error;
+		ERR_PRINT(vformat("E_RESOURCE: GodotVideo on React tag %d: %s", get_tag(), message));
+		if (emitter) {
+			emitter->onError({ .message = message.utf8().get_data() });
+		}
 		return;
 	}
 	video->set_stream(stream);
@@ -60,23 +63,8 @@ void RNVideoComponentView::_loaded(const Ref<Resource> &p_resource, const String
 			video->play();
 		}
 	}
-	load_pending = true;
-	_report();
-}
-
-// A cached stream loads while props apply, before the view has an event emitter.
-void RNVideoComponentView::_report() {
-	const auto emitter = std::static_pointer_cast<const GodotVideoEventEmitter>(event_emitter);
-	if (!emitter) {
-		return;
-	}
-	if (load_pending) {
-		load_pending = false;
+	if (emitter) {
 		emitter->onLoad({});
-	}
-	if (!failure_pending.is_empty()) {
-		emitter->onError({ .message = failure_pending.utf8().get_data() });
-		failure_pending = String();
 	}
 }
 
@@ -95,7 +83,6 @@ void RNVideoComponentView::update_event_emitter(const EventEmitter::Shared &p_em
 	RNComponentView::update_event_emitter(p_emitter);
 	auto emitter = std::static_pointer_cast<const GodotVideoEventEmitter>(p_emitter);
 	video->set_ended_callback(emitter ? std::function<void()>([emitter]() { emitter->onEnd({}); }) : nullptr);
-	_report();
 }
 
 void RNVideoComponentView::handle_command(const std::string &p_name, const folly::dynamic &p_args) {
