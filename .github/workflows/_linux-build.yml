@@ -195,8 +195,30 @@ jobs:
 
       - name: Run headless smoke tests
         run: |
-          (while true; do date +%T; free -m | sed -n 2p; ps -eo rss,etimes,args --sort=-rss | sed -n 2,6p | cut -c1-150; sleep 20; done) &
-          scripts/run_baseline.sh
+          ulimit -c 0
+          mkdir -p artifacts/smoke-logs
+          (
+            while true; do
+              available=$(awk '/MemAvailable/ {print int($2 / 1024)}' /proc/meminfo)
+              disk=$(df -m --output=avail . | tail -1 | tr -d ' ')
+              {
+                echo "$(date +%T) available=${available}MB disk=${disk}MB"
+                ps -eo pid,rss,etimes,args --sort=-rss | sed -n 2,5p | cut -c1-170
+              } | tee -a artifacts/smoke-logs/monitor.log
+              if [ "$available" -lt 2500 ] || [ "$disk" -lt 1500 ]; then
+                echo "::error::Out of resources: available=${available}MB disk=${disk}MB" | tee -a artifacts/smoke-logs/monitor.log
+                ps -eo pid,rss,etimes,args --sort=-rss | sed -n 2,10p | cut -c1-300 | tee -a artifacts/smoke-logs/monitor.log
+                du -sh artifacts samples/*/dist samples/*/.godot "$HOME/.local/share/godot" 2>/dev/null | tee -a artifacts/smoke-logs/monitor.log
+                pkill -9 -f 'godot.linuxbsd.editor' || true
+              fi
+              sleep 5
+            done
+          ) &
+          monitor=$!
+          status=0
+          scripts/run_baseline.sh || status=$?
+          kill "$monitor"
+          exit "$status"
 
       - name: Check generated component contracts
         run: git diff --exit-code -- samples/*/godot samples/*/components
