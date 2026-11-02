@@ -44,7 +44,8 @@ env_rn.Append(CPPPATH=[module_dir])
 env_rn.Append(CPPDEFINES=react_native_sources.REACT_NATIVE_DEFINES)
 # These objects reach the platform's props through -isystem headers, which SCons
 # doesn't scan. A props change has to rebuild them, or they read the old layout.
-env_rn.Append(CPPDEFINES=[("RN_PLATFORM_HEADERS_HASH", react_native_sources.platform_headers_hash())])
+platform_headers_hash = react_native_sources.platform_headers_hash()
+env_rn.Append(CPPDEFINES=[("RN_PLATFORM_HEADERS_HASH", platform_headers_hash)])
 
 env.Prepend(LIBPATH=[hermes_lib_dir, hermes_jsi_lib_dir])
 env.AppendUnique(LIBS=["hermesvm", "jsi"])
@@ -119,8 +120,11 @@ env_upstream.Append(CXXFLAGS=["-isystem%s" % path for path in autolinked_codegen
 upstream_objects = []
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.react_native_sources()))
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.generated_sources()))
+# Their own headers come through -isystem too, so they need the same hash.
+env_autolinked_codegen = env_upstream.Clone()
+env_autolinked_codegen.Append(CPPDEFINES=[("RN_PLATFORM_HEADERS_HASH", platform_headers_hash)])
 for path in autolinked_codegen:
-	env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.cpp_sources(path)))
+	env_autolinked_codegen.add_source_files(upstream_objects, relative_sources(react_native_sources.cpp_sources(path)))
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.react_platform_sources()))
 
 third_party = react_native_sources.third_party_sources()
