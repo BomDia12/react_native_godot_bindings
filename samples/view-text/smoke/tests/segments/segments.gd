@@ -2,7 +2,9 @@ extends Node
 
 # A startup segment from react_native/bundle/segments registers a component
 # before roots start, ReactNativeHost.load_segment adds another at runtime,
-# and both are evaluated again, in order, after a hard reload.
+# and both are evaluated again, in order, after a hard reload. A segment whose
+# code throws, or that needs a module its bundle lacks, fails its load, reports
+# its own error even after another one failed, and doesn't load again.
 
 const WAIT_MSEC := 20000
 const BUNDLE := "res://dist/segments/index.bundle.js"
@@ -33,6 +35,15 @@ func add_root(key: String) -> ReactNativeRootView:
 	root.size = Vector2(300, 100)
 	add_child(root)
 	return root
+
+func segment_fails(path: String, message: String) -> bool:
+	if await ReactNativeHost.load_segment(path):
+		fail("%s reported success" % path)
+		return false
+	if not ReactNativeHost.get_last_error().contains(message):
+		fail("%s reported '%s'" % [path, ReactNativeHost.get_last_error()])
+		return false
+	return true
 
 func mounted(root: ReactNativeRootView) -> bool:
 	return root.get_root_tag() != 0 and root.get_child(0, true).get_child_count() > 0
@@ -69,6 +80,16 @@ func _run() -> void:
 	stale.close()
 	if await ReactNativeHost.load_segment("user://stale.segment.js"):
 		fail("a segment built for another bundle reported success")
+		return
+	if not await segment_fails(BUNDLE.get_base_dir().path_join("throwing_segment.segment.js"), "Godot segment smoke"):
+		return
+	var unknown_module := FileAccess.open("user://unknown_module.segment.js", FileAccess.WRITE)
+	unknown_module.store_string("__r(1234567);\n")
+	unknown_module.close()
+	if not await segment_fails("user://unknown_module.segment.js", "Requiring unknown module"):
+		return
+	if await js("typeof ErrorUtils.getGlobalHandler() === 'function' && ErrorUtils.getGlobalHandler().name !== 'handleSegmentError'") != true:
+		fail("a failed segment left its error handler installed")
 		return
 
 	var generation := ReactNativeHost.get_generation()

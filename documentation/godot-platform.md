@@ -272,8 +272,8 @@ root starts, so roots can run components that segments register. A runtime that 
 downloads them as modules-only bundles, and falls back to the files as it does for the
 bundle. `ReactNativeHost.load_segment(path)` evaluates a segment file at runtime, for
 example from a pack loaded with `ProjectSettings.load_resource_pack()`, and returns a
-signal that completes with whether it succeeded, which is `false` when a reload interrupts
-it:
+signal that completes with whether it succeeded. It's `false` when the file is missing or
+built for another bundle, when its code throws, and when a reload interrupts it:
 
 ```gdscript
 ProjectSettings.load_resource_pack("user://dlc/shop.pck")
@@ -282,9 +282,15 @@ if await ReactNativeHost.load_segment("res://dist/shop.segment.js"):
 ```
 
 Segments that loaded are evaluated again, in the order they first loaded, after every hard
-reload. A segment that fails reports through `get_last_error()` and the debugger, and the
-segments after it still load. Exports add the startup segments with the bundle, and report
-a segment that wasn't built.
+reload. A segment that fails reports through `get_last_error()` and the debugger, doesn't
+load again after a reload, and the segments after it still load. Exports add the startup
+segments with the bundle, and report a segment that wasn't built.
+
+A `.js` file is not a resource, so exports leave out other segments, such as the ones
+`load_segment` loads. To ship them, add `*.segment.js` to the "Filters to export
+non-resource files/folders" of the preset whose game or DLC pack holds them. It matches
+every segment in the project, so give segments that belong in different packs their own
+file names and list those instead.
 
 A segment works only with a bundle that has the modules it was built against: build
 segments again against every bundle they ship with, such as a DLC for each game version.

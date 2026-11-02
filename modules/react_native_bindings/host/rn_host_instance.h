@@ -82,10 +82,12 @@ private:
 	String bundle_fingerprint;
 	bool script_loaded = false;
 	std::vector<Segment> waiting_segments;
+	std::vector<std::function<void()>> waiting_surface_work;
 	RNHostRuntime runtime;
 	std::unique_ptr<RNHostTeardown> teardown;
 
 	void _on_js_thread(std::function<void()> p_task, facebook::react::SchedulerPriority p_priority = facebook::react::SchedulerPriority::ImmediatePriority);
+	void _on_js_thread_after_segments(std::function<void()> p_task, facebook::react::SchedulerPriority p_priority = facebook::react::SchedulerPriority::ImmediatePriority);
 	void _report_error(const String &p_error);
 	std::vector<Segment> _segment_files(const String &p_bundle) const;
 	void _download_segments(const String &p_bundle, std::vector<Segment> p_downloaded, std::function<void(std::vector<Segment>)> p_done);
