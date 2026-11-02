@@ -194,7 +194,9 @@ jobs:
           "$GODOT_BINARY" --headless --test --test-case='*[ReactNativeBindings]*'
 
       - name: Run headless smoke tests
-        run: scripts/run_baseline.sh
+        run: |
+          (while true; do date +%T; free -m | sed -n 2p; ps -eo rss,etimes,args --sort=-rss | sed -n 2,6p | cut -c1-150; sleep 20; done) &
+          scripts/run_baseline.sh
 
       - name: Check generated component contracts
         run: git diff --exit-code -- samples/*/godot samples/*/components

@@ -160,6 +160,7 @@ def run_test(
     # Two Godot processes in one project directory would race on its shared .godot import
     # cache, so tests are parallel across projects and serial within one.
     with project_lock:
+        print(f"Starting {manifest.id}", flush=True)
         try:
             fixture = FIXTURES[manifest.fixture.kind](repo_root, manifest.fixture.config, log_dir / (manifest.id + "-fixture")) if manifest.fixture else nullcontext()
             with fixture as server:
