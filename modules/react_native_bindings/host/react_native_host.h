@@ -21,7 +21,9 @@
 
 class ReactNativeRootView;
 class RNHostInstance;
+class RNAsyncStorageState;
 class RNThemeMetricsStore;
+class SubViewport;
 
 // Forwards application pause and resume, which only nodes receive.
 class RNHostLifecycle : public Node {
@@ -51,6 +53,7 @@ class ReactNativeHost : public Object {
 	static ReactNativeHost *singleton;
 
 	std::shared_ptr<RNThemeMetricsStore> theme;
+	std::shared_ptr<RNAsyncStorageState> async_storage;
 	RNServiceSettings settings;
 	std::shared_ptr<RNHostInstance> instance;
 	Vector<std::shared_ptr<RNHostInstance>> retiring;
@@ -69,6 +72,7 @@ class ReactNativeHost : public Object {
 	Vector<String> loaded_segments;
 	uint64_t next_evaluation = 1;
 	HashMap<String, std::shared_ptr<const RNSceneAttachment>> modules;
+	HashMap<String, ObjectID> viewports;
 	uint64_t next_module_identity = 1;
 	bool takes_back_press = false;
 	bool project_quits_on_go_back = true;
@@ -121,10 +125,14 @@ public:
 	void update_root_layout(ReactNativeRootView *p_root);
 	void scene_binding_changed(facebook::react::SurfaceId p_surface);
 	void root_state_changed(ReactNativeRootView *p_root);
+	void root_drag_changed(ReactNativeRootView *p_root, const Variant &p_data);
 	void post_message(const String &p_name, const Variant &p_payload);
 	Dictionary register_module(const String &p_name, Object *p_target, const Ref<RNSceneBinding> &p_binding);
 	void unregister_module(const String &p_name);
 	std::shared_ptr<const RNSceneAttachment> find_module(const String &p_name) const;
+	void register_viewport(const String &p_name, SubViewport *p_viewport);
+	void unregister_viewport(const String &p_name);
+	SubViewport *find_viewport(const String &p_name) const;
 	void send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload);
 	bool handles_back_press() const;
 	void back_pressed(bool p_go_back_request);

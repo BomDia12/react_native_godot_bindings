@@ -38,6 +38,38 @@ AttributedString attributed(const std::string &p_text, const std::function<void(
 
 const Size2 UNBOUNDED(std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
 
+TEST_CASE("[ReactNativeBindings][Text][SceneTree] a theme type sets what the style leaves at React's defaults") {
+	Shaper shaper;
+	RNThemeMetrics metrics;
+	metrics.text_font = ThemeDB::get_singleton()->get_fallback_font();
+	metrics.text_font_size = 16;
+	RNThemeTypeMetrics &title = metrics.types[{ "RichTextLabel", "Title" }];
+	title.font = metrics.text_font;
+	title.font_size = 40;
+	title.color = ::Color(1, 0.5, 0);
+	shaper.theme->publish(metrics);
+
+	TextAttributes defaults = TextAttributes::defaultTextAttributes();
+	defaults.fontFamily = "godot-theme:Title|";
+	int size = 0;
+	::Color color;
+	shaper.shaper.resolve_font(defaults, -1, size, color);
+	CHECK(size == 40);
+	CHECK(color.is_equal_approx(::Color(1, 0.5, 0)));
+
+	TextAttributes explicit_style = defaults;
+	explicit_style.fontSize = 20;
+	explicit_style.foregroundColor = colorFromRGBA(0, 0, 255, 255);
+	shaper.shaper.resolve_font(explicit_style, -1, size, color);
+	CHECK(size == 20);
+	CHECK(color.is_equal_approx(::Color(0, 0, 1)));
+
+	TextAttributes unthemed = TextAttributes::defaultTextAttributes();
+	shaper.shaper.resolve_font(unthemed, -1, size, color);
+	CHECK(size == 14);
+	CHECK(color.is_equal_approx(::Color(0, 0, 0)));
+}
+
 TEST_CASE("[ReactNativeBindings][Text][SceneTree] natural, start, end, left and right alignment follow the layout direction") {
 	Shaper shaper;
 	RNParagraphLayout layout;

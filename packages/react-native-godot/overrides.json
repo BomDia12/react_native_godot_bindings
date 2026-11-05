@@ -18,5 +18,10 @@
     "file": "Libraries/Modal/Modal.godot.js",
     "baseFile": "Libraries/Modal/Modal.js",
     "baseHash": "3d35351a0b1975f2e18fd976cafc2b7e302c7592521ce5a686013bff4d303c25"
+  },
+  {
+    "file": "Libraries/Text/TextNativeComponent.godot.js",
+    "baseFile": "Libraries/Text/TextNativeComponent.js",
+    "baseHash": "3e783f0b9fcf2e2905d4be23449c77970d29de39755b966cdd259b2f671d5740"
   }
 ]

@@ -62,6 +62,10 @@ if env["react_native_autolinking"]:
 	with open(env["react_native_autolinking"], encoding="utf-8") as manifest:
 		autolinked_codegen = json.load(manifest)["codegen"]
 env_rn.Append(CXXFLAGS=["-isystem%s" % path for path in autolinked_codegen])
+# These objects reach the platform's props through -isystem headers, which SCons
+# doesn't scan. A props change has to rebuild them, or they read the old layout.
+platform_headers_hash = react_native_sources.platform_headers_hash(autolinked_codegen)
+env_rn.Append(CPPDEFINES=[("RN_PLATFORM_HEADERS_HASH", platform_headers_hash)])
 
 # Modules that extend React Native build with this environment.
 env_react_native = env_rn.Clone()
@@ -116,8 +120,11 @@ env_upstream.Append(CXXFLAGS=["-isystem%s" % path for path in autolinked_codegen
 upstream_objects = []
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.react_native_sources()))
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.generated_sources()))
+# Their own headers come through -isystem too, so they need the same hash.
+env_autolinked_codegen = env_upstream.Clone()
+env_autolinked_codegen.Append(CPPDEFINES=[("RN_PLATFORM_HEADERS_HASH", platform_headers_hash)])
 for path in autolinked_codegen:
-	env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.cpp_sources(path)))
+	env_autolinked_codegen.add_source_files(upstream_objects, relative_sources(react_native_sources.cpp_sources(path)))
 env_upstream.add_source_files(upstream_objects, relative_sources(react_native_sources.react_platform_sources()))
 
 third_party = react_native_sources.third_party_sources()

@@ -30,6 +30,12 @@ void RNGodotHostEvents::root_state_changed(int p_root_tag, const RNRootState &p_
 	}
 }
 
+void RNGodotHostEvents::drag_changed(int p_root_tag, const Variant &p_data) {
+	for (const auto &module : _live_modules()) {
+		module->emit_drag(p_root_tag, p_data);
+	}
+}
+
 void RNGodotHostEvents::send_message(std::optional<int> p_root_tag, const String &p_name, const Variant &p_payload) {
 	for (const auto &module : _live_modules()) {
 		module->emit_message(p_root_tag, p_name, p_payload);
@@ -110,6 +116,22 @@ void RNGodotHostModule::emit_root_state(int p_root_tag, const RNRootState &p_sta
 	static_cast<AsyncEventEmitter<jsi::Value> &>(*eventEmitterMap_["onRootStateChanged"]).emit([p_root_tag, p_state](jsi::Runtime &p_runtime) -> jsi::Value {
 		jsi::Object change = state_to_js(p_runtime, p_state);
 		change.setProperty(p_runtime, "rootTag", p_root_tag);
+		return change;
+	});
+}
+
+// Only React's own drags carry data it can read; a GDScript drag of an Object
+// still marks a drag as going on.
+void RNGodotHostModule::emit_drag(int p_root_tag, const Variant &p_data) {
+	static_cast<AsyncEventEmitter<jsi::Value> &>(*eventEmitterMap_["onDragChanged"]).emit([p_root_tag, p_data](jsi::Runtime &p_runtime) -> jsi::Value {
+		jsi::Value data;
+		RNError error;
+		if (!RNValueCodec::to_js(p_runtime, p_data, RNValueSchema::value(RNValueType::DYNAMIC), data, error, nullptr, "dragChanged", "data")) {
+			data = jsi::Object(p_runtime);
+		}
+		jsi::Object change(p_runtime);
+		change.setProperty(p_runtime, "rootTag", p_root_tag);
+		change.setProperty(p_runtime, "data", data);
 		return change;
 	});
 }

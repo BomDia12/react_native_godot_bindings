@@ -13,5 +13,8 @@
 namespace facebook::react {
 
 extern const char GodotSceneComponentName[] = "GodotScene";
+extern const char GodotTextureProgressBarComponentName[] = "GodotTextureProgressBar";
+extern const char GodotVideoComponentName[] = "GodotVideo";
+extern const char GodotViewportViewComponentName[] = "GodotViewportView";
 
 } // namespace facebook::react

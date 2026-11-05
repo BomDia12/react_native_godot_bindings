@@ -1,8 +1,10 @@
 #include "react_native_host.h"
 
+#include "../components/rn_resource_requests.h"
 #include "../components/rn_theme_metrics.h"
 #include "../root_view/react_native_root_view.h"
 #include "../singletons/react_native_file_singleton.h"
+#include "../turbomodules/rn_async_storage_module.h"
 #include "rn_host_instance.h"
 
 #include "core/config/project_settings.h"
@@ -11,6 +13,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/main/scene_tree.h"
+#include "scene/main/viewport.h"
 #include "scene/main/window.h"
 
 #include <mutex>
@@ -64,6 +67,9 @@ void ReactNativeHost::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("post_message", "name", "payload"), &ReactNativeHost::post_message, DEFVAL(Variant()));
 	ClassDB::bind_method(D_METHOD("register_module", "name", "target", "binding"), &ReactNativeHost::register_module);
 	ClassDB::bind_method(D_METHOD("unregister_module", "name"), &ReactNativeHost::unregister_module);
+	ClassDB::bind_method(D_METHOD("register_viewport", "name", "viewport"), &ReactNativeHost::register_viewport);
+	ClassDB::bind_method(D_METHOD("unregister_viewport", "name"), &ReactNativeHost::unregister_viewport);
+	ADD_SIGNAL(MethodInfo("viewport_changed", PropertyInfo(Variant::STRING, "name")));
 	ADD_SIGNAL(MethodInfo("message_received", PropertyInfo(Variant::STRING, "name"), PropertyInfo(Variant::NIL, "payload", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NIL_IS_VARIANT)));
 }
 
@@ -126,6 +132,10 @@ bool ReactNativeHost::_start() {
 	RNHostInstance::Setup setup;
 	setup.settings = settings;
 	setup.theme = theme;
+	if (!async_storage) {
+		async_storage = std::make_shared<RNAsyncStorageState>();
+	}
+	setup.async_storage = async_storage;
 	setup.generation = generation;
 	setup.find_root = [this](SurfaceId p_surface) { return find_root(p_surface); };
 	setup.find_module = [this](const String &p_name) { return find_module(p_name); };
@@ -270,6 +280,12 @@ void ReactNativeHost::scene_binding_changed(SurfaceId p_surface) {
 	}
 }
 
+void ReactNativeHost::root_drag_changed(ReactNativeRootView *p_root, const Variant &p_data) {
+	if (instance && p_root->get_root_tag() != 0) {
+		instance->root_drag_changed(p_root->get_root_tag(), p_data);
+	}
+}
+
 void ReactNativeHost::root_state_changed(ReactNativeRootView *p_root) {
 	if (instance && p_root->get_root_tag() != 0) {
 		instance->root_state_changed(p_root->get_root_tag(), p_root->get_state());
@@ -337,6 +353,25 @@ void ReactNativeHost::_module_node_moved(const String &p_name, uint64_t p_identi
 	if (module && (*module)->identity == p_identity && instance) {
 		instance->module_changed(p_name);
 	}
+}
+
+// Names belong to the host, as modules do, so they survive hard reloads, and
+// views showing a name follow it to whichever viewport it means next.
+void ReactNativeHost::register_viewport(const String &p_name, SubViewport *p_viewport) {
+	ERR_FAIL_NULL(p_viewport);
+	viewports[p_name] = p_viewport->get_instance_id();
+	emit_signal(SNAME("viewport_changed"), p_name);
+}
+
+void ReactNativeHost::unregister_viewport(const String &p_name) {
+	if (viewports.erase(p_name)) {
+		emit_signal(SNAME("viewport_changed"), p_name);
+	}
+}
+
+SubViewport *ReactNativeHost::find_viewport(const String &p_name) const {
+	const ObjectID *found = viewports.getptr(p_name);
+	return found ? Object::cast_to<SubViewport>(ObjectDB::get_instance(*found)) : nullptr;
 }
 
 void ReactNativeHost::unregister_module(const String &p_name) {
@@ -468,6 +503,7 @@ void ReactNativeHost::_process_frame() {
 	}
 	_finish_retired();
 	_sync_back_press();
+	RNResourceRequests::poll();
 	for (int i = scene_loads.size() - 1; i >= 0; --i) {
 		if (ResourceLoader::load_threaded_get_status(scene_loads[i]) != ResourceLoader::THREAD_LOAD_IN_PROGRESS) {
 			ResourceLoader::load_threaded_get(scene_loads[i]);
@@ -531,10 +567,12 @@ void ReactNativeHost::shutdown() {
 		ResourceLoader::load_threaded_get(path);
 	}
 	scene_loads.clear();
+	RNResourceRequests::shutdown();
 	for (const std::shared_ptr<RNHostInstance> &retired : retiring) {
 		retired->finish();
 	}
 	retiring.clear();
+	async_storage.reset();
 	if (frame_connected) {
 		if (SceneTree *tree = SceneTree::get_singleton()) {
 			tree->disconnect("process_frame", callable_mp(this, &ReactNativeHost::_process_frame));

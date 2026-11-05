@@ -12,8 +12,115 @@
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/PropsParserContext.h>
 #include <react/renderer/debug/DebugStringConvertible.h>
+#include <react/renderer/graphics/Color.h>
+#include <react/renderer/imagemanager/primitives.h>
+#include <vector>
 
 namespace facebook::react {
+
+enum class GodotProgressBarFillMode { BeginToEnd, EndToBegin, TopToBottom, BottomToTop };
+
+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, GodotProgressBarFillMode &result) {
+  auto string = (std::string)value;
+  if (string == "beginToEnd") { result = GodotProgressBarFillMode::BeginToEnd; return; }
+  if (string == "endToBegin") { result = GodotProgressBarFillMode::EndToBegin; return; }
+  if (string == "topToBottom") { result = GodotProgressBarFillMode::TopToBottom; return; }
+  if (string == "bottomToTop") { result = GodotProgressBarFillMode::BottomToTop; return; }
+  abort();
+}
+
+static inline std::string toString(const GodotProgressBarFillMode &value) {
+  switch (value) {
+    case GodotProgressBarFillMode::BeginToEnd: return "beginToEnd";
+    case GodotProgressBarFillMode::EndToBegin: return "endToBegin";
+    case GodotProgressBarFillMode::TopToBottom: return "topToBottom";
+    case GodotProgressBarFillMode::BottomToTop: return "bottomToTop";
+    default:
+      abort();
+  }
+}
+
+#ifdef RN_SERIALIZABLE_STATE
+static inline folly::dynamic toDynamic(const GodotProgressBarFillMode &value) {
+  return toString(value);
+}
+#endif
+
+class GodotProgressBarProps final : public ViewProps {
+ public:
+  GodotProgressBarProps() = default;
+  GodotProgressBarProps(const PropsParserContext& context, const GodotProgressBarProps &sourceProps, const RawProps &rawProps);
+
+#pragma mark - Props
+
+  double value{0.0};
+  double minimumValue{0.0};
+  double maximumValue{100.0};
+  double step{0.0};
+  GodotProgressBarFillMode fillMode{GodotProgressBarFillMode::BeginToEnd};
+  bool showPercentage{false};
+
+  #ifdef RN_SERIALIZABLE_STATE
+  ComponentName getDiffPropsImplementationTarget() const override;
+
+  folly::dynamic getDiffProps(const Props* prevProps) const override;
+  #endif
+
+  
+};
+
+enum class GodotRichTextVisibleCharactersBehavior { CharsBeforeShaping, CharsAfterShaping, GlyphsLayoutDirection, GlyphsLeftToRight, GlyphsRightToLeft };
+
+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, GodotRichTextVisibleCharactersBehavior &result) {
+  auto string = (std::string)value;
+  if (string == "charsBeforeShaping") { result = GodotRichTextVisibleCharactersBehavior::CharsBeforeShaping; return; }
+  if (string == "charsAfterShaping") { result = GodotRichTextVisibleCharactersBehavior::CharsAfterShaping; return; }
+  if (string == "glyphsLayoutDirection") { result = GodotRichTextVisibleCharactersBehavior::GlyphsLayoutDirection; return; }
+  if (string == "glyphsLeftToRight") { result = GodotRichTextVisibleCharactersBehavior::GlyphsLeftToRight; return; }
+  if (string == "glyphsRightToLeft") { result = GodotRichTextVisibleCharactersBehavior::GlyphsRightToLeft; return; }
+  abort();
+}
+
+static inline std::string toString(const GodotRichTextVisibleCharactersBehavior &value) {
+  switch (value) {
+    case GodotRichTextVisibleCharactersBehavior::CharsBeforeShaping: return "charsBeforeShaping";
+    case GodotRichTextVisibleCharactersBehavior::CharsAfterShaping: return "charsAfterShaping";
+    case GodotRichTextVisibleCharactersBehavior::GlyphsLayoutDirection: return "glyphsLayoutDirection";
+    case GodotRichTextVisibleCharactersBehavior::GlyphsLeftToRight: return "glyphsLeftToRight";
+    case GodotRichTextVisibleCharactersBehavior::GlyphsRightToLeft: return "glyphsRightToLeft";
+    default:
+      abort();
+  }
+}
+
+#ifdef RN_SERIALIZABLE_STATE
+static inline folly::dynamic toDynamic(const GodotRichTextVisibleCharactersBehavior &value) {
+  return toString(value);
+}
+#endif
+
+class GodotRichTextProps final : public ViewProps {
+ public:
+  GodotRichTextProps() = default;
+  GodotRichTextProps(const PropsParserContext& context, const GodotRichTextProps &sourceProps, const RawProps &rawProps);
+
+#pragma mark - Props
+
+  std::string bbcode{};
+  std::vector<std::string> customEffects{};
+  double visibleRatio{1.0};
+  GodotRichTextVisibleCharactersBehavior visibleCharactersBehavior{GodotRichTextVisibleCharactersBehavior::CharsBeforeShaping};
+  bool selectionEnabled{false};
+  bool scrollActive{false};
+
+  #ifdef RN_SERIALIZABLE_STATE
+  ComponentName getDiffPropsImplementationTarget() const override;
+
+  folly::dynamic getDiffProps(const Props* prevProps) const override;
+  #endif
+
+  
+};
 
 class GodotSceneProps final : public ViewProps {
  public:
@@ -23,6 +130,156 @@ class GodotSceneProps final : public ViewProps {
 #pragma mark - Props
 
   std::string source{};
+
+  #ifdef RN_SERIALIZABLE_STATE
+  ComponentName getDiffPropsImplementationTarget() const override;
+
+  folly::dynamic getDiffProps(const Props* prevProps) const override;
+  #endif
+
+  
+};
+
+enum class GodotTextureProgressBarFillMode { LeftToRight, RightToLeft, TopToBottom, BottomToTop, Clockwise, CounterClockwise, BilinearLeftAndRight, BilinearTopAndBottom, ClockwiseAndCounterClockwise };
+
+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, GodotTextureProgressBarFillMode &result) {
+  auto string = (std::string)value;
+  if (string == "leftToRight") { result = GodotTextureProgressBarFillMode::LeftToRight; return; }
+  if (string == "rightToLeft") { result = GodotTextureProgressBarFillMode::RightToLeft; return; }
+  if (string == "topToBottom") { result = GodotTextureProgressBarFillMode::TopToBottom; return; }
+  if (string == "bottomToTop") { result = GodotTextureProgressBarFillMode::BottomToTop; return; }
+  if (string == "clockwise") { result = GodotTextureProgressBarFillMode::Clockwise; return; }
+  if (string == "counterClockwise") { result = GodotTextureProgressBarFillMode::CounterClockwise; return; }
+  if (string == "bilinearLeftAndRight") { result = GodotTextureProgressBarFillMode::BilinearLeftAndRight; return; }
+  if (string == "bilinearTopAndBottom") { result = GodotTextureProgressBarFillMode::BilinearTopAndBottom; return; }
+  if (string == "clockwiseAndCounterClockwise") { result = GodotTextureProgressBarFillMode::ClockwiseAndCounterClockwise; return; }
+  abort();
+}
+
+static inline std::string toString(const GodotTextureProgressBarFillMode &value) {
+  switch (value) {
+    case GodotTextureProgressBarFillMode::LeftToRight: return "leftToRight";
+    case GodotTextureProgressBarFillMode::RightToLeft: return "rightToLeft";
+    case GodotTextureProgressBarFillMode::TopToBottom: return "topToBottom";
+    case GodotTextureProgressBarFillMode::BottomToTop: return "bottomToTop";
+    case GodotTextureProgressBarFillMode::Clockwise: return "clockwise";
+    case GodotTextureProgressBarFillMode::CounterClockwise: return "counterClockwise";
+    case GodotTextureProgressBarFillMode::BilinearLeftAndRight: return "bilinearLeftAndRight";
+    case GodotTextureProgressBarFillMode::BilinearTopAndBottom: return "bilinearTopAndBottom";
+    case GodotTextureProgressBarFillMode::ClockwiseAndCounterClockwise: return "clockwiseAndCounterClockwise";
+    default:
+      abort();
+  }
+}
+
+#ifdef RN_SERIALIZABLE_STATE
+static inline folly::dynamic toDynamic(const GodotTextureProgressBarFillMode &value) {
+  return toString(value);
+}
+#endif
+
+class GodotTextureProgressBarProps final : public ViewProps {
+ public:
+  GodotTextureProgressBarProps() = default;
+  GodotTextureProgressBarProps(const PropsParserContext& context, const GodotTextureProgressBarProps &sourceProps, const RawProps &rawProps);
+
+#pragma mark - Props
+
+  double value{0.0};
+  double minimumValue{0.0};
+  double maximumValue{100.0};
+  double step{0.0};
+  GodotTextureProgressBarFillMode fillMode{GodotTextureProgressBarFillMode::LeftToRight};
+  ImageSource underTexture{};
+  ImageSource progressTexture{};
+  ImageSource overTexture{};
+  SharedColor underTint{};
+  SharedColor progressTint{};
+  SharedColor overTint{};
+  double radialInitialAngle{0.0};
+  double radialFillDegrees{360.0};
+  double radialCenterOffsetX{0.0};
+  double radialCenterOffsetY{0.0};
+  bool nineSliceStretch{false};
+  int stretchMarginLeft{0};
+  int stretchMarginTop{0};
+  int stretchMarginRight{0};
+  int stretchMarginBottom{0};
+
+  #ifdef RN_SERIALIZABLE_STATE
+  ComponentName getDiffPropsImplementationTarget() const override;
+
+  folly::dynamic getDiffProps(const Props* prevProps) const override;
+  #endif
+
+  
+};
+
+class GodotVideoProps final : public ViewProps {
+ public:
+  GodotVideoProps() = default;
+  GodotVideoProps(const PropsParserContext& context, const GodotVideoProps &sourceProps, const RawProps &rawProps);
+
+#pragma mark - Props
+
+  std::string source{};
+  bool autoplay{false};
+  bool paused{false};
+  bool loop{false};
+  double volume{1.0};
+  std::string bus{std::string{"Master"}};
+  bool expand{true};
+
+  #ifdef RN_SERIALIZABLE_STATE
+  ComponentName getDiffPropsImplementationTarget() const override;
+
+  folly::dynamic getDiffProps(const Props* prevProps) const override;
+  #endif
+
+  
+};
+
+enum class GodotViewportViewResizeMode { Cover, Contain, Stretch, Center, Repeat };
+
+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, GodotViewportViewResizeMode &result) {
+  auto string = (std::string)value;
+  if (string == "cover") { result = GodotViewportViewResizeMode::Cover; return; }
+  if (string == "contain") { result = GodotViewportViewResizeMode::Contain; return; }
+  if (string == "stretch") { result = GodotViewportViewResizeMode::Stretch; return; }
+  if (string == "center") { result = GodotViewportViewResizeMode::Center; return; }
+  if (string == "repeat") { result = GodotViewportViewResizeMode::Repeat; return; }
+  abort();
+}
+
+static inline std::string toString(const GodotViewportViewResizeMode &value) {
+  switch (value) {
+    case GodotViewportViewResizeMode::Cover: return "cover";
+    case GodotViewportViewResizeMode::Contain: return "contain";
+    case GodotViewportViewResizeMode::Stretch: return "stretch";
+    case GodotViewportViewResizeMode::Center: return "center";
+    case GodotViewportViewResizeMode::Repeat: return "repeat";
+    default:
+      abort();
+  }
+}
+
+#ifdef RN_SERIALIZABLE_STATE
+static inline folly::dynamic toDynamic(const GodotViewportViewResizeMode &value) {
+  return toString(value);
+}
+#endif
+
+class GodotViewportViewProps final : public ViewProps {
+ public:
+  GodotViewportViewProps() = default;
+  GodotViewportViewProps(const PropsParserContext& context, const GodotViewportViewProps &sourceProps, const RawProps &rawProps);
+
+#pragma mark - Props
+
+  std::string viewport{};
+  GodotViewportViewResizeMode resizeMode{GodotViewportViewResizeMode::Cover};
+  bool matchSize{false};
+  bool forwardInput{false};
 
   #ifdef RN_SERIALIZABLE_STATE
   ComponentName getDiffPropsImplementationTarget() const override;

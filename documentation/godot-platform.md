@@ -326,6 +326,123 @@ scheme, forward slashes, a nonempty relative path, and no `..` segment or embedd
 Percent characters remain literal. Missing staged files should be fixed by rebuilding
 the bundle.
 
+## Game UI
+
+These surfaces expose what Godot gives GDScript UIs. Each one configures a Godot class or
+server, so Godot does the work.
+
+### Godot resources on views
+
+`godotThemeType` selects a Theme type variation, of `Panel` on a View and of `RichTextLabel`
+on a Text. On a View, the variation's `panel` StyleBox replaces the React Native background
+and borders. On a Text, the variation sets the font, size and color that the style leaves
+unset. Every span counts React's default `fontSize` of 14 and default black as unset, so a Text
+with a theme type can't explicitly ask for exactly those. A nested Text with a `fontFamily` of
+its own replaces the theme type for its text. Spans inherit text attributes and nothing else
+from their paragraph, so the theme type travels as a `godot-theme:` `fontFamily`, which is
+why it reaches nested spans.
+
+`godotStyleBox` names a StyleBox resource that replaces the background and borders and
+takes priority over `godotThemeType`. A `StyleBoxTexture` with region and 9-slice margins
+gives a sprite frame. Both paint only: a StyleBox's content margins don't add layout
+padding, so padding stays in the style. Shadows, outline, clipping and opacity still apply.
+
+`godotMaterial` names a ShaderMaterial and `godotShaderParameters` sets its uniforms, using
+the Color and Vector wrappers of `react-native-godot/values` for typed values. The view and
+its children render through an effect host, and the shader sees them as `TEXTURE`, after
+filters and before blending. The texture holds premultiplied color, so shaders use
+`render_mode blend_premul_alpha`. Views sharing a resource keep their own uniform values.
+
+`tooltip` sets the Control's `tooltip_text`, styled by the theme's `TooltipPanel` and
+`TooltipLabel`.
+
+Resources load on a resource-loader thread. Until then a view paints as it would without
+the prop, and a failure reports `E_RESOURCE`. Props naming a resource accept `res://` and
+`user://` paths.
+
+### Components
+
+`react-native-godot/GodotProgressBar` wraps `ProgressBar`, and
+`react-native-godot/GodotTextureProgressBar` wraps `TextureProgressBar`, with its fill modes
+including radial, textures, tints and 9-slice stretch. The first takes its height from the
+theme; the second is sized by its style, as `Image` is.
+
+`react-native-godot/GodotRichText` wraps `RichTextLabel` for BBCode, with `customEffects`
+naming `RichTextEffect` resources. Text is applied once they load, because the parser only
+knows the tags of installed effects. `GodotRichTextCommands.reveal(view, ratio, seconds)`
+animates `visible_ratio` with a Tween, Godot's typewriter effect, and ends with
+`onRevealFinished`. `RichTextLabel` only shapes text inside the scene tree, so a hidden
+label on the main thread measures for layout. The JS thread waits for it unless the result
+is among the recent measurements, as it does when it first loads a font.
+
+The main thread answers these synchronous calls when it drains its queue once per frame. So
+that a loop of them doesn't take one frame each, it then waits up to 200 microseconds for the
+next call, within 4 milliseconds per frame. That's the only time it waits for JavaScript.
+
+`react-native-godot/GodotViewportView` shows a viewport GDScript registered with
+`ReactNativeHost.register_viewport(name, viewport)`, see
+[interop](interop.md#viewports). Unlike `GodotScene`, the game keeps owning the viewport,
+which can share the game's world, as a minimap camera does. `matchSize` keeps the viewport's
+size at the view's in pixels, and `forwardInput` sends pointer and key events on to it with
+coordinates mapped through `resizeMode`. Godot renders a viewport outside a
+`SubViewportContainer` only with `render_target_update_mode` set to `UPDATE_ALWAYS`.
+
+`react-native-godot/GodotVideo` wraps `VideoStreamPlayer`. Stock Godot plays Theora `.ogv`
+files; other formats come from `VideoStream` extensions, which work unchanged.
+
+### Services
+
+`react-native-godot/input` exposes the InputMap. `useInputAction(name, handler)` delivers
+presses and releases from `_unhandled_input`, so events the GUI consumed, such as keys typed
+into a TextInput, never arrive. `useLastInputDevice()` answers `keyboard`, `mouse`, `joypad`
+or `touch`, for button prompts. `GodotInput.captureNextEvent({devices})` takes the next
+press for a rebinding screen and consumes it. Input events are JSON-compatible, so a game can
+save what `getActionEvents` returns and pass it back to `setActionEvents`.
+`resetAction` restores the project's events. `getJoypads`, `onJoypadsChanged`, `vibrateJoypad`
+and `stopJoypadVibration` cover controllers.
+
+`react-native-godot/audio` plays streams with `GodotAudio.play(source, {bus, volumeDb,
+pitchScale})`, where `source` is a `res://` path or a required asset. Under Metro a required
+asset loads from its file in the project, which the editor has imported. One polyphonic player
+serves each bus, with `react_native/audio/max_polyphony` overlapping voices (default 8), each
+with its own volume and pitch, and keeps playing while the tree is paused. All sounds on a bus
+share those voices, and a sound played with none free is dropped with an `E_LIMIT` warning. A failed `play` is only logged, because it never
+holds JavaScript up. `useAudioBus(name)` and `getBuses`, `setBusVolume` and `setBusMute` read
+and write `AudioServer` buses, with linear volumes.
+
+`react-native-godot/i18n` reads Godot's translation catalogs with `tr`, `trN` and
+`useTranslation()`. `TranslationServer` isn't safe to read from another thread, so each
+string crosses to the main thread once per locale and is cached in JavaScript, up to 2048
+strings. A locale
+changed from either side rerenders `useTranslation()`. Layout direction keeps the existing
+`I18nManager` rule and applies on the next host start.
+
+`@react-native-async-storage/async-storage` works unchanged. Each database is one JSON object
+in `user://react_native/async_storage/<name>.json`, with names limited to letters, numbers,
+`_`, `-` and `.`, and the legacy storage is under `legacy/storage.json` in that directory.
+Reads and writes run in order on one thread that outlives reloads, and every write replaces the
+file atomically through a temporary one, so a failed write leaves the old file. Clearing a storage
+doesn't read it, which recovers a corrupt database.
+
+### Controls
+
+`@react-native-community/slider` works unchanged over `HSlider` and `VSlider`. The theme
+applies by default; `godotThemeType` selects a variation, images override the `grabber`
+icons and the `slider` and `grabber_area` styles, and tints become flat styles. Godot sliders
+always seek to a clicked point, so `tapToSeek` has no effect, and they can't run backwards, so
+an inverted slider shows the mirrored value.
+
+Drag and drop is Godot's own. `godotDragData` holds what a drag carries, with a required string
+`type`; `godotDropTypes` lists the types a view accepts; `godotDragPreview` is an image of
+`res://` or `user://` origin. Godot asks for all of this synchronously and the main thread
+never waits for JavaScript, so it is declared ahead of time as props. `onGodotDrop` delivers
+the data at the target, and `onGodotDragEnd` tells the source whether a drop happened; a
+failed one is where a game drops onto its world. Roots emit `godot_drag_started` and
+`godot_drag_ended`, and `useGodotDrag()` from `react-native-godot/root` returns the current
+drag's data, so slots can highlight. Starting a drag cancels the pressed pointer, which ends
+a responder gesture with `onResponderTerminate`. A view with an effect host drags within its
+own viewport.
+
 ## Pending APIs
 
 Imports of pending adapters are safe, but attempted operations report `E_UNSUPPORTED`.
@@ -342,7 +459,7 @@ until its native dismiss event.
 
 React Native flattens Views that only lay out, and it mounts a View that only draws
 without nesting its children, so a Text can be a sibling of its bordered parent View in
-the Godot tree. Views that clip, transform, change opacity or set `pointerEvents` to `none` or `box-only` keep
+the Godot tree. Views that clip, transform, change opacity, take a `godotMaterial`, `tooltip`, `godotContextMenu`, drag or drop props, or set `pointerEvents` to `none` or `box-only` keep
 their children nested; `pointerEvents="none"` disables input for that Godot subtree.
 A press that opens a Godot popup, such as a `godotContextMenu` or a text input's context
 menu, hands the release to the popup, so the root cancels that mouse pointer

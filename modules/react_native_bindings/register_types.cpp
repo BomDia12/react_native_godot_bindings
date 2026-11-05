@@ -5,14 +5,20 @@
 #include "components/rn_godot_scene_component_view.h"
 #include "components/rn_image_control.h"
 #include "components/rn_presentation_control.h"
+#include "components/rn_progress_component_views.h"
+#include "components/rn_rich_text_component_view.h"
 #include "components/rn_scroll_control.h"
 #include "components/rn_shader_cache.h"
+#include "components/rn_slider_component_view.h"
 #include "components/rn_small_controls.h"
 #include "components/rn_text_control.h"
 #include "components/rn_text_input_control.h"
+#include "components/rn_video_component_view.h"
 #include "components/rn_view_control.h"
+#include "components/rn_viewport_component_view.h"
 #include "host/react_native_host.h"
 #include "host/rn_feature_flags.h"
+#include "host/rn_game_services.h"
 #include "host/rn_logging.h"
 #include "host/rn_service_settings.h"
 #include "interop/rn_component_contract.h"
@@ -63,6 +69,7 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		Engine::get_singleton()->add_singleton(Engine::Singleton("GodotAlerts", godot_alerts, "GodotAlerts"));
 		ClassDB::register_abstract_class<RNHTTPService>();
 		ClassDB::register_internal_class<RNHostLifecycle>();
+		ClassDB::register_internal_class<RNGameServices>();
 		ClassDB::register_abstract_class<RNEvaluation>();
 		ClassDB::register_class<ReactNativeHost>();
 		react_native_host = memnew(ReactNativeHost);
@@ -83,6 +90,14 @@ void initialize_react_native_bindings_module(ModuleInitializationLevel p_level) 
 		ClassDB::register_internal_class<RNModalOverlay>();
 		ClassDB::register_internal_class<RNWindowContent>();
 		ClassDB::register_internal_class<RNGodotSceneHost>();
+		ClassDB::register_internal_class<RNProgressBarControl>();
+		ClassDB::register_internal_class<RNTextureProgressBarControl>();
+		ClassDB::register_internal_class<RNRichTextControl>();
+		ClassDB::register_internal_class<RNViewportViewControl>();
+		ClassDB::register_internal_class<RNVideoControl>();
+		ClassDB::register_internal_class<RNHSliderControl>();
+		ClassDB::register_internal_class<RNVSliderControl>();
+		ClassDB::register_internal_class<RNSliderHost>();
 		ClassDB::register_internal_class<RNLineEditor>();
 		ClassDB::register_internal_class<RNTextEditor>();
 		ClassDB::register_class<RNTextInputControl>();

@@ -1,0 +1,4 @@
+# Diagnostics that any smoke test may print. None are expected.
+# The scenario drags inside a SubViewport without a container, because only a
+# SubViewport tracks the control under the mouse from events in a headless run.
+^WARNING: SubViewport is not a child of a SubViewportContainer\. get_screen_transform doesn't return the actual screen position\.$

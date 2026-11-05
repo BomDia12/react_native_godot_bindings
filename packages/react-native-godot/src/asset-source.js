@@ -2,6 +2,7 @@
 
 import Platform from 'react-native/Libraries/Utilities/Platform';
 
+const {metroAssetResourcePath} = require('../asset-path.cjs');
 const {pickScale} = require('../asset-scale.cjs');
 
 // A bundle Metro served gets its assets from Metro, as on other platforms, so
@@ -29,4 +30,18 @@ export function godotAssetSource(resolver) {
     height: asset.height,
     scale,
   };
+}
+
+// The path Godot loads a non-image asset from. Images can come over HTTP from Metro,
+// but audio and video streams can only load as resources.
+export function godotResourcePath(source) {
+  if (typeof source === 'string') {
+    return source;
+  }
+  const uri = require('react-native/Libraries/Image/resolveAssetSource').default(source)?.uri ?? '';
+  if (uri.startsWith('res://') || uri.startsWith('user://') || typeof source !== 'number') {
+    return uri;
+  }
+  const asset = require('react-native/src/private/assets/AssetRegistry').AssetRegistry.getAssetByID(source);
+  return metroAssetResourcePath(asset, Platform.constants.projectRoot) ?? uri;
 }

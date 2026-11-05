@@ -1,0 +1,27 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://smoke/tests/game_components/game_components.gd" id="1"]
+[ext_resource type="Theme" path="res://smoke/tests/game_components/theme.tres" id="2"]
+
+[node name="GameComponentsSmoke" type="Node"]
+script = ExtResource("1")
+
+[node name="Root" type="ReactNativeRootView" parent="."]
+offset_right = 400.0
+offset_bottom = 800.0
+theme = ExtResource("2")
+application_key = "GameComponentsApp"
+
+[node name="Minimap" type="SubViewport" parent="."]
+size = Vector2i(64, 64)
+render_target_update_mode = 4
+
+[node name="Pointer" type="Control" parent="Minimap"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Other" type="SubViewport" parent="."]
+size = Vector2i(32, 32)
+render_target_update_mode = 4

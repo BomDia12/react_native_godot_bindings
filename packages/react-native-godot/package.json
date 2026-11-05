@@ -4,6 +4,9 @@
   "description": "Godot platform for React Native",
   "license": "MIT",
   "exports": {
+    ".": {
+      "types": "./godot.d.ts"
+    },
     "./metro": "./metro.cjs",
     "./resolver": "./resolver.cjs",
     "./assets": "./assets.cjs",
@@ -27,6 +30,18 @@
       "types": "./types/modules.d.ts",
       "default": "./src/modules.js"
     },
+    "./input": {
+      "types": "./types/input.d.ts",
+      "default": "./src/input.js"
+    },
+    "./audio": {
+      "types": "./types/audio.d.ts",
+      "default": "./src/audio.js"
+    },
+    "./i18n": {
+      "types": "./types/i18n.d.ts",
+      "default": "./src/i18n.js"
+    },
     "./root": {
       "types": "./types/root.d.ts",
       "default": "./src/root.js"
@@ -38,6 +53,26 @@
     "./GodotScene": {
       "types": "./types/GodotScene.d.ts",
       "default": "./src/GodotScene.js"
+    },
+    "./GodotProgressBar": {
+      "types": "./types/GodotProgressBar.d.ts",
+      "default": "./src/GodotProgressBar.js"
+    },
+    "./GodotTextureProgressBar": {
+      "types": "./types/GodotTextureProgressBar.d.ts",
+      "default": "./src/GodotTextureProgressBar.js"
+    },
+    "./GodotRichText": {
+      "types": "./types/GodotRichText.d.ts",
+      "default": "./src/GodotRichText.js"
+    },
+    "./GodotViewportView": {
+      "types": "./types/GodotViewportView.d.ts",
+      "default": "./src/GodotViewportView.js"
+    },
+    "./GodotVideo": {
+      "types": "./types/GodotVideo.d.ts",
+      "default": "./src/GodotVideo.js"
     },
     "./fonts": {
       "types": "./types/fonts.d.ts",
@@ -69,6 +104,7 @@
     "types",
     "scripts/start.cjs",
     "scripts/build.cjs",
+    "asset-path.cjs",
     "asset-scale.cjs",
     "assets.cjs",
     "babel.cjs",
@@ -101,7 +137,9 @@
     "react": "19.2.3",
     "react-native": "0.87.1",
     "typescript": "^6.0.3",
-    "@babel/core": "^7.25.2"
+    "@babel/core": "^7.25.2",
+    "@react-native-community/slider": "5.2.2",
+    "@react-native-async-storage/async-storage": "3.1.1"
   },
   "engines": {
     "node": ">=22.13.0"

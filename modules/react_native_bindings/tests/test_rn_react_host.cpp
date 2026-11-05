@@ -2,6 +2,7 @@
 #include "../host/rn_main_thread_queue.h"
 #include "../mounting/rn_mounting_manager.h"
 #include "../native_modules/rn_blob_service.h"
+#include "../turbomodules/rn_async_storage_module.h"
 #include "../turbomodules/rn_godot_turbo_module_provider.h"
 #include "support/rn_upstream_test_macros.h"
 
@@ -250,7 +251,7 @@ TEST_CASE("[ReactNativeBindings][ReactHost] teardown interrupts busy JavaScript 
 	busy->get_future().wait();
 
 	const auto started = std::chrono::steady_clock::now();
-	RNHostTeardown teardown(runtime, {});
+	RNHostTeardown teardown(runtime, {}, std::make_shared<RNAsyncStorageState>());
 	CHECK(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(50));
 	while (!teardown.is_finished() && std::chrono::steady_clock::now() - started < std::chrono::milliseconds(2500)) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));

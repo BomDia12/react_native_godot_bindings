@@ -4,12 +4,17 @@
 #include "../components/rn_image_component_view.h"
 #include "../components/rn_paragraph_component_view.h"
 #include "../components/rn_presentation_component_views.h"
+#include "../components/rn_progress_component_views.h"
+#include "../components/rn_rich_text_component_view.h"
 #include "../components/rn_scroll_component_view.h"
+#include "../components/rn_slider_component_view.h"
 #include "../components/rn_small_component_views.h"
 #include "../components/rn_text_input_component_view.h"
 #include "../components/rn_text_shaper.h"
 #include "../components/rn_theme_metrics.h"
+#include "../components/rn_video_component_view.h"
 #include "../components/rn_view_component_view.h"
+#include "../components/rn_viewport_component_view.h"
 #include "../interop/rn_dynamic.h"
 #include "../interop/rn_value_codec.h"
 #include "../mounting/rn_mounting_manager.h"
@@ -24,6 +29,7 @@
 #include "rn_animation_clock.h"
 #include "rn_dev_server.h"
 #include "rn_extension_registry.h"
+#include "rn_game_services.h"
 #include "rn_inspector_socket.h"
 #include "rn_log_box_surface.h"
 #include "rn_main_thread_queue.h"
@@ -40,6 +46,7 @@
 #include <react/renderer/animated/NativeAnimatedNodesManagerProvider.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
 #include <react/renderer/components/ReactNativeGodotSpec/ComponentDescriptors.h>
+#include <react/renderer/components/godotgame/GodotGameShadowNodes.h>
 #include <react/renderer/components/godotwindow/GodotWindowShadowNode.h>
 #include <react/renderer/components/image/ImageComponentDescriptor.h>
 #include <react/renderer/components/modal/ModalHostViewComponentDescriptor.h>
@@ -80,6 +87,12 @@ ComponentRegistryFactory component_registry_factory() {
 			registry->add(concreteComponentDescriptorProvider<GodotSwitchComponentDescriptor>());
 			registry->add(concreteComponentDescriptorProvider<GodotWindowComponentDescriptor>());
 			registry->add(concreteComponentDescriptorProvider<GodotSceneComponentDescriptor>());
+			registry->add(concreteComponentDescriptorProvider<GodotProgressBarComponentDescriptor>());
+			registry->add(concreteComponentDescriptorProvider<GodotTextureProgressBarComponentDescriptor>());
+			registry->add(concreteComponentDescriptorProvider<GodotRichTextComponentDescriptor>());
+			registry->add(concreteComponentDescriptorProvider<GodotViewportViewComponentDescriptor>());
+			registry->add(concreteComponentDescriptorProvider<GodotVideoComponentDescriptor>());
+			registry->add(concreteComponentDescriptorProvider<GodotSliderComponentDescriptor>());
 			for (const RNExtensionRegistry::Component &component : RNExtensionRegistry::get_components()) {
 				registry->add(component.descriptor);
 			}
@@ -107,6 +120,12 @@ std::shared_ptr<RNComponentViewFactories> component_view_factories(const std::sh
 	factories->add("ModalHostView", [](const ShadowView &p_view) { return std::make_unique<RNModalComponentView>(p_view.tag); });
 	factories->add(GodotWindowComponentName, [](const ShadowView &p_view) { return std::make_unique<RNWindowComponentView>(p_view.tag); });
 	factories->add(GodotSceneComponentName, [](const ShadowView &p_view) { return std::make_unique<RNGodotSceneComponentView>(p_view.tag); });
+	factories->add(GodotProgressBarComponentName, [](const ShadowView &p_view) { return std::make_unique<RNProgressBarComponentView>(p_view.tag); });
+	factories->add(GodotTextureProgressBarComponentName, [p_images](const ShadowView &p_view) { return std::make_unique<RNTextureProgressBarComponentView>(p_view.tag, p_images); });
+	factories->add(GodotRichTextComponentName, [](const ShadowView &p_view) { return std::make_unique<RNRichTextComponentView>(p_view.tag); });
+	factories->add(GodotViewportViewComponentName, [](const ShadowView &p_view) { return std::make_unique<RNViewportViewComponentView>(p_view.tag); });
+	factories->add(GodotVideoComponentName, [](const ShadowView &p_view) { return std::make_unique<RNVideoComponentView>(p_view.tag); });
+	factories->add(GodotSliderComponentName, [p_images](const ShadowView &p_view) { return std::make_unique<RNSliderComponentView>(p_view.tag, p_images); });
 	for (const RNExtensionRegistry::Component &component : RNExtensionRegistry::get_components()) {
 		factories->add(component.descriptor.name, component.view);
 	}
@@ -228,6 +247,8 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	}
 	context->insert(RNTextShaper::CONTEXT_KEY, std::shared_ptr<const RNTextShaper>(shaper));
 	context->insert(GodotSwitchComponentDescriptor::THEME_KEY, std::shared_ptr<const RNThemeMetricsStore>(p_setup.theme));
+	game_services = std::make_shared<RNGameServicesHandle>();
+	context->insert(RICH_TEXT_MEASURER_KEY, std::make_shared<RNRichTextMeasurer>(main_thread, game_services));
 
 	RNTurboModuleContext modules;
 	modules.host = { main_thread, [find_root = p_setup.find_root](int p_root_tag) -> Object * { return find_root(p_root_tag); }, p_setup.reload, [this] { open_debugger(); }, [weak = std::weak_ptr<RNMountingManager>(mounting)](int p_tag) {
@@ -241,6 +262,9 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	modules.scenes = scenes;
 	modules.host_events = host_events;
 	modules.image_loader = image_loader;
+	modules.game_services = game_services;
+	async_storage = p_setup.async_storage;
+	modules.async_storage = async_storage;
 	modules.extensions = RNExtensionRegistry::get_turbo_modules();
 
 	ReactInstanceConfig config;
@@ -512,6 +536,10 @@ void RNHostInstance::set_suspended(bool p_suspended) {
 	_on_js_thread([this, p_suspended] { runtime.timers->setPaused(p_suspended); });
 }
 
+void RNHostInstance::root_drag_changed(SurfaceId p_surface, const Variant &p_data) {
+	host_events->drag_changed(p_surface, p_data);
+}
+
 void RNHostInstance::root_state_changed(SurfaceId p_surface, const RNRootState &p_state) {
 	host_events->root_state_changed(p_surface, p_state);
 }
@@ -600,13 +628,14 @@ void RNHostInstance::retire(std::vector<SurfaceId> p_surfaces) {
 	main_thread->close();
 	dev_server.reset();
 	log_box->close();
+	game_services->free_node();
 	scenes->shutdown();
 	websockets->shutdown();
 	http->shutdown();
 	if (GodotAlerts *alerts = GodotAlerts::get_singleton()) {
 		alerts->clear_presenters();
 	}
-	teardown = std::make_unique<RNHostTeardown>(runtime, std::move(p_surfaces));
+	teardown = std::make_unique<RNHostTeardown>(runtime, std::move(p_surfaces), async_storage);
 }
 
 bool RNHostInstance::is_finished() const {

@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://smoke/tests/game_styling/game_styling.gd" id="1"]
+[ext_resource type="Theme" path="res://smoke/tests/game_styling/theme.tres" id="2"]
+
+[node name="GameStylingSmoke" type="Node"]
+script = ExtResource("1")
+
+[node name="Root" type="ReactNativeRootView" parent="."]
+offset_right = 400.0
+offset_bottom = 400.0
+theme = ExtResource("2")
+application_key = "GameStylingApp"

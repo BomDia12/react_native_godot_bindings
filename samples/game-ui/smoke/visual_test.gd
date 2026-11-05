@@ -20,6 +20,9 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(output_dir)
 	if right_to_left:
 		ProjectSettings.set_setting("react_native/i18n/force_rtl", true)
+	for child in get_children():
+		if child is SubViewport:
+			ReactNativeHost.register_viewport(child.name, child)
 	root = ReactNativeRootView.new()
 	root.application_key = application
 	if right_to_left:
