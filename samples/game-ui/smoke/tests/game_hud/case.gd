@@ -79,3 +79,6 @@ func run() -> void:
 	check(InputMap.action_get_events(POTION_ACTION).size() == 1, "The binding was not restored")
 	AudioServer.set_bus_volume_linear(0, 1.0)
 	TranslationServer.set_locale("en")
+	# Quitting while the new runtime still mounts can leave a font behind at exit.
+	await wait_until(game_ready, "the game UI after the reload")
+	await frames(30)
