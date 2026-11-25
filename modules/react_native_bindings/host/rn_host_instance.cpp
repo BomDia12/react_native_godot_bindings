@@ -543,7 +543,15 @@ void RNHostInstance::start_surface(ReactNativeRootView *p_root, SurfaceId p_surf
 	LayoutConstraints constraints;
 	LayoutContext context;
 	layout_for(p_root, *application, constraints, context);
-	_on_js_thread_after_segments([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(p_root->get_surface_properties()), constraints, context] {
+	Dictionary properties = p_root->get_surface_properties().duplicate();
+	for (const Variant &key : properties.keys()) {
+		const String path = rn_dynamic_unsupported_path(properties[key], key);
+		if (!path.is_empty()) {
+			ERR_PRINT(vformat("The initial property %s can't be passed to React Native, so the surface starts without %s.", path, key));
+			properties.erase(key);
+		}
+	}
+	_on_js_thread_after_segments([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(properties), constraints, context] {
 		host->startSurface(p_surface, key, properties, constraints, context);
 	});
 }

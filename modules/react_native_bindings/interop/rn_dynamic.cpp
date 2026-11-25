@@ -122,3 +122,37 @@ folly::dynamic rn_dynamic_from_variant(const Variant &p_value) {
 			return nullptr;
 	}
 }
+
+String rn_dynamic_unsupported_path(const Variant &p_value, const String &p_path) {
+	constexpr int64_t MAX_SAFE_INTEGER = 9007199254740991;
+	switch (p_value.get_type()) {
+		case Variant::NIL:
+			return String();
+		case Variant::INT: {
+			const int64_t value = p_value;
+			return value > MAX_SAFE_INTEGER || value < -MAX_SAFE_INTEGER ? p_path : String();
+		}
+		case Variant::ARRAY: {
+			const Array array = p_value;
+			for (int i = 0; i < array.size(); ++i) {
+				const String path = rn_dynamic_unsupported_path(array[i], vformat("%s[%d]", p_path, i));
+				if (!path.is_empty()) {
+					return path;
+				}
+			}
+			return String();
+		}
+		case Variant::DICTIONARY: {
+			const Dictionary dictionary = p_value;
+			for (const Variant &key : dictionary.keys()) {
+				const String path = rn_dynamic_unsupported_path(dictionary[key], p_path + "." + String(key));
+				if (!path.is_empty()) {
+					return path;
+				}
+			}
+			return String();
+		}
+		default:
+			return rn_dynamic_from_variant(p_value).isNull() ? p_path : String();
+	}
+}

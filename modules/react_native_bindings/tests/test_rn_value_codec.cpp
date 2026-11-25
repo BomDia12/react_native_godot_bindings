@@ -1,6 +1,9 @@
+#include "../interop/rn_dynamic.h"
 #include "../interop/rn_value_codec.h"
 #include "support/rn_test_runtime.h"
 #include "support/rn_upstream_test_macros.h"
+
+#include "core/object/ref_counted.h"
 
 #include <cmath>
 #include <limits>
@@ -66,6 +69,15 @@ TEST_CASE("[ReactNativeBindings][ValueCodec] dynamic safe integers retain native
 	CHECK(negative_zero.get_type() == Variant::FLOAT);
 	CHECK(std::signbit(double(negative_zero)));
 	CHECK(decode("9007199254740992").get_type() == Variant::FLOAT);
+}
+
+TEST_CASE("[ReactNativeBindings][ValueCodec] values that can't cross as plain props are found by path") {
+	Ref<RefCounted> object;
+	object.instantiate();
+	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "player", object } }), "props") == "props.player");
+	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "items", Array({ 1, PackedByteArray({ 1, 2 }) }) } }), "props") == "props.items[1]");
+	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "id", int64_t(9007199254740993) } }), "props") == "props.id");
+	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "id", int64_t(9007199254740991) }, { "tint", Color(1, 0, 0) }, { "position", Vector2(1, 2) }, { "missing", Variant() }, { "tags", Array({ "a", 2.5 }) } }), "props").is_empty());
 }
 
 } // namespace TestRNValueCodec
