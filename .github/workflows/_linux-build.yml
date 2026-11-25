@@ -179,7 +179,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Saved even when the build or a later step fails, so the next run builds only
-      # what changed. A failed build's partial cache goes under a run-specific key:
+      # what changed. A failed build's partial cache goes under an attempt-specific key:
       # later runs still restore it by prefix, but never hit it exactly and skip
       # saving the complete one.
       - name: Save SCons cache
