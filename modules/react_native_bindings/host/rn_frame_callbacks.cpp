@@ -41,6 +41,7 @@ void RNFrameCallbacks::process_frame(uint64_t p_now_usec, const RNFrameClock::Di
 	if (frame_pending.exchange(true)) {
 		return;
 	}
+	++posted;
 	run_on_js([this](jsi::Runtime &p_runtime) {
 		frame_pending = false;
 		_run(p_runtime, react::HighResTimeStamp::now().toDOMHighResTimeStamp());

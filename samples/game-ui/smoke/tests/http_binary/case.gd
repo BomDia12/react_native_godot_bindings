@@ -68,21 +68,37 @@ func check_image_requests() -> bool:
 	if not await wait_until(func(): return http_active() > 0, "the unmounted image's request"):
 		return false
 	await get_tree().create_timer(0.1).timeout
+	var unmounted := Time.get_ticks_msec()
 	await action("requestImage", [null])
 	if not await wait_until(func(): return http_active() == 0, "the unmounted image's request to leave the pool"):
 		return false
-	# As many one-second requests as the pool's slots and buffer budget allow
-	# start while the cancelled one drains, so they finish together instead of
-	# one waiting for the cancelled request's slot or reservation.
-	var capacity := mini(int(ProjectSettings.get_setting("react_native/network/http/max_active_requests")), int(ProjectSettings.get_setting("react_native/network/http/max_buffered_bytes")) / int(ProjectSettings.get_setting("react_native/network/http/max_body_bytes")))
+	check(Time.get_ticks_msec() - unmounted < 500, "Cancelling an image's HTTP request stalled the game for %d ms" % (Time.get_ticks_msec() - unmounted))
+	# The draining node keeps its response bytes in the buffer budget, and as
+	# many one-second requests as the rest allows run at once beside it.
+	var held := int(ReactNativeHost.get_service_stats().http.bufferedBytes)
+	check(held > 0, "A draining request released its response budget early")
+	var capacity := mini(int(ProjectSettings.get_setting("react_native/network/http/max_active_requests")), (int(ProjectSettings.get_setting("react_native/network/http/max_buffered_bytes")) - held) / int(ProjectSettings.get_setting("react_native/network/http/max_body_bytes")))
 	var parallel_started := Time.get_ticks_msec()
 	await action("parallelFetch", [network.http, capacity])
 	if not await wait_until(func(): return (await fixture()).has("parallelFetch") or (await fixture()).has("networkError"), "requests started while a cancelled one drains"):
 		return false
-	check(Time.get_ticks_msec() - parallel_started < 1700, "A cancelled request kept its HTTP slot: %d ms for a pool of one-second requests" % (Time.get_ticks_msec() - parallel_started))
+	check(Time.get_ticks_msec() - parallel_started < 1700, "Requests waited on a cancelled one: %d ms for %d one-second requests" % [Time.get_ticks_msec() - parallel_started, capacity])
 	check(int(ReactNativeHost.get_service_stats().http.draining) == 1, "The cancelled request is not draining: %s" % [ReactNativeHost.get_service_stats().http])
 	await get_tree().create_timer(1.5).timeout
 	check((await requested_loads()).size() == 1, "An unmounted Image reported onLoad: %s" % [await requested_loads()])
-	check(int(ReactNativeHost.get_service_stats().http.draining) == 0, "A cancelled request's node outlived its response: %s" % [ReactNativeHost.get_service_stats().http])
+	var drained: Dictionary = ReactNativeHost.get_service_stats().http
+	check(int(drained.draining) == 0 and int(drained.bufferedBytes) == 0, "A cancelled request's node outlived its response: %s" % [drained])
+
+	# A request that times out drains the same way instead of stalling the game.
+	var longest := 0
+	var previous := Time.get_ticks_msec()
+	var timeout_started := previous
+	await action("timeoutRequest", [network.http])
+	while not (await fixture()).has("timedOut") and Time.get_ticks_msec() - timeout_started < 5000:
+		await get_tree().process_frame
+		longest = maxi(longest, Time.get_ticks_msec() - previous)
+		previous = Time.get_ticks_msec()
+	check((await fixture()).has("timedOut"), "An XHR timeout did not fire")
+	check(longest < 500, "An HTTP timeout stalled the game for %d ms" % longest)
 	return true
 

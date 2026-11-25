@@ -4,7 +4,7 @@
 #include "rn_cookie_jar.h"
 #include "rn_image_service.h"
 
-#include "core/templates/hash_set.h"
+#include "core/templates/hash_map.h"
 #include "scene/main/http_request.h"
 
 #include <deque>
@@ -54,8 +54,9 @@ class RNHTTPService : public Node {
 	std::map<uint64_t, Request> requests;
 	std::deque<uint64_t> waiting;
 	std::vector<Slot> slots;
-	// Nodes of cancelled requests, which free themselves once their thread ends.
-	HashSet<int64_t> retired;
+	// Nodes of cancelled requests, which free themselves once their thread ends,
+	// and the response bytes each still holds of the buffer budget.
+	HashMap<int64_t, uint64_t> retired;
 	uint64_t next_id = 1;
 	uint64_t buffered = 0;
 	uint64_t started = 0;

@@ -660,6 +660,7 @@ Dictionary RNHostInstance::stats() const {
 	stats["websocket_peers"] = int64_t(websockets->get_socket_count());
 	stats["blob_count"] = int64_t(blobs->count());
 	stats["blob_bytes"] = int64_t(blobs->used_bytes());
+	stats["animation_frames"] = int64_t(frames->get_posted_frames());
 	return stats;
 }
 

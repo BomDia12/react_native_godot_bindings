@@ -76,6 +76,13 @@ function GameInventory({rootTag}) {
   useEffect(() => {
     actions.set(rootTag, {
       command, queued, refresh, requestImage: setRequested,
+      timeoutRequest: base => {
+        const request = new XMLHttpRequest();
+        request.open('GET', base + '/slow?seconds=2');
+        request.timeout = 300;
+        request.ontimeout = () => {observations.timedOut = true;};
+        request.send();
+      },
       parallelFetch: (base, count) => Promise.all(Array.from({length: count}, () => fetch(base + '/slow?seconds=1').then(response => response.text())))
         .then(() => {observations.parallelFetch = true;}).catch(error => {observations.networkError = error.message;}),
       testAlert: (title = 'Inventory alert') => alert(title, 'Local policy', [{text: 'OK', onPress: () => record('inventory-alert-button')}], {cancelable: true}).then(() => record('alert-settled')).catch(error => {observations.alertError = error.code;}),

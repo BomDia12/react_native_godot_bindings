@@ -57,4 +57,11 @@ func validate_smoke():
 		return "a throwing callback stopped the rest of its frame"
 	if not ReactNativeHost.get_last_error().contains("intentional frame callback failure"):
 		return "a frame callback's error did not reach the host: %s" % ReactNativeHost.get_last_error()
+
+	# With no callback waiting, display frames don't wake JavaScript.
+	await get_tree().create_timer(0.2).timeout
+	var posted := int(ReactNativeHost.get_service_stats().animation_frames)
+	await get_tree().create_timer(0.5).timeout
+	if int(ReactNativeHost.get_service_stats().animation_frames) != posted:
+		return "idle frames reached JavaScript: %d frames in 0.5 s" % (int(ReactNativeHost.get_service_stats().animation_frames) - posted)
 	return ""

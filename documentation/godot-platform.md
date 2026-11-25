@@ -109,7 +109,8 @@ read native scroll events on the main thread. Animated layout props, such as `wi
 `ReactNativeHost.evaluate(code)` returns a signal that completes with the converted
 result, for example `var value = await ReactNativeHost.evaluate("1 + 1")`.
 `get_last_error()` reports the latest JavaScript error and `get_service_stats()`
-reports native HTTP, WebSocket and Blob usage.
+reports native HTTP, WebSocket and Blob usage, and how many display frames reached
+JavaScript's `requestAnimationFrame`.
 
 Upstream C++ logs through glog. The host routes it into Godot's output: errors print as
 Godot errors, and info and warnings only show with `--verbose`. glog writes no files.
@@ -386,9 +387,11 @@ divided by the `scale` of the source entry it came from. A source replaced or un
 it loads reports nothing and cancels its load. Every caller shares one decoded texture per URI
 and headers, whatever scale it asks for. HTTP images use the shared bounded HTTPRequest pool.
 Godot's threaded HTTPRequest can only stop a request by waiting for its response, so a
-cancelled request's node leaves the pool: the request settles as cancelled and its slot and
-memory reservation are free for other requests at once, while the node finishes on its own
-thread and frees itself. `get_service_stats().http.draining` counts these nodes. Prefetch cannot be
+request that is cancelled or times out leaves its node behind: the request settles at once and
+its slot serves other requests, while the node finishes on its own thread and frees itself.
+Until then the bytes it may still receive stay in the pool's buffer budget, which bounds how
+many nodes drain at once. `get_service_stats().http.draining` counts them. The pool enforces
+request timeouts itself, because HTTPRequest's own timeout waits for its thread. Prefetch cannot be
 aborted, as in upstream's C++ image loader. The native image service requires the exact
 scheme, forward slashes, a nonempty relative path, and no `..` segment or embedded NUL.
 Percent characters remain literal. Missing staged files should be fixed by rebuilding

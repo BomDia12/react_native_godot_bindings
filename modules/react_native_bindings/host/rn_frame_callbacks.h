@@ -29,6 +29,7 @@ private:
 	std::atomic<bool> frame_pending = false;
 	// Whether a callback waits, which is the only time frames reach JavaScript.
 	std::atomic<bool> requested = false;
+	std::atomic<uint64_t> posted = 0;
 	// Used on the JS thread.
 	std::weak_ptr<Queue> queue;
 
@@ -42,4 +43,6 @@ public:
 	void install(facebook::jsi::Runtime &p_runtime);
 	// Runs on the main thread once per Godot frame.
 	void process_frame(uint64_t p_now_usec, const RNFrameClock::Display &p_display);
+	// The frames that reached the JS thread.
+	uint64_t get_posted_frames() const { return posted; }
 };

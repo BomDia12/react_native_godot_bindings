@@ -145,8 +145,9 @@ void RNHTTPService::settle(uint64_t p_request, RNHTTPResponse p_response) {
 }
 // HTTPRequest's cancel_request joins its thread, which blocks reading the
 // response, so the node of a request still in flight leaves its slot and frees
-// itself once the server answers. The slot, its reservation and the request
-// are released at once.
+// itself once the server answers. The slot and the request are released at
+// once; the response bytes the node may still receive stay in the buffer
+// budget until then, which also bounds how many nodes drain.
 void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 	Slot &slot = slots[p_slot];
 	if (slot.state == State::DRAINING) {
@@ -157,17 +158,24 @@ void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 	if (p_in_flight && node) {
 		node->disconnect("request_completed", slot.callback);
 		node->connect("request_completed", callable_mp(this, &RNHTTPService::_retired_completed).bind(int64_t(slot.node)), CONNECT_ONE_SHOT | CONNECT_DEFERRED);
-		retired.insert(int64_t(slot.node));
+		retired[int64_t(slot.node)] = slot.reservation;
+		slot.reservation = 0;
 		slot.node = ObjectID();
 		slot.callback = Callable();
 	}
 	callable_mp(this, &RNHTTPService::_drained).call_deferred(int(p_slot), int64_t(slot.sequence));
 }
 void RNHTTPService::_retired_completed(int, int, const PackedStringArray &, const PackedByteArray &, int64_t p_node) {
+	if (const uint64_t *reservation = retired.getptr(p_node)) {
+		buffered -= *reservation;
+	}
 	retired.erase(p_node);
 	if (Node *node = Object::cast_to<Node>(ObjectDB::get_instance(ObjectID(uint64_t(p_node))))) {
 		remove_child(node);
 		memdelete(node);
+	}
+	if (!closed) {
+		process_requests();
 	}
 }
 void RNHTTPService::_drained(int p_slot, int64_t p_sequence) {
@@ -247,7 +255,9 @@ void RNHTTPService::lease(size_t p_slot, uint64_t p_request) {
 	node->connect("request_completed", slot.callback);
 	node->set_max_redirects(0);
 	node->set_body_size_limit(request.spec.tooling ? -1 : int(request.spec.response_limit));
-	node->set_timeout(request.deadline > 0 ? std::max(0.001, (request.deadline - now()) / 1000) : 0);
+	// process_requests enforces the deadline: HTTPRequest's own timeout would
+	// cancel the request on the main thread, waiting for its thread.
+	node->set_timeout(0);
 	node->set_tls_options(tls_options.is_valid() ? tls_options : TLSOptions::client());
 	PackedStringArray headers = request.spec.headers;
 	if (request.spec.credentials) {
@@ -429,8 +439,8 @@ void RNHTTPService::shutdown() {
 		slot.callback = Callable();
 		slot.state = State::IDLE;
 	}
-	for (int64_t id : retired) {
-		if (HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(ObjectID(uint64_t(id))))) {
+	for (const KeyValue<int64_t, uint64_t> &entry : retired) {
+		if (HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(ObjectID(uint64_t(entry.key))))) {
 			node->cancel_request();
 			remove_child(node);
 			memdelete(node);
