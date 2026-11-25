@@ -27,6 +27,15 @@ func expect_opacity(value: float, message: String) -> bool:
 func first_host() -> Control:
 	return surface.get_child(0, true).get_child(0)
 
+func find_scroll(node: Node) -> RNScrollControl:
+	if node is RNScrollControl:
+		return node
+	for child in node.get_children(true):
+		var found := find_scroll(child)
+		if found != null:
+			return found
+	return null
+
 func click() -> void:
 	for pressed in [true, false]:
 		var event := InputEventMouseButton.new()
@@ -81,5 +90,15 @@ func _ready() -> void:
 		await click()
 		if not expect((await events()).has("topTouchEnd"), "shown %s did not receive input: %s" % [hidden_node.name, await events()]):
 			return
+	await action("mount-scroll")
+	var scroll := find_scroll(surface)
+	if not expect(scroll != null, "the scroll view did not mount"):
+		return
+	await action("scroll")
+	if not expect(scroll.scroll_vertical == 50, "scrollTo did not reach the scroll view (offset %d)" % scroll.scroll_vertical):
+		return
+	await action("malformed-command")
+	if not expect(is_instance_valid(scroll) and scroll.scroll_vertical == 50, "a malformed scrollTo changed the scroll view"):
+		return
 	print("RN_SMOKE_OK: mounting-regressions")
 	get_tree().quit(0)

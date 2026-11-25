@@ -85,8 +85,10 @@ React rendering, layout and text measurement run on its JS thread. Godot nodes a
 scene-owned resources are touched only on the main thread, which drains a task queue
 from `SceneTree.process_frame`. The main thread never waits on the JS thread. A
 synchronous TurboModule call that needs Godot blocks the JS thread until its main-thread
-task finishes; while the host shuts down, such calls fail with `E_CANCELLED`. JS timers
-use the steady clock and pause only while the runtime is suspended (see
+task finishes; while the host shuts down, such calls fail with `E_CANCELLED`. A main-thread
+task that throws is reported as an error and skipped. JS timers use the steady clock and
+pause only while the runtime is suspended (see [Roots in a scene](#roots-in-a-scene)).
+Interval ticks that come due while JavaScript is busy are skipped, not queued.
 [Roots in a scene](#roots-in-a-scene)). Interval ticks that come due while JavaScript is
 busy are skipped, not queued.
 

@@ -1,5 +1,6 @@
 #include "../components/rn_scroll_component_view.h"
 #include "../components/rn_view_component_view.h"
+#include "../host/rn_main_thread_queue.h"
 #include "../mounting/rn_component_view_registry.h"
 #include "support/rn_upstream_test_macros.h"
 
@@ -8,6 +9,9 @@
 
 #include <react/renderer/components/scrollview/ScrollViewProps.h>
 #include <react/renderer/graphics/Color.h>
+
+#include <atomic>
+#include <thread>
 
 namespace TestRNComponentViews {
 
@@ -373,6 +377,32 @@ TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] cursors inherit from
 	CHECK(child_control->get_default_cursor_shape() == Control::CURSOR_VSIZE);
 	surface.registry->apply({ ShadowViewMutation::UpdateMutation(child, with_props(child, [](ViewProps &p_props) { p_props.cursor = Cursor::Text; }), 0) });
 	CHECK(child_control->get_default_cursor_shape() == Control::CURSOR_IBEAM);
+}
+
+TEST_CASE("[ReactNativeBindings][ComponentViews][SceneTree] a malformed command is reported and the main-thread queue keeps running") {
+	RNScrollComponentView scroll(2);
+	RNMainThreadQueue queue;
+	const auto malformed = [&scroll] { scroll.handle_command("scrollTo", folly::dynamic::array(nullptr, 0, true)); };
+	bool ran = false;
+	ERR_PRINT_OFF;
+	queue.post(malformed);
+	queue.post([&ran] { ran = true; });
+	queue.drain();
+	CHECK(ran);
+	std::atomic<bool> finished = false;
+	std::atomic<bool> succeeded = true;
+	std::thread worker([&] {
+		succeeded = queue.run_sync(malformed);
+		finished = true;
+	});
+	while (!finished) {
+		queue.drain();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	worker.join();
+	CHECK_FALSE(succeeded);
+	CHECK_FALSE(queue.run_sync(malformed));
+	ERR_PRINT_ON;
 }
 
 } // namespace TestRNComponentViews

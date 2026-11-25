@@ -1,9 +1,10 @@
 (() => {
   const ui = globalThis.nativeFabricUIManager;
-  const handles = [{}, {}];
+  const handles = [{}, {}, {}, {}];
   let rootTag;
   let leaf;
   let sibling;
+  let scroll;
 
   const commitChildren = childrenToCommit => {
     const children = ui.createChildSet(rootTag);
@@ -55,6 +56,23 @@
         break;
       case 'restore-leaf':
         commit();
+        break;
+      case 'mount-scroll': {
+        const content = ui.createNode(90008, 'RCTView', rootTag, {
+          width: 100, height: 400,
+        }, handles[3]);
+        scroll = ui.createNode(90006, 'RCTScrollView', rootTag, {
+          width: 100, height: 100,
+        }, handles[2]);
+        ui.appendChild(scroll, content);
+        commitChildren([leaf, sibling, scroll]);
+        break;
+      }
+      case 'scroll':
+        ui.dispatchCommand(scroll, 'scrollTo', [0, 50, false]);
+        break;
+      case 'malformed-command':
+        ui.dispatchCommand(scroll, 'scrollTo', [null, 0, true]);
         break;
       case 'clear-events':
         globalThis.__godotMountingRegressionEvents.length = 0;
