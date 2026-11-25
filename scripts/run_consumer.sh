@@ -74,6 +74,11 @@ sed -i '/^\[react_native\]$/a bundle/segments=PackedStringArray("consumer_segmen
 mkdir -p "$PROJECT_DIR/react_native/contracts"
 cp "$SCRIPT_DIR/consumer_contract.tres" "$PROJECT_DIR/react_native/contracts/Scoreboard.tres"
 (cd "$PROJECT_DIR/react_native" && npx react-native build-godot > "$LOG_DIR/consumer-build.log" 2>&1)
+# Contract generation and plugin toggling run the editor, which must quit cleanly.
+if grep -qE "ERROR:|A Thread object is being destroyed" "$LOG_DIR/consumer-autolink.log" "$LOG_DIR/consumer-build.log"; then
+	echo "The editor tooling runs reported errors; see $LOG_DIR/consumer-autolink.log and $LOG_DIR/consumer-build.log." >&2
+	exit 1
+fi
 if [[ ! -f "$PROJECT_DIR/react_native/components/Scoreboard.tsx" ]]; then
 	echo "The build did not generate the contract's component." >&2
 	exit 1
