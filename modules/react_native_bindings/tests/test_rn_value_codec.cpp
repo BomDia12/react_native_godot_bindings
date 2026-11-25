@@ -77,7 +77,17 @@ TEST_CASE("[ReactNativeBindings][ValueCodec] values that can't cross as plain pr
 	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "player", object } }), "props") == "props.player");
 	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "items", Array({ 1, PackedByteArray({ 1, 2 }) }) } }), "props") == "props.items[1]");
 	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "id", int64_t(9007199254740993) } }), "props") == "props.id");
+	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "scores", Dictionary({ { 1, "first" } }) } }), "props") == "props.scores.1");
 	CHECK(rn_dynamic_unsupported_path(Dictionary({ { "id", int64_t(9007199254740991) }, { "tint", Color(1, 0, 0) }, { "position", Vector2(1, 2) }, { "missing", Variant() }, { "tags", Array({ "a", 2.5 }) } }), "props").is_empty());
+}
+
+TEST_CASE("[ReactNativeBindings][ValueCodec] initial properties leave out values that can't cross") {
+	const Dictionary properties({ { "label", "normal" }, { "data", PackedByteArray({ 1, 2 }) } });
+	ERR_PRINT_OFF;
+	const Dictionary plain = rn_plain_properties(properties);
+	ERR_PRINT_ON;
+	CHECK(plain == Dictionary({ { "label", "normal" } }));
+	CHECK(properties.has("data"));
 }
 
 } // namespace TestRNValueCodec

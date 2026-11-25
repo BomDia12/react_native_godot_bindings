@@ -40,11 +40,7 @@ RNHostTeardown::~RNHostTeardown() {
 // JavaScript blocked in native code can't be interrupted, so a runtime that
 // doesn't stop in time is left running on its detached thread.
 bool RNHostTeardown::join(std::chrono::milliseconds p_timeout) {
-	const auto deadline = std::chrono::steady_clock::now() + p_timeout;
-	while (!finished && std::chrono::steady_clock::now() < deadline) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
-	}
-	if (!finished) {
+	if (finished.wait_for(p_timeout) != std::future_status::ready) {
 		thread.detach();
 		return false;
 	}
@@ -66,7 +62,7 @@ void RNHostTeardown::_run() {
 	async_storage->thread.wait_until_idle();
 	_wait_until_idle();
 	runtime.react_host.reset();
-	finished = true;
+	finishing.set_value();
 }
 
 // The marker runs at LowPriority, after the unmount and cleanup work that React

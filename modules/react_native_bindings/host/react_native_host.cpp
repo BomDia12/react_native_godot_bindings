@@ -181,7 +181,7 @@ void ReactNativeHost::_retire() {
 void ReactNativeHost::_finish_retired() {
 	for (int i = retiring.size() - 1; i >= 0; --i) {
 		if (retiring[i]->is_finished()) {
-			retiring[i]->finish({});
+			retiring[i]->finish(std::chrono::milliseconds::zero());
 			retiring.remove_at(i);
 		}
 	}

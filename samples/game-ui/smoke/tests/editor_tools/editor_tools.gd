@@ -57,6 +57,7 @@ func source_mapped_error(tab: Node) -> bool:
 
 func _ready() -> void:
 	var filesystem := EditorInterface.get_resource_filesystem()
+	# The editor starts its first file scan after it initializes plugins.
 	for i in 10:
 		await get_tree().process_frame
 	if not await wait_until(func(): return not filesystem.is_scanning(), "the first scan"):

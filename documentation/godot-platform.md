@@ -84,7 +84,7 @@ types and the `react-native` prop augmentations, and `types/` declares each subp
 React rendering, layout and text measurement run on its JS thread. Godot nodes and
 scene-owned resources are touched only on the main thread, which drains a task queue
 from `SceneTree.process_frame`. The main thread waits on the JS thread only when the game
-quits, for up to 10 s; a runtime still blocked in native code then is reported and left
+quits, for up to 10 s; a runtime still blocked in native code is then reported and left
 running. A synchronous TurboModule call that needs Godot blocks the JS thread until its
 main-thread task finishes; while the host shuts down, such calls fail with `E_CANCELLED`.
 A main-thread task that throws is reported as an error and skipped. JS timers use the
@@ -233,7 +233,8 @@ service, caches it under `user://react_native/cache/downloads/`, and loads it un
 Metro URL; `ResourceLoader` resolves that URL to the cached copy. Surfaces that start
 meanwhile wait for the bundle. When the download fails, the runtime loads
 `react_native/bundle/path`. Export templates ignore the setting. Bundle and segment
-downloads aren't limited by the `react_native/network/http` limits.
+downloads aren't limited by `react_native/network/http/max_body_bytes` or
+`max_buffered_bytes`.
 
 Upstream `ReactHost` stays out of dev mode, because its dev mode asks Metro for an Android
 bundle and reloads the runtime in place. Godot instead reuses upstream's pieces:

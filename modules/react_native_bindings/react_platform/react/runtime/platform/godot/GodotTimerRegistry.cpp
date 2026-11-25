@@ -47,7 +47,8 @@ void GodotTimerRegistry::schedule(uint32_t timerId, Timer &timer, double delayMs
 		timer.remainingMs = delayMs;
 		return;
 	}
-	// Casting a delay beyond INT32_MAX to int32_t is undefined; such a timer stays pending.
+	// Casting a delay beyond INT32_MAX to int32_t is undefined, so longer delays are
+	// clamped to INT32_MAX ms, about 24.8 days.
 	const auto delay = std::chrono::milliseconds(static_cast<int32_t>(std::min(delayMs, double(INT32_MAX))));
 	timer.tick = nextTick_++;
 	timer.due = Clock::now() + delay;

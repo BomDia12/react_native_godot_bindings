@@ -145,6 +145,9 @@ String rn_dynamic_unsupported_path(const Variant &p_value, const String &p_path)
 		case Variant::DICTIONARY: {
 			const Dictionary dictionary = p_value;
 			for (const Variant &key : dictionary.keys()) {
+				if (key.get_type() != Variant::STRING && key.get_type() != Variant::STRING_NAME) {
+					return p_path + "." + String(key);
+				}
 				const String path = rn_dynamic_unsupported_path(dictionary[key], p_path + "." + String(key));
 				if (!path.is_empty()) {
 					return path;
@@ -155,4 +158,16 @@ String rn_dynamic_unsupported_path(const Variant &p_value, const String &p_path)
 		default:
 			return rn_dynamic_from_variant(p_value).isNull() ? p_path : String();
 	}
+}
+
+Dictionary rn_plain_properties(const Dictionary &p_properties) {
+	Dictionary properties = p_properties.duplicate();
+	for (const Variant &key : p_properties.keys()) {
+		const String path = rn_dynamic_unsupported_path(p_properties[key], key);
+		if (!path.is_empty()) {
+			ERR_PRINT(vformat("The initial property %s can't be passed to React Native, so the surface starts without %s.", path, key));
+			properties.erase(key);
+		}
+	}
+	return properties;
 }

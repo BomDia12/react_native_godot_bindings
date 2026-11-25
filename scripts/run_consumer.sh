@@ -105,7 +105,8 @@ python3 "$SCRIPT_DIR/check_baseline_log.py" --log "$LOG_DIR/consumer-export-run.
 
 # An export whose bundle doesn't build fails.
 echo 'export default (;' >> "$PROJECT_DIR/react_native/index.js"
-if "$GODOT_BINARY" --headless --path "$PROJECT_DIR" --export-pack Linux "$PACKAGE_DIR/broken.pck" > "$LOG_DIR/consumer-export-broken.log" 2>&1; then
-	echo "An export whose bundle failed to build exited successfully; see $LOG_DIR/consumer-export-broken.log." >&2
+if "$GODOT_BINARY" --headless --path "$PROJECT_DIR" --export-pack Linux "$PACKAGE_DIR/broken.pck" > "$LOG_DIR/consumer-export-broken.log" 2>&1 \
+	|| ! grep -q "The React Native release bundle could not be built" "$LOG_DIR/consumer-export-broken.log"; then
+	echo "An export whose bundle failed to build didn't fail for that reason; see $LOG_DIR/consumer-export-broken.log." >&2
 	exit 1
 fi
