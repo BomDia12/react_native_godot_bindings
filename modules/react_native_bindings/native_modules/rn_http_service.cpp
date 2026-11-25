@@ -98,7 +98,7 @@ uint64_t RNHTTPService::submit(const RNHTTPRequest &p_request, std::function<voi
 			return 0;
 		}
 	}
-	if (requests.size() >= uint64_t(settings.limit("network/http/max_active_requests") + settings.limit("network/http/max_queued_requests")) || uint64_t(p_request.body.size()) > uint64_t(settings.limit("network/http/max_buffered_bytes")) - buffered) {
+	if (requests.size() >= uint64_t(settings.limit("network/http/max_active_requests") + settings.limit("network/http/max_queued_requests")) || uint64_t(p_request.body.size()) > _available_budget()) {
 		r_error = http_error("HTTP queue or upload budget exceeded", RNErrorCode::LIMIT);
 		return 0;
 	}
@@ -113,7 +113,7 @@ uint64_t RNHTTPService::submit(const RNHTTPRequest &p_request, std::function<voi
 	for (const Slot &slot : slots) {
 		available_slot = available_slot || slot.state == State::IDLE;
 	}
-	const bool immediate = waiting.empty() && available_slot && uint64_t(p_request.body.size()) + response_limit <= uint64_t(settings.limit("network/http/max_buffered_bytes")) - buffered;
+	const bool immediate = waiting.empty() && available_slot && uint64_t(p_request.body.size()) + response_limit <= _available_budget();
 	if (!immediate && waiting.size() >= uint64_t(settings.limit("network/http/max_queued_requests"))) {
 		r_error = http_error("HTTP FIFO is full", RNErrorCode::LIMIT);
 		return 0;
@@ -143,17 +143,51 @@ void RNHTTPService::settle(uint64_t p_request, RNHTTPResponse p_response) {
 		callback(std::move(p_response));
 	}
 }
-void RNHTTPService::quarantine(size_t p_slot) {
+uint64_t RNHTTPService::_available_budget() const {
+	const uint64_t budget = settings.limit("network/http/max_buffered_bytes");
+	return buffered >= budget ? 0 : budget - buffered;
+}
+// HTTPRequest's cancel_request joins its thread, which blocks reading the
+// response, so the node of a request still in flight leaves its slot and frees
+// itself once the server answers. The slot and the request are released at
+// once; the response bytes the node may still receive stay in the buffer
+// budget until then, which also bounds how many nodes drain.
+void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 	Slot &slot = slots[p_slot];
 	if (slot.state == State::DRAINING) {
 		return;
 	}
 	slot.state = State::DRAINING;
 	HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(slot.node));
-	if (node) {
-		node->cancel_request();
+	if (p_in_flight && node) {
+		node->disconnect("request_completed", slot.callback);
+		node->connect("request_completed", callable_mp(this, &RNHTTPService::_retired_completed).bind(slot.node), CONNECT_ONE_SHOT | CONNECT_DEFERRED);
+		// Tooling responses have no limit or reservation, so a draining one
+		// holds max_body_bytes as its share of the budget, which can overcommit
+		// it until the node finishes.
+		const auto request = requests.find(slot.request);
+		const bool tooling = request != requests.end() && request->second.spec.tooling;
+		const uint64_t held = tooling ? uint64_t(settings.limit("network/http/max_body_bytes")) : slot.reservation;
+		buffered += held - slot.reservation;
+		retired[slot.node] = held;
+		slot.reservation = 0;
+		slot.node = ObjectID();
+		slot.callback = Callable();
 	}
 	callable_mp(this, &RNHTTPService::_drained).call_deferred(int(p_slot), int64_t(slot.sequence));
+}
+void RNHTTPService::_retired_completed(int, int, const PackedStringArray &, const PackedByteArray &, ObjectID p_node) {
+	if (const uint64_t *reservation = retired.getptr(p_node)) {
+		buffered -= *reservation;
+	}
+	retired.erase(p_node);
+	if (Node *node = Object::cast_to<Node>(ObjectDB::get_instance(p_node))) {
+		remove_child(node);
+		memdelete(node);
+	}
+	if (!closed) {
+		process_requests();
+	}
 }
 void RNHTTPService::_drained(int p_slot, int64_t p_sequence) {
 	if (p_slot < 0 || size_t(p_slot) >= slots.size()) {
@@ -202,7 +236,7 @@ bool RNHTTPService::cancel(uint64_t p_request) {
 	for (size_t index = 0; index < slots.size(); ++index) {
 		if (slots[index].request == p_request && slots[index].state != State::IDLE) {
 			found->second.cancelled = true;
-			quarantine(index);
+			quarantine(index, true);
 			return false;
 		}
 	}
@@ -232,7 +266,9 @@ void RNHTTPService::lease(size_t p_slot, uint64_t p_request) {
 	node->connect("request_completed", slot.callback);
 	node->set_max_redirects(0);
 	node->set_body_size_limit(request.spec.tooling ? -1 : int(request.spec.response_limit));
-	node->set_timeout(request.deadline > 0 ? std::max(0.001, (request.deadline - now()) / 1000) : 0);
+	// process_requests enforces the deadline: HTTPRequest's own timeout would
+	// cancel the request on the main thread, waiting for its thread.
+	node->set_timeout(0);
 	node->set_tls_options(tls_options.is_valid() ? tls_options : TLSOptions::client());
 	PackedStringArray headers = request.spec.headers;
 	if (request.spec.credentials) {
@@ -245,7 +281,7 @@ void RNHTTPService::lease(size_t p_slot, uint64_t p_request) {
 	if (error != OK) {
 		RNHTTPResponse response;
 		response.error = http_error(vformat("HTTPRequest failed to start (%d)", error));
-		quarantine(p_slot);
+		quarantine(p_slot, false);
 		settle(p_request, std::move(response));
 	}
 }
@@ -268,7 +304,7 @@ void RNHTTPService::process_requests() {
 		response.error = http_error("HTTP request timed out", "E_TIMEOUT");
 		for (size_t index = 0; index < slots.size(); ++index) {
 			if (slots[index].request == id) {
-				quarantine(index);
+				quarantine(index, true);
 				break;
 			}
 		}
@@ -293,7 +329,7 @@ void RNHTTPService::process_requests() {
 		if (draining) {
 			break;
 		}
-		if (found->second.spec.response_limit > uint64_t(settings.limit("network/http/max_buffered_bytes")) - buffered) {
+		if (found->second.spec.response_limit > _available_budget()) {
 			break;
 		}
 		size_t index = 0;
@@ -320,7 +356,7 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 	}
 	auto found = requests.find(slot.request);
 	if (found == requests.end()) {
-		quarantine(p_slot);
+		quarantine(p_slot, false);
 		return;
 	}
 	Request &request = found->second;
@@ -368,7 +404,7 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 				request.spec.url = next;
 				++request.redirects;
 				waiting.push_front(request.id);
-				quarantine(p_slot);
+				quarantine(p_slot, false);
 				return;
 			}
 		}
@@ -381,7 +417,7 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 		response.body = p_body;
 	}
 	const uint64_t id = slot.request;
-	quarantine(p_slot);
+	quarantine(p_slot, false);
 	settle(id, std::move(response));
 }
 bool RNHTTPService::has_pending_work() const {
@@ -414,6 +450,14 @@ void RNHTTPService::shutdown() {
 		slot.callback = Callable();
 		slot.state = State::IDLE;
 	}
+	for (const KeyValue<ObjectID, uint64_t> &entry : retired) {
+		if (HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(entry.key))) {
+			node->cancel_request();
+			remove_child(node);
+			memdelete(node);
+		}
+	}
+	retired.clear();
 	requests.clear();
 	waiting.clear();
 	buffered = 0;
@@ -433,7 +477,7 @@ Dictionary RNHTTPService::stats() const {
 	}
 	value["active"] = active;
 	value["idle"] = idle;
-	value["draining"] = draining;
+	value["draining"] = draining + int(retired.size());
 	value["queued"] = int(waiting.size());
 	value["bufferedBytes"] = int64_t(buffered);
 	value["started"] = int64_t(started);

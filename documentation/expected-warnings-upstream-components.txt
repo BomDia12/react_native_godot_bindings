@@ -1,0 +1,2 @@
+# Upstream ImageBackground warns once that it is deprecated; the fixture verifies it anyway.
+^WARNING: ImageBackground is deprecated and will be removed in a future release\. Use a View with an absolutely positioned Image instead\. See https://reactnative\.dev/docs/imagebackground$

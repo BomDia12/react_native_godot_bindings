@@ -4,6 +4,7 @@
 #include "rn_cookie_jar.h"
 #include "rn_image_service.h"
 
+#include "core/templates/hash_map.h"
 #include "scene/main/http_request.h"
 
 #include <deque>
@@ -53,6 +54,9 @@ class RNHTTPService : public Node {
 	std::map<uint64_t, Request> requests;
 	std::deque<uint64_t> waiting;
 	std::vector<Slot> slots;
+	// Nodes of cancelled requests, which free themselves once their thread ends,
+	// and the response bytes each still holds of the buffer budget.
+	HashMap<ObjectID, uint64_t> retired;
 	uint64_t next_id = 1;
 	uint64_t buffered = 0;
 	uint64_t started = 0;
@@ -61,9 +65,11 @@ class RNHTTPService : public Node {
 	static double now();
 	void lease(size_t p_slot, uint64_t p_request);
 	void settle(uint64_t p_request, RNHTTPResponse p_response);
-	void quarantine(size_t p_slot);
+	void quarantine(size_t p_slot, bool p_in_flight);
 	void _completed(int p_result, int p_status, const PackedStringArray &p_headers, const PackedByteArray &p_body, int p_slot, int64_t p_sequence);
+	uint64_t _available_budget() const;
 	void _drained(int p_slot, int64_t p_sequence);
+	void _retired_completed(int p_result, int p_status, const PackedStringArray &p_headers, const PackedByteArray &p_body, ObjectID p_node);
 
 protected:
 	static void _bind_methods();

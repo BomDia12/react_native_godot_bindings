@@ -10,7 +10,8 @@ class RNMainThreadQueue;
 namespace facebook::react {
 
 class RNImageLoader : public IImageLoader {
-	std::shared_ptr<RNImageService> service;
+	// Weak, so the last owner of the service is the host, on the main thread.
+	std::weak_ptr<RNImageService> service;
 	std::shared_ptr<RNMainThreadQueue> main_thread;
 
 public:

@@ -160,7 +160,9 @@ void RNComponentView::apply_view_props(const ViewProps &p_props) {
 	control->set_modulate(::Color(1, 1, 1, p_props.opacity));
 	control->set_clip_contents(p_props.getClipsContentToBounds());
 	const bool branch_enabled = p_props.pointerEvents != PointerEventsMode::None;
-	control->set_mouse_filter(branch_enabled ? Control::MOUSE_FILTER_PASS : Control::MOUSE_FILTER_IGNORE);
+	// Godot then skips a box-none view when it picks a control, so the press
+	// reaches its children or whatever is behind it.
+	control->set_mouse_filter(branch_enabled && p_props.pointerEvents != PointerEventsMode::BoxNone ? Control::MOUSE_FILTER_PASS : Control::MOUSE_FILTER_IGNORE);
 	control->set_mouse_behavior_recursive(branch_enabled ? Control::MOUSE_BEHAVIOR_INHERITED : Control::MOUSE_BEHAVIOR_DISABLED);
 	control->set_meta("react_native_test_id", String::utf8(p_props.testId.c_str()));
 	if (Control *focus = get_focus_control()) {

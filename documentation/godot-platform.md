@@ -109,7 +109,8 @@ read native scroll events on the main thread. Animated layout props, such as `wi
 `ReactNativeHost.evaluate(code)` returns a signal that completes with the converted
 result, for example `var value = await ReactNativeHost.evaluate("1 + 1")`.
 `get_last_error()` reports the latest JavaScript error and `get_service_stats()`
-reports native HTTP, WebSocket and Blob usage.
+reports native HTTP, WebSocket and Blob usage, and how many display frames reached
+JavaScript's `requestAnimationFrame`.
 
 Upstream C++ logs through glog. The host routes it into Godot's output: errors print as
 Godot errors, and info and warnings only show with `--verbose`. glog writes no files.
@@ -140,6 +141,21 @@ the bundle file for changes; a running game or an exported build doesn't. A bund
 missing when roots start leaves them empty, and the bundle-change signal that makes it
 available starts the runtime and every waiting root.
 
+### Why an engine module
+
+The bindings are a Godot engine module. `build_godot.sh` attaches them through SCons'
+`custom_modules` option, so they build into the unmodified pinned engine without patching
+it. A module compiles against the engine's own headers, so it subclasses scene classes with
+access to engine internals: shaping and drawing through `TextServer`, `Control` virtuals
+such as combined minimum sizes and accessibility hierarchies, and the `StyleBox` and `Theme`
+internals that `rn_theme_metrics.h` reads. Upstream React Native's C++ and Hermes link into
+the same binary, which ships as one executable per target.
+
+The cost is that a game needs an editor and export templates built with the module for each
+platform, which the release path gate and Phase 11 provide. A GDExtension would run on
+official Godot binaries, but only through the API that ClassDB exposes, and it would need a
+shared library of its own for every target.
+
 ## Roots in a scene
 
 A `ReactNativeRootView` is an ordinary `Control`, and works in containers, under themed
@@ -162,8 +178,35 @@ controls, in `SubViewport`s and in other windows.
   its initial props, converted like other Godot values. A property holding a value that
   can't be converted, such as an Object, an integer beyond `Number.MAX_SAFE_INTEGER` or a
   key that isn't a string, is reported as an error and left out.
+- **Touches across roots.** Roots share one application, as on other platforms:
+  `TouchEvent.touches` lists the contacts held in every root, `numberActiveTouches` counts
+  them, and only the application's first contact is the primary pointer. A root whose surface
+  stops cancels its own contacts and leaves the others'. React Native has one responder per
+  application and negotiates it from the views' common ancestor, which views in different
+  roots lack, so a touch in one root can't take the responder from a view in another, and,
+  because Fabric sends numeric touch targets that upstream's end check can't match to the
+  held responder, any touch end releases it.
 - **Editor preview.** With `editor_preview` off, the editor doesn't run the root and draws
   its application key instead. Running games ignore it.
+
+### Pointer input and the game
+
+A root shares Godot's input with the game around it. A pointer button, wheel, touch or drag
+event that React claims for a target view, meaning any view but the root after `box-none` and
+`box-only` resolve, doesn't reach the game's `_unhandled_input`. The same event over a root's
+empty area, a `box-none` view or a `pointerEvents="none"` subtree does. Mouse motion always
+reaches the game, so game cursors and hover keep working.
+
+The root accepts a claimed event in its own `gui_input`, which Godot calls after the event
+has bubbled through every React and native control with `MOUSE_FILTER_PASS`. A native
+control that handles the event itself, such as a ScrollContainer scrolling, a Slider or a
+LineEdit, accepts it first. Accepting earlier, in the handler of the views' `gui_input`
+signals, would starve those controls, because Godot emits a control's `gui_input` signal
+before calling its `gui_input()` and stops once the event is handled.
+
+`pointerEvents` resolves in Godot, as React Native leaves hit testing to the platform. A
+`box-none` view's control ignores the mouse, so Godot picks its children or whatever is behind
+it, and a press inside a `box-only` view goes to that view instead of its children.
 
 ### State and pausing
 
@@ -174,8 +217,9 @@ mode changes and on window focus. `getRootState(rootTag)` and
 `onRootStateChanged(rootTag, callback)` read it outside components.
 
 While no root can process, because the tree is paused or their process mode disables
-them, the runtime is suspended. JS timers, and so `requestAnimationFrame`, keep their
-remaining delay and resume with it. Native-driver animations stop and resume where they
+them, the runtime is suspended. JS timers keep their remaining delay and resume with it.
+`requestAnimationFrame` callbacks wait, because no frame ticks while suspended, and run on the
+first frame after resuming. Native-driver animations stop and resume where they
 were. LayoutAnimation and JS-driven `Animated` timing read upstream's own clocks, so an
 animation that spans a pause ends at its wall-clock position on resume. JavaScript still
 runs: `ReactNativeHost.evaluate()`, scene bindings, network responses and other Godot events
@@ -335,7 +379,22 @@ shape.
 
 Explicit `res://` and `user://` objects are supported for local operations. PNG/JPEG/static WebP and base64 images use the bounded native image service;
 getSize, prefetch and queryCache go through upstream's `ImageLoader` module, backed by the
-same service. HTTP images use the shared bounded HTTPRequest pool. Prefetch cannot be
+same service. `Image` loads through upstream's `ImageState`: as on iOS, every entry of a
+`source` array reaches the native component, upstream's `ImageShadowNode` picks the one that
+fits the laid-out size and requests it from a Godot `ImageManager`, and the component view
+shows the request's result. `onLoad` reports the image's size in points, the texture's pixels
+divided by the `scale` of the source entry it came from. A source replaced or unmounted before
+it loads reports nothing and cancels its load. Every caller shares one decoded texture per URI
+and headers, whatever scale it asks for. HTTP images use the shared bounded HTTPRequest pool.
+Godot's threaded HTTPRequest can only stop a request by waiting for its response, so a
+request that is cancelled or times out leaves its node behind: the request settles at once and
+its slot serves other requests, while the node finishes on its own thread and frees itself.
+Until then the bytes it may still receive stay in the pool's buffer budget, which bounds how
+many nodes drain at once; a developer-server download, which has no response limit, holds
+`max_body_bytes`. `get_service_stats().http.draining` counts them. The pool enforces request
+timeouts itself, because HTTPRequest's own timeout waits for its thread, so a timeout fires
+on the first frame of the runtime after its deadline. A hard reload or quit still waits for
+requests in flight, because an HTTPRequest leaving the tree stops by joining its thread. Prefetch cannot be
 aborted, as in upstream's C++ image loader. The native image service requires the exact
 scheme, forward slashes, a nonempty relative path, and no `..` segment or embedded NUL.
 Percent characters remain literal. Missing staged files should be fixed by rebuilding
@@ -589,8 +648,21 @@ component registry the Scheduler builds through it, installs the driver as the U
 animation delegate in `setUIManager`, and makes it the mounting override delegate of every
 surface that starts. `RNHostInstance::process_frame` ticks it before draining the main-thread
 queue, so interpolated mutations mount in the frame they are computed. Native `Animated`
-keeps its own per-frame callback. JS-driven animations follow upstream's C++
-`requestAnimationFrame`, which is `setTimeout(0)`.
+keeps its own per-frame callback. Both advance on every Godot frame, as Tweens and
+AnimationPlayers do.
+
+JS-driven animations run on `requestAnimationFrame`. Upstream's C++ `TimerManager` implements
+it as `setTimeout(0)`, which would run it as often as the JS thread loops, so the host
+replaces the global after upstream installs it. A frame clock decides on the main thread, once
+per Godot frame, whether the frame is a display frame: every frame when V-Sync paces the loop
+(`enabled` or `adaptive`, in a window that can draw), and otherwise, as headless or with
+mailbox or disabled V-Sync, frames that keep the screen's refresh rate on average (60 Hz when
+Godot can't read it), resuming from the current time after a stall. On a display frame
+while callbacks wait, one task runs, on the JS thread, the callbacks registered before it
+started, all with the time it started in `performance.now()`'s time base. Without waiting
+callbacks, frames don't wake the JS thread. Callbacks registered during it wait for the next
+frame, and a busy JS thread skips frames instead of running a burst of them. A throwing
+callback doesn't stop the others; its error reaches the host as a timer's error does.
 
 ## Application services
 

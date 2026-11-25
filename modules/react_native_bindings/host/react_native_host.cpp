@@ -2,6 +2,7 @@
 
 #include "../components/rn_resource_requests.h"
 #include "../components/rn_theme_metrics.h"
+#include "../input/rn_touch_table.h"
 #include "../root_view/react_native_root_view.h"
 #include "../singletons/react_native_file_singleton.h"
 #include "../turbomodules/rn_async_storage_module.h"
@@ -43,6 +44,7 @@ ReactNativeHost *ReactNativeHost::singleton = nullptr;
 ReactNativeHost::ReactNativeHost() {
 	singleton = this;
 	theme = std::make_shared<RNThemeMetricsStore>();
+	touch_table = std::make_shared<RNTouchTable>();
 	if (ReactNativeFileSingleton *files = ReactNativeFileSingleton::get_singleton()) {
 		files->connect("react_native_file_changed", callable_mp(this, &ReactNativeHost::_bundle_changed));
 	}

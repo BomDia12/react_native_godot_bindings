@@ -311,6 +311,7 @@ void RNViewComponentView::update_props(const facebook::react::Props::Shared &p_o
 	view->set_menu_entries(self_targetable ? Array(rn_variant_from_dynamic(props->godotContextMenu)) : Array());
 	view->set_accessibility(rn_view_accessibility(*props));
 	view->set_tooltip_text(String::utf8(props->tooltip.c_str()));
+	view->set_hit_slop(Vector4(props->hitSlop.left, props->hitSlop.top, props->hitSlop.right, props->hitSlop.bottom));
 	_load_skin(String::utf8(props->godotStyleBox.c_str()));
 	_load_material(String::utf8(props->godotMaterial.c_str()));
 	_apply_shader_parameters();

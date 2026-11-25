@@ -55,6 +55,8 @@ private:
 	RNInputRouter input_router;
 	uint64_t input_serial = 1;
 	uint64_t claimed_input_serial = 0;
+	// Whether the claimed event has a React target, which keeps it from the game.
+	bool claimed_target_valid = false;
 	Callable alert_handler;
 	std::shared_ptr<const RNSceneAttachment> scene_attachment;
 	uint64_t next_binding_identity = 1;
@@ -91,6 +93,7 @@ protected:
 	bool _get(const StringName &p_name, Variant &r_value) const;
 	void _get_property_list(List<PropertyInfo> *p_list) const;
 	void input(const Ref<InputEvent> &p_event) override;
+	void gui_input(const Ref<InputEvent> &p_event) override;
 
 public:
 	ReactNativeRootView();
@@ -130,6 +133,7 @@ public:
 	void _detach_surface();
 	void _begin_input(const Ref<InputEvent> &p_event, ObjectID p_viewport_id);
 	void _on_host_gui_input(const Ref<InputEvent> &p_event, ObjectID p_control_id);
+	RNComponentView *_box_only_target(RNComponentView *p_view) const;
 };
 
 VARIANT_ENUM_CAST(ReactNativeRootView::FitContent);

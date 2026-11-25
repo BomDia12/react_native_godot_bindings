@@ -11,6 +11,10 @@ import './native_module.entry';
 import './native_animated.entry';
 import './engine_integration.entry';
 import './game_ui.entry';
+import './upstream_components.entry';
+import './animation_frames.entry';
+import './multi_touch.entry';
+import './world_input.entry';
 
 const styles = StyleSheet.create({
   container: {

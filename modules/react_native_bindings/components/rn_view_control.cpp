@@ -266,6 +266,10 @@ void RNViewControl::_notification(int p_what) {
 	}
 }
 
+bool RNViewControl::has_point(const Point2 &p_point) const {
+	return Rect2(Point2(), get_size()).grow_individual(hit_slop.x, hit_slop.y, hit_slop.z, hit_slop.w).has_point(p_point);
+}
+
 void RNViewControl::gui_input(const Ref<InputEvent> &p_event) {
 	Panel::gui_input(p_event);
 	if (!menu || published_entries.is_empty()) {

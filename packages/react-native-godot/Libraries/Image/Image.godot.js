@@ -2,20 +2,25 @@
 import React from 'react';
 import ImageViewNativeComponent from 'react-native/Libraries/Image/ImageViewNativeComponent';
 import NativeImageLoaderAndroid from 'react-native/Libraries/Image/NativeImageLoaderAndroid';
+import {getImageSourcesFromImageProps} from 'react-native/Libraries/Image/ImageSourceUtils';
 import resolveAssetSource from 'react-native/Libraries/Image/resolveAssetSource';
 import StyleSheet from 'react-native/Libraries/StyleSheet/StyleSheet';
 
 let nextRequestId = 1;
 
-const Image = React.forwardRef(function Image({source, src, style, resizeMode, tintColor, ...props}, ref) {
-  const resolved = src != null ? {uri: src} : resolveAssetSource(Array.isArray(source) ? source[0] : source);
+// As on iOS, every source reaches the native component, which loads the one
+// that fits the laid-out size.
+const Image = React.forwardRef(function Image(props, ref) {
+  const {source: _source, src: _src, srcSet: _srcSet, style, resizeMode, tintColor, ...rest} = props;
+  const source = getImageSourcesFromImageProps(props) ?? {uri: undefined};
+  const sources = Array.isArray(source) ? source : [source];
+  const size = Array.isArray(source) ? null : {width: source.width ?? props.width, height: source.height ?? props.height};
   const flattened = StyleSheet.flatten(style) ?? {};
-  const size = resolved?.width != null && resolved?.height != null ? {width: resolved.width, height: resolved.height} : null;
   return (
     <ImageViewNativeComponent
-      {...props}
+      {...rest}
       ref={ref}
-      source={resolved}
+      source={sources}
       resizeMode={resizeMode ?? flattened.resizeMode ?? 'cover'}
       tintColor={tintColor ?? flattened.tintColor}
       style={[size, style]}

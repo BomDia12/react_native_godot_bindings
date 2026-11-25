@@ -41,12 +41,9 @@ void RNTextureSources::set_source(int p_slot, const ImageSource &p_source) {
 		}
 		return;
 	}
-	Dictionary source;
-	source["uri"] = String::utf8(p_source.uri.c_str());
-	source["scale"] = p_source.scale;
 	RNImageSource normalized;
 	RNError error;
-	if (!RNImageService::normalize(source, normalized, error)) {
+	if (!rn_normalize_image_source(p_source, normalized, error)) {
 		if (shared->failed) {
 			shared->failed(p_slot, error.message);
 		}

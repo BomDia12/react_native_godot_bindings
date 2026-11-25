@@ -21,14 +21,19 @@ bool normalized_source(const std::string &p_uri, RNImageSource &r_source, RNErro
 } // namespace
 
 void RNImageLoader::loadImage(const std::string &uri, const IImageLoaderOnLoadCallback &&onLoad) {
-	main_thread->post([service = service, uri, onLoad = onLoad]() {
+	main_thread->post([weak = service, uri, onLoad = onLoad]() {
+		const std::shared_ptr<RNImageService> images = weak.lock();
 		RNImageSource source;
 		RNError error;
+		if (!images) {
+			onLoad(0, 0, "Image service stopped");
+			return;
+		}
 		if (!normalized_source(uri, source, error)) {
 			onLoad(0, 0, error.message.utf8().get_data());
 			return;
 		}
-		service->request(source, [onLoad, scale = source.scale](RNImageResult p_result) {
+		images->request(source, [onLoad, scale = source.scale](RNImageResult p_result) {
 			if (p_result.error.is_set()) {
 				onLoad(0, 0, p_result.error.message.utf8().get_data());
 				return;
@@ -44,7 +49,8 @@ IImageLoader::CacheStatus RNImageLoader::getCacheStatus(const std::string &uri) 
 	main_thread->run_sync([&]() {
 		RNImageSource source;
 		RNError error;
-		if (normalized_source(uri, source, error) && service->cached(source)) {
+		const std::shared_ptr<RNImageService> alive = service.lock();
+		if (alive && normalized_source(uri, source, error) && alive->cached(source)) {
 			status = CacheStatus::Memory;
 		}
 	});

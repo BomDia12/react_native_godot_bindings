@@ -1,0 +1,3 @@
+# The fixture intentionally throws from a requestAnimationFrame callback.
+^ERROR: \[Error: intentional frame callback failure\]$
+^ERROR: React Native JS error: Error: intentional frame callback failure$

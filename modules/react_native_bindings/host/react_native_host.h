@@ -47,6 +47,8 @@ protected:
 // upstream ReactHost, JS thread and Godot services, and the per-frame work that
 // applies JS results on the main thread. A hard reload replaces the instance and
 // tears the old one down in the background.
+struct RNTouchTable;
+
 class ReactNativeHost : public Object {
 	GDCLASS(ReactNativeHost, Object);
 
@@ -54,6 +56,8 @@ class ReactNativeHost : public Object {
 
 	std::shared_ptr<RNThemeMetricsStore> theme;
 	std::shared_ptr<RNAsyncStorageState> async_storage;
+	// Outlives reloads; a stopping surface cancels its root's contacts.
+	std::shared_ptr<RNTouchTable> touch_table;
 	RNServiceSettings settings;
 	std::shared_ptr<RNHostInstance> instance;
 	Vector<std::shared_ptr<RNHostInstance>> retiring;
@@ -109,6 +113,7 @@ public:
 	ReactNativeHost();
 	~ReactNativeHost() override;
 	static ReactNativeHost *get_singleton() { return singleton; }
+	const std::shared_ptr<RNTouchTable> &get_touch_table() const { return touch_table; }
 
 	Signal evaluate(const String &p_code);
 	Signal load_segment(const String &p_path);
