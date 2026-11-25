@@ -70,6 +70,7 @@ void RNDevServer::configure(ReactInstanceConfig &r_config) const {
 void RNDevServer::download(RNHTTPService &p_http, const std::string &p_url, std::function<void(bool)> p_done) const {
 	RNHTTPRequest request;
 	request.url = String::utf8(p_url.c_str());
+	request.tooling = true;
 	RNError error;
 	auto completed = [url = p_url, p_done](RNHTTPResponse p_response) {
 		if (p_response.error.is_set() || p_response.status != 200) {

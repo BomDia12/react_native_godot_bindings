@@ -102,7 +102,9 @@ uint64_t RNHTTPService::submit(const RNHTTPRequest &p_request, std::function<voi
 		r_error = http_error("HTTP queue or upload budget exceeded", RNErrorCode::LIMIT);
 		return 0;
 	}
-	const uint64_t response_limit = p_request.response_limit ? std::min(p_request.response_limit, uint64_t(settings.limit("network/http/max_body_bytes"))) : settings.limit("network/http/max_body_bytes");
+	const uint64_t max_body = settings.limit("network/http/max_body_bytes");
+	const uint64_t requested_limit = p_request.response_limit ? std::min(p_request.response_limit, max_body) : max_body;
+	const uint64_t response_limit = p_request.tooling ? 0 : requested_limit;
 	if (uint64_t(p_request.body.size()) + response_limit > uint64_t(settings.limit("network/http/max_buffered_bytes"))) {
 		r_error = http_error("Upload and response reservation exceed the buffer ceiling", RNErrorCode::LIMIT);
 		return 0;
@@ -119,7 +121,7 @@ uint64_t RNHTTPService::submit(const RNHTTPRequest &p_request, std::function<voi
 	Request request;
 	request.id = next_id++;
 	request.spec = p_request;
-	request.spec.response_limit = p_request.response_limit ? std::min(p_request.response_limit, uint64_t(settings.limit("network/http/max_body_bytes"))) : settings.limit("network/http/max_body_bytes");
+	request.spec.response_limit = response_limit;
 	request.deadline = p_request.timeout_ms > 0 ? now() + p_request.timeout_ms : 0;
 	request.completion = std::move(p_completion);
 	buffered += p_request.body.size();
@@ -229,7 +231,7 @@ void RNHTTPService::lease(size_t p_slot, uint64_t p_request) {
 	slot.callback = callable_mp(this, &RNHTTPService::_completed).bind(int(p_slot), int64_t(slot.sequence));
 	node->connect("request_completed", slot.callback);
 	node->set_max_redirects(0);
-	node->set_body_size_limit(request.spec.response_limit);
+	node->set_body_size_limit(request.spec.tooling ? -1 : int(request.spec.response_limit));
 	node->set_timeout(request.deadline > 0 ? std::max(0.001, (request.deadline - now()) / 1000) : 0);
 	node->set_tls_options(tls_options.is_valid() ? tls_options : TLSOptions::client());
 	PackedStringArray headers = request.spec.headers;
@@ -373,7 +375,7 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 	} else if (p_result != HTTPRequest::RESULT_SUCCESS) {
 		response.error = http_error(vformat("HTTPRequest transport result %d", p_result), p_result == HTTPRequest::RESULT_TIMEOUT ? String("E_TIMEOUT") : p_result == HTTPRequest::RESULT_BODY_SIZE_LIMIT_EXCEEDED ? String(RNErrorCode::LIMIT)
 																																																				   : String(RNErrorCode::NATIVE));
-	} else if (uint64_t(p_body.size()) > request.spec.response_limit) {
+	} else if (!request.spec.tooling && uint64_t(p_body.size()) > request.spec.response_limit) {
 		response.error = http_error("HTTP body exceeds configured limit", RNErrorCode::LIMIT);
 	} else {
 		response.body = p_body;

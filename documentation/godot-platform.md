@@ -230,8 +230,8 @@ With `react_native/dev_server/enabled` on, each runtime downloads its bundle fro
 service, caches it under `user://react_native/cache/downloads/`, and loads it under its
 Metro URL; `ResourceLoader` resolves that URL to the cached copy. Surfaces that start
 meanwhile wait for the bundle. When the download fails, the runtime loads
-`react_native/bundle/path`. Export templates ignore the setting. The bundle must stay
-within `react_native/network/http/max_body_bytes`.
+`react_native/bundle/path`. Export templates ignore the setting. Bundle and segment
+downloads aren't limited by the `react_native/network/http` limits.
 
 Upstream `ReactHost` stays out of dev mode, because its dev mode asks Metro for an Android
 bundle and reloads the runtime in place. Godot instead reuses upstream's pieces:

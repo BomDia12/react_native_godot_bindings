@@ -17,6 +17,8 @@ struct RNHTTPRequest {
 	double timeout_ms = 0;
 	uint64_t response_limit = 0;
 	bool credentials = true;
+	// Developer tools download bundles of any size, outside the game's HTTP limits.
+	bool tooling = false;
 };
 struct RNHTTPResponse {
 	String url;
