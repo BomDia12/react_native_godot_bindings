@@ -335,7 +335,16 @@ shape.
 
 Explicit `res://` and `user://` objects are supported for local operations. PNG/JPEG/static WebP and base64 images use the bounded native image service;
 getSize, prefetch and queryCache go through upstream's `ImageLoader` module, backed by the
-same service. HTTP images use the shared bounded HTTPRequest pool. Prefetch cannot be
+same service. `Image` loads through upstream's `ImageState`: as on iOS, every entry of a
+`source` array reaches the native component, upstream's `ImageShadowNode` picks the one that
+fits the laid-out size and requests it from a Godot `ImageManager`, and the component view
+shows the request's result. `onLoad` reports the image's size in points, the texture's pixels
+divided by the `scale` of the source entry it came from. A source replaced or unmounted before
+it loads reports nothing and cancels its load. Every caller shares one decoded texture per URI
+and headers, whatever scale it asks for. HTTP images use the shared bounded HTTPRequest pool.
+Godot's threaded HTTPRequest can only stop a request by waiting for its response, so a
+cancelled request drains on its own thread without blocking the game and leaves the pool's
+active count at once. Prefetch cannot be
 aborted, as in upstream's C++ image loader. The native image service requires the exact
 scheme, forward slashes, a nonempty relative path, and no `..` segment or embedded NUL.
 Percent characters remain literal. Missing staged files should be fixed by rebuilding

@@ -51,6 +51,7 @@ function GameInventory({rootTag}) {
   const [modal, setModal] = useState(false);
   const [windowVisible, setWindowVisible] = useState(false);
   const [remote, setRemote] = useState(null);
+  const [requested, setRequested] = useState(null);
   const [endpoint, setEndpoint] = useState('');
   const [busy, setBusy] = useState(false);
   const [controlled, setControlled] = useState('Controlled');
@@ -74,7 +75,7 @@ function GameInventory({rootTag}) {
   };
   useEffect(() => {
     actions.set(rootTag, {
-      command, queued, refresh,
+      command, queued, refresh, requestImage: setRequested,
       testAlert: (title = 'Inventory alert') => alert(title, 'Local policy', [{text: 'OK', onPress: () => record('inventory-alert-button')}], {cancelable: true}).then(() => record('alert-settled')).catch(error => {observations.alertError = error.code;}),
       ambientAlert: () => Alert.alert('Unattributed', 'Godot handler', [{text: 'OK', onPress: () => record('ambient-alert-button')}]),
       staleAlert: () => savedAlert?.(),
@@ -123,6 +124,7 @@ function GameInventory({rootTag}) {
     <View style={{flexDirection: 'row', height: 44, alignItems: 'center'}}>
       <Image testID="asset-image" source={icon} style={{width: 32, height: 32}} onLoad={() => record('asset-load')} />
       {remote && <Image testID="remote-image" source={remote} style={{width: 32, height: 32}} onLoad={() => record('remote-load')} onError={event => {observations.networkError = event.nativeEvent.error;}} />}
+      {requested && <Image testID="requested-image" source={{uri: requested}} style={{width: 32, height: 32}} onLoad={event => record('requested-load ' + event.nativeEvent.source.uri)} />}
       <Switch testID="settings-switch" value={dark} onValueChange={value => {setDark(value); Appearance.setColorScheme(value ? 'dark' : 'light');}} />
       <ActivityIndicator animating={busy} hidesWhenStopped={false} />
       <Button title="Use potion" onPress={() => command('use', ['potion'])} />

@@ -299,7 +299,34 @@ func _process(_delta: float) -> void:
 		17:
 			require_condition(fixture().get("events", []).count("press") == 1, "Native primary input did not activate Pressable exactly once")
 			require_condition(fixture().get("events", []).count("refresh") == 1, "Native primary input did not activate Button exactly once")
+			action("image-case", {"source": [{"uri": "res://assets/item.png", "width": 24, "height": 24, "scale": 1}, {"uri": "res://assets/item@3x.png", "width": 48, "height": 48, "scale": 1}], "size": 24})
+			next_stage()
+		18:
+			# Upstream picks the source that fits the laid-out size.
+			if not image_loaded("item.png") and frames - stage_frame < 300:
+				return
+			require_condition(case_texture_width() == 24, "Image did not load the source that fits 24 points: %d" % case_texture_width())
+			action("image-case", {"source": [{"uri": "res://assets/item.png", "width": 24, "height": 24, "scale": 1}, {"uri": "res://assets/item@3x.png", "width": 48, "height": 48, "scale": 1}], "size": 48})
+			next_stage()
+		19:
+			if not image_loaded("item@3x.png") and frames - stage_frame < 300:
+				return
+			require_condition(case_texture_width() == 48, "Resized Image did not switch to the source that fits 48 points: %d" % case_texture_width())
+			action("image-case", {"source": {"uri": "res://assets/item@2x.png", "scale": 2}, "size": 16})
+			next_stage()
+		20:
+			if not image_loaded("item@2x.png") and frames - stage_frame < 300:
+				return
+			var loads: Array = fixture().get("imageLoads", [])
+			require_condition(not loads.is_empty() and int(loads[-1].get("width", 0)) == 16, "An @2x asset did not report its onLoad size in points: %s" % [loads])
 			finish()
+
+func image_loaded(uri_part: String) -> bool:
+	return fixture().get("imageLoads", []).any(func(source): return String(source.get("uri", "")).contains(uri_part))
+
+func case_texture_width() -> int:
+	var image := target("case-image") as RNImageControl
+	return 0 if image == null or image.texture == null else image.texture.get_width()
 
 func finish() -> void:
 	set_process(false)

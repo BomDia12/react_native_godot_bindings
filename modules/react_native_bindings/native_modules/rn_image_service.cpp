@@ -130,7 +130,6 @@ bool RNImageService::normalize(const Dictionary &p_source, RNImageSource &r_sour
 		identity.update(reinterpret_cast<const uint8_t *>(part.ptr()), size_t(length) * sizeof(char32_t));
 	};
 	hash_part(r_source.uri);
-	hash_part(String::num(r_source.scale, 9));
 	for (const Variant &key : keys) {
 		if (key.get_type() != Variant::STRING || r_source.headers[key].get_type() != Variant::STRING) {
 			r_error = RNError::make(RNErrorCode::VALIDATION, "Image headers must contain strings", "image.source");

@@ -143,17 +143,18 @@ void RNHTTPService::settle(uint64_t p_request, RNHTTPResponse p_response) {
 		callback(std::move(p_response));
 	}
 }
-void RNHTTPService::quarantine(size_t p_slot) {
+// HTTPRequest's cancel_request joins its thread, which blocks reading the
+// response, so a request still in flight drains on that thread instead and its
+// completion frees the slot.
+void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 	Slot &slot = slots[p_slot];
 	if (slot.state == State::DRAINING) {
 		return;
 	}
 	slot.state = State::DRAINING;
-	HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(slot.node));
-	if (node) {
-		node->cancel_request();
+	if (!p_in_flight) {
+		callable_mp(this, &RNHTTPService::_drained).call_deferred(int(p_slot), int64_t(slot.sequence));
 	}
-	callable_mp(this, &RNHTTPService::_drained).call_deferred(int(p_slot), int64_t(slot.sequence));
 }
 void RNHTTPService::_drained(int p_slot, int64_t p_sequence) {
 	if (p_slot < 0 || size_t(p_slot) >= slots.size()) {
@@ -202,7 +203,7 @@ bool RNHTTPService::cancel(uint64_t p_request) {
 	for (size_t index = 0; index < slots.size(); ++index) {
 		if (slots[index].request == p_request && slots[index].state != State::IDLE) {
 			found->second.cancelled = true;
-			quarantine(index);
+			quarantine(index, true);
 			return false;
 		}
 	}
@@ -245,7 +246,7 @@ void RNHTTPService::lease(size_t p_slot, uint64_t p_request) {
 	if (error != OK) {
 		RNHTTPResponse response;
 		response.error = http_error(vformat("HTTPRequest failed to start (%d)", error));
-		quarantine(p_slot);
+		quarantine(p_slot, false);
 		settle(p_request, std::move(response));
 	}
 }
@@ -268,7 +269,7 @@ void RNHTTPService::process_requests() {
 		response.error = http_error("HTTP request timed out", "E_TIMEOUT");
 		for (size_t index = 0; index < slots.size(); ++index) {
 			if (slots[index].request == id) {
-				quarantine(index);
+				quarantine(index, true);
 				break;
 			}
 		}
@@ -315,12 +316,16 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 		return;
 	}
 	Slot &slot = slots[p_slot];
-	if (slot.sequence != uint64_t(p_sequence) || slot.state != State::LEASED) {
+	if (slot.sequence != uint64_t(p_sequence)) {
+		return;
+	}
+	if (slot.state == State::DRAINING) {
+		callable_mp(this, &RNHTTPService::_drained).call_deferred(p_slot, p_sequence);
 		return;
 	}
 	auto found = requests.find(slot.request);
 	if (found == requests.end()) {
-		quarantine(p_slot);
+		quarantine(p_slot, false);
 		return;
 	}
 	Request &request = found->second;
@@ -368,7 +373,7 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 				request.spec.url = next;
 				++request.redirects;
 				waiting.push_front(request.id);
-				quarantine(p_slot);
+				quarantine(p_slot, false);
 				return;
 			}
 		}
@@ -381,7 +386,7 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 		response.body = p_body;
 	}
 	const uint64_t id = slot.request;
-	quarantine(p_slot);
+	quarantine(p_slot, false);
 	settle(id, std::move(response));
 }
 bool RNHTTPService::has_pending_work() const {

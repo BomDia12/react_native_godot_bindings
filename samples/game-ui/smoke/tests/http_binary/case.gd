@@ -40,5 +40,40 @@ func run() -> void:
 		return
 	check(inventory.items[0].quantity == 4 and (await fixture()).inventory.items[0].quantity == 4, "HTTP inventory bypassed Godot authority")
 	check(target("remote-image") is RNImageControl and target("remote-image").texture != null, "Shared HTTP image transport did not decode")
+	if not await check_image_requests():
+		return
 	var records := FileAccess.get_file_as_string(network.records)
 	check(records.contains('"path": "/icon.png"') and records.contains('"path": "/echo"'), "Server records lack real image/upload requests")
+
+func http_active() -> int:
+	return int(ReactNativeHost.get_service_stats().http.active)
+
+func requested_loads() -> Array:
+	return (await fixture()).events.filter(func(event): return String(event).begins_with("requested-load"))
+
+# A slow request that its Image replaces or unmounts reports nothing and leaves
+# the HTTP pool before the fixture answers.
+func check_image_requests() -> bool:
+	await action("requestImage", [network.http + "/slow?seconds=1"])
+	if not await wait_until(func(): return http_active() > 0, "the slow image request"):
+		return false
+	await action("requestImage", [network.http + "/icon.png"])
+	if not await wait_until(func(): return (await requested_loads()).size() == 1, "the replacing image"):
+		return false
+	await get_tree().create_timer(1.5).timeout
+	var loads := await requested_loads()
+	check(loads.size() == 1 and String(loads[0]).ends_with("/icon.png"), "A replaced image request reported onLoad: %s" % [loads])
+
+	await action("requestImage", [network.http + "/slow?seconds=2"])
+	var started := Time.get_ticks_msec()
+	if not await wait_until(func(): return http_active() > 0, "the unmounted image's request"):
+		return false
+	await get_tree().create_timer(0.1).timeout
+	await action("requestImage", [null])
+	if not await wait_until(func(): return http_active() == 0, "the unmounted image's request to leave the pool"):
+		return false
+	check(Time.get_ticks_msec() - started < 1800, "Unmounting an Image did not cancel its HTTP request before the server answered")
+	await get_tree().create_timer(2.2).timeout
+	check((await requested_loads()).size() == 1, "An unmounted Image reported onLoad: %s" % [await requested_loads()])
+	return true
+

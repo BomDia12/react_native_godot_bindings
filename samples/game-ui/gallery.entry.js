@@ -9,7 +9,7 @@ const importedFont = fontFamily(require('./assets/OpenSans.woff2'));
 const rows = Array.from({length: 100}, (_, index) => ({id: String(index), title: 'Item ' + index}));
 const sections = [{title: 'Equipment', data: rows.slice(0, 8)}, {title: 'Supplies', data: rows.slice(8, 16)}];
 const fixture = {enemySetters: {}, refs: {}};
-const state = global.__gallery = {events: [], enemies: {}, renderedItems: []};
+const state = global.__gallery = {events: [], enemies: {}, renderedItems: [], imageLoads: []};
 const record = name => state.events.push(name);
 const dataIcon = {uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAAAAADFHGIkAAAAAmJLR0QA/4ePzL8AAAAHdElNRQfqCgECJyKFJspvAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTEwLTAxVDAyOjM5OjE3KzAwOjAwucRQNQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0xMC0wMVQwMjozOToxNyswMDowMMiZ6IkAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMTAtMDFUMDI6Mzk6MzQrMDA6MDDsQdS2AAABbUlEQVQoz22SsW4TQRCGv39u13cRZ8HJRhShgT5NpEQUlKnCC/AI5AnyGunIi4SKHilI9DSWCLiIZMsuYnH23e1Q+BwsxDY7mp35Z/T9qzNc/OcEfwwlSAAuXIG+3tqmI4shuXAg9OnmoXpVaTFdFDEhIOAIW43en4wH3sy/3syeJIDsNcgeji9P8nbT+PDozfRHnrR9yFbHlwcrl6SuLt9O7nIHk6wZfdA6CIGytV+MNwJzVJ+/qDMHB7D183e1wKB9elqbQ7+4/T6tWjDUvBy3gr4DtaPDjTApVdH3YXiskjB2Gv8QM9wWjf7mhZqFOeYep7OwGwDucfZr4JgIy9uDTjv6SsXtMoBBKj7dF13fo664vykcDIjzj+TdVqjNuZ4PfMvK87vJ0Tgld8VyfvWtTD1dPP/5pavKYsDs8/WkTDjSWW9U/eywYjFdFjE5cvUOpjBcf+/I4tDT1vXwuL4Vwr1DyMH3fonvXc4fihicbbO3bcMAAAAASUVORK5CYII='};
 
@@ -18,6 +18,18 @@ function EnemyPanel({rootTag}) {
   useEffect(() => { fixture.enemySetters[rootTag] = setHealth; return () => delete fixture.enemySetters[rootTag]; }, [rootTag]);
   state.enemies[rootTag] = health;
   return <View style={{width: 180, height: 16, backgroundColor: '#333333'}}><View testID="health" style={{width: health + '%', height: 16, backgroundColor: '#cc3333'}} /></View>;
+}
+// One Image whose sources, size and presence the smoke test sets.
+function ImageCase() {
+  const [imageCase, setImageCase] = useState(null);
+  fixture.setImageCase = setImageCase;
+  if (!imageCase) {
+    return null;
+  }
+  return <View style={{position: 'absolute', right: 0, bottom: 0}}>
+    <Image testID="case-image" source={imageCase.source} style={{width: imageCase.size, height: imageCase.size}}
+      onLoad={event => state.imageLoads.push(event.nativeEvent.source)} />
+  </View>;
 }
 function Inventory() {
   const [enabled, setEnabled] = useState(false);
@@ -48,6 +60,7 @@ function Inventory() {
     return <View style={{height: 32, flexDirection: 'row'}}><Image source={itemIcon} style={{width: 24, height: 24}} /><Text>{item.title}</Text></View>;
   };
   return <View style={{flex: 1, padding: 12, backgroundColor: '#18202b'}}>
+    <ImageCase />
     <Text testID="imported-font" style={{fontFamily: importedFont, fontSize: 22, color: '#eeeeee'}}>Inventory and settings</Text>
     <View style={{flexDirection: 'row', height: 44, alignItems: 'center'}}>
       <Image testID="asset-image" source={itemIcon} style={{width: 32, height: 32}} onLoad={() => record('asset-load')} />
@@ -110,5 +123,6 @@ global.__galleryAction = (action, value) => {
   else if (action === 'clear') { fixture.refs.editor.current.clear(); }
   else if (action === 'focus') { fixture.refs.editor.current.focus(); }
   else if (action === 'enemy') { fixture.enemySetters[value.rootTag]?.(value.health); }
+  else if (action === 'image-case') { state.imageLoads = []; fixture.setImageCase(value); }
   else if (action === 'image-size') { Image.getSize(Image.resolveAssetSource(itemIcon).uri).then(size => { state.imageSize = size; }); }
 };

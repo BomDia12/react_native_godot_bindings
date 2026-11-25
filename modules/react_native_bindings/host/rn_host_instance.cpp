@@ -20,6 +20,7 @@
 #include "../mounting/rn_mounting_manager.h"
 #include "../native_modules/rn_blob_service.h"
 #include "../native_modules/rn_http_service.h"
+#include "../native_modules/rn_image_manager.h"
 #include "../native_modules/rn_image_service.h"
 #include "../root_view/react_native_root_view.h"
 #include "../turbomodules/rn_godot_alerts.h"
@@ -105,14 +106,14 @@ ComponentRegistryFactory component_registry_factory() {
 	};
 }
 
-std::shared_ptr<RNComponentViewFactories> component_view_factories(const std::shared_ptr<const RNTextShaper> &p_shaper, const std::shared_ptr<RNImageService> &p_images) {
+std::shared_ptr<RNComponentViewFactories> component_view_factories(const std::shared_ptr<const RNTextShaper> &p_shaper, const std::shared_ptr<RNImageService> &p_images, const std::shared_ptr<RNMainThreadQueue> &p_main_thread) {
 	auto factories = std::make_shared<RNComponentViewFactories>();
 	auto view = [](const ShadowView &p_view) { return std::make_unique<RNViewComponentView>(p_view.tag); };
 	factories->add("View", view);
 	factories->add("UnimplementedNativeView", view);
 	factories->set_fallback(view);
 	factories->add("Paragraph", [p_shaper](const ShadowView &p_view) { return std::make_unique<RNParagraphComponentView>(p_view.tag, p_shaper); });
-	factories->add("Image", [p_images](const ShadowView &p_view) { return std::make_unique<RNImageComponentView>(p_view.tag, p_images); });
+	factories->add("Image", [p_main_thread](const ShadowView &p_view) { return std::make_unique<RNImageComponentView>(p_view.tag, p_main_thread); });
 	factories->add("ScrollView", [](const ShadowView &p_view) { return std::make_unique<RNScrollComponentView>(p_view.tag); });
 	factories->add(GodotTextInputComponentName, [p_shaper](const ShadowView &p_view) { return std::make_unique<RNTextInputComponentView>(p_view.tag, p_view.surfaceId, p_shaper); });
 	factories->add(GodotSwitchComponentName, [](const ShadowView &p_view) { return std::make_unique<RNSwitchComponentView>(p_view.tag); });
@@ -276,7 +277,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	scenes = std::make_shared<RNSceneBindings>(p_setup.find_root, p_setup.find_module);
 	host_events = std::make_shared<RNGodotHostEvents>();
 	auto image_loader = std::make_shared<RNImageLoader>(images, main_thread);
-	mounting = std::make_shared<RNMountingManager>(main_thread, component_view_factories(shaper, images), component_registry_factory(), image_loader);
+	mounting = std::make_shared<RNMountingManager>(main_thread, component_view_factories(shaper, images, main_thread), component_registry_factory(), image_loader);
 	run_loop_observers = std::make_shared<RunLoopObserverManager>();
 	log_box = std::make_shared<RNLogBoxSurface>(main_thread);
 	startup_segments = p_setup.settings.segments;
@@ -300,6 +301,7 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 	if (dev_server) {
 		context->insert(DevToolsWebSocketClientFactoryKey, rn_inspector_web_socket_client_factory(rn_web_socket_client_factory(main_thread), reload_from_main_thread));
 	}
+	context->insert(ImageManagerKey, std::shared_ptr<ImageManager>(std::make_shared<RNImageManager>(images, main_thread)));
 	context->insert(RNTextShaper::CONTEXT_KEY, std::shared_ptr<const RNTextShaper>(shaper));
 	context->insert(GodotSwitchComponentDescriptor::THEME_KEY, std::shared_ptr<const RNThemeMetricsStore>(p_setup.theme));
 	game_services = std::make_shared<RNGameServicesHandle>();
