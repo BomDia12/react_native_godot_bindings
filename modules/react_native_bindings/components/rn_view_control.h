@@ -31,6 +31,8 @@ class RNViewControl : public Panel {
 	std::function<void(const Variant &, const Point2 &)> dropped;
 	std::function<void(bool)> drag_ended;
 	RNBoxShadows shadows;
+	// Left, top, right and bottom distances that hitSlop adds to the hit area.
+	Vector4 hit_slop;
 	RNAccessibility accessibility;
 	// A grouped view's children hang under this hidden element, as TabContainer
 	// hides inactive tabs, because AccessKit rejects elements outside the tree.
@@ -53,6 +55,8 @@ public:
 	RNViewControl();
 	Size2 get_combined_minimum_size() const override { return Size2(); }
 	Size2 get_combined_maximum_size() const override { return Size2(-1, -1); }
+	bool has_point(const Point2 &p_point) const override;
+	void set_hit_slop(const Vector4 &p_hit_slop) { hit_slop = p_hit_slop; }
 	void set_menu_entries(const Array &p_entries);
 	void set_focus_callback(std::function<void(bool)> p_callback) { focus_changed = std::move(p_callback); }
 	void set_menu_callbacks(std::function<void(const String &)> p_action, std::function<void()> p_opening);
