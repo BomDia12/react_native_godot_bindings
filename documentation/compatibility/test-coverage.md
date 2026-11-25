@@ -1,5 +1,7 @@
 # Test coverage
 
+Every new or extended test ID has a negative control, recorded once in the pull request that adds it: the same test fails against the code without the change, or with the checked behaviour deliberately broken.
+
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
 | BASELINE-BUILD | `Pinned Linux build` | supported | Builds source-pinned Hermes and the Godot editor with the external module and tests enabled. | [build script](../../scripts/build_godot.sh) | CI build exit status |
