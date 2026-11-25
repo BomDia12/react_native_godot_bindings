@@ -273,7 +273,9 @@ downloads them as modules-only bundles, and falls back to the files as it does f
 bundle. `ReactNativeHost.load_segment(path)` evaluates a segment file at runtime, for
 example from a pack loaded with `ProjectSettings.load_resource_pack()`, and returns a
 signal that completes with whether it succeeded. It's `false` when the file is missing or
-built for another bundle, when its code throws, and when a reload interrupts it:
+built for another bundle, when its code throws or reports a fatal error, and when a reload
+interrupts it. Non-fatal errors it reports, such as through `ErrorUtils.reportError`, reach
+the game's error handler as usual and don't fail the load:
 
 ```gdscript
 ProjectSettings.load_resource_pack("user://dlc/shop.pck")

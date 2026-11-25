@@ -635,7 +635,7 @@ void RNHostInstance::evaluate(const String &p_code, std::function<void(const Var
 			result = decoded.ok() ? decoded.value : Variant();
 		} catch (const jsi::JSError &p_error) {
 			if (!retired) {
-				on_error(String::utf8(p_error.getMessage().c_str()) + "\n" + String::utf8(p_error.getStack().c_str()));
+				on_error(js_error_text(p_error));
 			}
 		} catch (const std::exception &p_error) {
 			if (!retired) {
