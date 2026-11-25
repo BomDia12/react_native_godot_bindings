@@ -4,12 +4,10 @@ Public cross-platform non-component exports from React Native 0.87.1 are classif
 below. Framework startup shims remain separate from native service claims.
 The tagged [public exports](https://github.com/facebook/react-native/blob/v0.87.1/packages/react-native/index.js)
 are verified with `git show v0.87.1`, including Alert, Dimensions, Appearance, AppState,
-Keyboard, Linking, Vibration and Networking contracts. APIs that React Native scopes to a
-single platform are out of scope and are not listed: `ActionSheetIOS`,
-`DynamicColorIOS`, `PermissionsAndroid`, `PushNotificationIOS`, `Settings`, and
-`ToastAndroid`. `InteractionManager` is absent from the tagged public types and its
-development-only compatibility getter throws when accessed. `BackHandler` is listed because
-Godot gives it a meaning on every platform.
+Keyboard, Linking, Vibration and Networking contracts. Exports that React Native scopes to a
+single platform, or that throw when accessed, are listed under [Out of scope](#out-of-scope).
+`BackHandler` is listed because Godot gives it a meaning on every platform. Globals that are
+not `index.js` exports have a Surface cell of the form `` `name` (global) ``.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
@@ -78,3 +76,15 @@ Godot gives it a meaning on every platform.
 | API-GODOT-AUDIO | `react-native-godot/audio` | supported | Godot-specific. Pooled AudioStreamPlayer playback, preloading and AudioServer bus volume and mute. Verified against the dummy audio driver. | [game modules](../../modules/react_native_bindings/turbomodules/rn_game_modules.cpp) | [GAME-AUDIO-SMOKE](test-coverage.md) |
 | API-GODOT-I18N | `react-native-godot/i18n` | supported | Godot-specific. TranslationServer messages and plurals, cached per locale, and locale changes from either side. | [game modules](../../modules/react_native_bindings/turbomodules/rn_game_modules.cpp) | [GAME-TRANSLATIONS-SMOKE](test-coverage.md) |
 | API-COMMUNITY-ASYNC-STORAGE | `@react-native-async-storage/async-storage` | supported | The package works unchanged, default and named storages, over JSON files under `user://` replaced atomically. | [storage module](../../modules/react_native_bindings/turbomodules/rn_async_storage_module.cpp) | [GAME-STORAGE-SMOKE](test-coverage.md), [GAME-UI-UNIT](test-coverage.md) |
+
+## Out of scope
+
+| Surface | Rationale |
+|---|---|
+| `ActionSheetIOS` | iOS-only API. |
+| `DynamicColorIOS` | iOS-only API. |
+| `PermissionsAndroid` | Android-only API. |
+| `PushNotificationIOS` | iOS-only API. |
+| `Settings` | iOS-only API. |
+| `ToastAndroid` | Android-only API. |
+| `InteractionManager` | Absent from the tagged public types, and its development-only compatibility getter throws when accessed. |

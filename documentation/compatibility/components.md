@@ -2,14 +2,10 @@
 
 Public cross-platform component exports from React Native 0.87.1 are classified below.
 `RCTRawText` is an internal host primitive folded into `Text`, not a public component
-export. Components that React Native scopes to a single platform are out of scope and are
-not listed: `DrawerLayoutAndroid` (Android implementation), `InputAccessoryView` (iOS
-implementation and non-iOS warning/null fallback), `ProgressBarAndroid` (Android
-implementation and non-Android `UnimplementedView` fallback), `SafeAreaView` (iOS
-implementation and default `View` fallback), and `TouchableNativeFeedback` (Android-only
-component). These scopes are documented by the tagged component modules' `@platform`
-annotations or `Platform.OS` branches. `Touchable` remains a runtime compatibility
-re-export but is absent from the tagged public types.
+export. Exports that React Native scopes to a single platform, or keeps only for runtime
+compatibility, are listed under [Out of scope](#out-of-scope). The package test
+`tests/exports.test.cjs` requires every `react-native` export to have exactly one row here,
+in the [API matrix](apis.md), or in either file's out-of-scope table.
 
 | ID | Surface | Status | Behavior / limitations | Implementation evidence | Test evidence |
 |---|---|---|---|---|---|
@@ -48,3 +44,17 @@ re-export but is absent from the tagged public types.
 | COMP-VIRTUAL-VIEW | `unstable_VirtualView` | pending | Experimental component is not implemented or verified. | none | none |
 | COMP-VIRTUAL-COLUMN | `unstable_VirtualColumn` | pending | Experimental virtual-collection component is not implemented or verified. | none | none |
 | COMP-VIRTUAL-ROW | `unstable_VirtualRow` | pending | Experimental virtual-collection component is not implemented or verified. | none | none |
+
+## Out of scope
+
+The tagged component modules' `@platform` annotations or `Platform.OS` branches scope these
+exports to one platform.
+
+| Surface | Rationale |
+|---|---|
+| `DrawerLayoutAndroid` | Android implementation. |
+| `InputAccessoryView` | iOS implementation, with a warning and `null` fallback elsewhere. |
+| `ProgressBarAndroid` | Android implementation, with an `UnimplementedView` fallback elsewhere. |
+| `SafeAreaView` | iOS implementation, with a default `View` fallback elsewhere. |
+| `TouchableNativeFeedback` | Android-only component. |
+| `Touchable` | Runtime compatibility re-export, absent from the tagged public types. |
