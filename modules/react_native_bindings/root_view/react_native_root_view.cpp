@@ -621,6 +621,9 @@ void ReactNativeRootView::_on_host_gui_input(const Ref<InputEvent> &p_event, Obj
 	if (Ref<InputEventMouse> mouse = p_event; mouse.is_valid() && view) {
 		view = _view_inside_clips(view, control->get_global_transform().xform(mouse->get_position()));
 	}
+	if (view) {
+		view = _box_only_target(view);
+	}
 	if (view == root_component.get()) {
 		view = nullptr;
 	}
@@ -628,7 +631,34 @@ void ReactNativeRootView::_on_host_gui_input(const Ref<InputEvent> &p_event, Obj
 		return;
 	}
 	claimed_input_serial = input_serial;
+	claimed_target_valid = view != nullptr;
 	_route(p_event->xformed_by(control->get_global_transform_with_canvas()), view, control->get_viewport());
+}
+
+// Godot calls this after the event has bubbled through every React and native
+// control under the pointer, so a native control that handles the event, such
+// as a scrolling ScrollContainer, accepts it first. A press React claims for a
+// view stops here instead of reaching the game's _unhandled_input; motion goes
+// on, so game cursors and hover keep working.
+void ReactNativeRootView::gui_input(const Ref<InputEvent> &p_event) {
+	const bool pointer = Ref<InputEventMouseButton>(p_event).is_valid() || Ref<InputEventScreenTouch>(p_event).is_valid() || Ref<InputEventScreenDrag>(p_event).is_valid();
+	if (pointer && claimed_input_serial == input_serial && claimed_target_valid) {
+		accept_event();
+	}
+}
+
+// A box-only view takes the presses of everything inside it, as its children
+// can't be targets. Godot already skips box-none views when it picks a control.
+RNComponentView *ReactNativeRootView::_box_only_target(RNComponentView *p_view) const {
+	RNComponentView *target = p_view;
+	for (Node *node = p_view->get_control(); node && node != container; node = node->get_parent()) {
+		Control *control = Object::cast_to<Control>(node);
+		RNComponentView *view = control && control->has_meta(RNComponentView::TAG_META) ? views->find_for_control(control) : nullptr;
+		if (view && view->get_pointer_events() == PointerEventsMode::BoxOnly) {
+			target = view;
+		}
+	}
+	return target;
 }
 
 // Godot picks controls by rectangle; a point outside a rounded clip belongs to

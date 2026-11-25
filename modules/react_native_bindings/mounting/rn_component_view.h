@@ -86,6 +86,7 @@ public:
 	// What ReactNativeRootView.get_native_node() returns for this view's nativeID.
 	virtual Node *get_native_node() const { return control; }
 	const std::string &get_native_id() const;
+	facebook::react::PointerEventsMode get_pointer_events() const { return props ? props->pointerEvents : facebook::react::PointerEventsMode::Auto; }
 	// Views whose Godot control handles presses itself receive pointer events but no touches.
 	virtual bool owns_activation() const { return false; }
 	// Views that name other views as focus neighbors resolve them once each

@@ -70,6 +70,9 @@ Control *RNTextInputControl::_create_editor(bool p_multiline) {
 		line->connect("text_submitted", callable_mp(this, &RNTextInputControl::_submitted));
 		result = line;
 	}
+	// Anchored, because Godot reports no resize to a control outside the tree,
+	// where the wrapper takes its first layout.
+	result->set_anchors_and_offsets_preset(PRESET_FULL_RECT);
 	result->connect("focus_entered", callable_mp(this, &RNTextInputControl::_focus_entered));
 	result->connect("focus_exited", callable_mp(this, &RNTextInputControl::_focus_exited));
 	result->connect("gui_input", callable_mp(this, &RNTextInputControl::_editor_input));
@@ -201,7 +204,6 @@ void RNTextInputControl::_configure_editor(Control *p_editor) {
 		edit->set_editable(config.editable);
 		edit->set_placeholder(config.placeholder);
 	}
-	p_editor->set_size(get_size());
 }
 void RNTextInputControl::set_callbacks(std::function<void(const StringName &, const Dictionary &)> p_event, std::function<void()> p_layout) {
 	event_callback = std::move(p_event);
@@ -371,9 +373,6 @@ void RNTextInputControl::_font_changed() {
 void RNTextInputControl::_notification(int p_what) {
 	if (p_what == NOTIFICATION_ENTER_TREE && auto_focus_pending) {
 		callable_mp(this, &RNTextInputControl::_auto_focus).call_deferred();
-	}
-	if (p_what == NOTIFICATION_RESIZED && editor) {
-		editor->set_size(get_size());
 	}
 	if (p_what == NOTIFICATION_PROCESS) {
 		if (!is_composing() && !deferred_replacement.is_empty()) {

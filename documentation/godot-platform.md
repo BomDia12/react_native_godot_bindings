@@ -173,6 +173,25 @@ controls, in `SubViewport`s and in other windows.
 - **Editor preview.** With `editor_preview` off, the editor doesn't run the root and draws
   its application key instead. Running games ignore it.
 
+### Pointer input and the game
+
+A root shares Godot's input with the game around it. A pointer button, wheel, touch or drag
+event that React claims for a target view, meaning any view but the root after `box-none` and
+`box-only` resolve, doesn't reach the game's `_unhandled_input`. The same event over a root's
+empty area, a `box-none` view or a `pointerEvents="none"` subtree does. Mouse motion always
+reaches the game, so game cursors and hover keep working.
+
+The root accepts a claimed event in its own `gui_input`, which Godot calls after the event
+has bubbled through every React and native control with `MOUSE_FILTER_PASS`. A native
+control that handles the event itself, such as a ScrollContainer scrolling, a Slider or a
+LineEdit, accepts it first. Accepting earlier, in the handler of the views' `gui_input`
+signals, would starve those controls, because Godot emits a control's `gui_input` signal
+before calling its `gui_input()` and stops once the event is handled.
+
+`pointerEvents` resolves in Godot, as React Native leaves hit testing to the platform. A
+`box-none` view's control ignores the mouse, so Godot picks its children or whatever is behind
+it, and a press inside a `box-only` view goes to that view instead of its children.
+
 ### State and pausing
 
 `useGodotRootState()` from `react-native-godot/root` returns the calling root's
