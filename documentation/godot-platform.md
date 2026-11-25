@@ -160,8 +160,8 @@ controls, in `SubViewport`s and in other windows.
   still applies, as on other platforms.
 - **Initial properties.** `initial_properties` is a Dictionary passed to the component as
   its initial props, converted like other Godot values. A property holding a value that
-  can't be converted, such as an Object or an integer beyond `Number.MAX_SAFE_INTEGER`, is
-  reported as an error and left out.
+  can't be converted, such as an Object, an integer beyond `Number.MAX_SAFE_INTEGER` or a
+  key that isn't a string, is reported as an error and left out.
 - **Editor preview.** With `editor_preview` off, the editor doesn't run the root and draws
   its application key instead. Running games ignore it.
 
