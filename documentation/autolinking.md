@@ -155,9 +155,12 @@ project's `autolinking.json`:
 ```sh
 scripts/build_hermes.sh
 scripts/build_hermes.sh linux-x86_64
-RN_AUTOLINKING=<path to autolinking.json> scripts/build_godot.sh --release template_debug
-RN_AUTOLINKING=<path to autolinking.json> scripts/build_godot.sh --release template_release
+RN_AUTOLINKING=<path to autolinking.json> scripts/build_godot.sh --release template_debug werror=no
+RN_AUTOLINKING=<path to autolinking.json> scripts/build_godot.sh --release template_release werror=no
 ```
+
+`werror=no` keeps warnings in a library's own sources from failing the build, as it does for
+`build-godot-editor`.
 
 Then set `godot/bin/godot.linuxbsd.template_debug.x86_64.react_native` and
 `godot/bin/godot.linuxbsd.template_release.x86_64.react_native` as the export preset's

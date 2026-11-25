@@ -9,10 +9,11 @@ ARCHIVE_NAME=react-native-godot-templates.tpz
 
 # Godot's export template manager looks for templates under GODOT_VERSION_FULL_CONFIG.
 VERSION=$(python3 -I -c '
-import runpy, sys
+import os, runpy, sys
 version = runpy.run_path(sys.argv[1])
 patch = ".%d" % version["patch"] if version["patch"] else ""
-print("%d.%d%s.%s.react_native" % (version["major"], version["minor"], patch, version["status"]))
+status = os.environ.get("GODOT_VERSION_STATUS", version["status"])
+print("%d.%d%s.%s%s.react_native" % (version["major"], version["minor"], patch, status, version["module_config"]))
 ' "$GODOT_SOURCE_DIR/version.py")
 
 mkdir -p "$ARTIFACT_DIR"

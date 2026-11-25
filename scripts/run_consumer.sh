@@ -12,7 +12,7 @@ GODOT_SOURCE_DIR=${GODOT_SOURCE_DIR:-"$REPO_ROOT/godot"}
 if [[ -n "${GODOT_EDITOR:-}" ]]; then
 	GODOT_BINARY=$(realpath "$GODOT_EDITOR")
 else
-	GODOT_BINARY=$(find "$GODOT_SOURCE_DIR/bin" -maxdepth 1 -type f -name 'godot.linuxbsd.editor.dev.*' -perm -u+x -print -quit)
+	GODOT_BINARY=$(find "$GODOT_SOURCE_DIR/bin" -maxdepth 1 -type f -name 'godot.linuxbsd.editor.dev.*.react_native' -perm -u+x -print -quit)
 fi
 if [[ ! -x "$GODOT_BINARY" ]]; then
 	echo "Build the pinned dev editor or set GODOT_EDITOR before running the consumer check." >&2

@@ -105,7 +105,12 @@ if [[ $PLATFORM == android ]]; then
 		exit 1
 	fi
 	READELF=$(find "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt" -path '*/bin/llvm-readelf' -print -quit)
-	if "$READELF" -d "$OUTPUT" | grep -E 'NEEDED.*\[lib(hermes|jsi|icu)'; then
+	if [[ -z "$READELF" ]]; then
+		echo "llvm-readelf is missing from Android NDK $ANDROID_NDK_VERSION." >&2
+		exit 1
+	fi
+	DYNAMIC=$("$READELF" -d "$OUTPUT")
+	if grep -E 'NEEDED.*\[lib(hermes|jsi|icu)' <<<"$DYNAMIC"; then
 		echo "$OUTPUT should link Hermes, JSI and ICU statically." >&2
 		exit 1
 	fi
@@ -113,14 +118,16 @@ if [[ $PLATFORM == android ]]; then
 	exit 0
 fi
 
-OUTPUT="$GODOT_SOURCE_DIR/bin/godot.linuxbsd.$TARGET$BINARY_SUFFIX.x86_64.react_native"
+# Options such as use_llvm add their own suffix before the module's.
+OUTPUT=$(ls -t "$GODOT_SOURCE_DIR/bin"/godot.linuxbsd."$TARGET$BINARY_SUFFIX".x86_64*.react_native 2>/dev/null | head -n 1 || true)
 if [[ ! -x "$OUTPUT" ]]; then
-	echo "Godot build did not produce $OUTPUT" >&2
+	echo "Godot build did not produce a godot.linuxbsd.$TARGET$BINARY_SUFFIX.x86_64*.react_native binary" >&2
 	exit 1
 fi
 
 if [[ $RELEASE == true ]]; then
-	UNEXPECTED=$(readelf -d "$OUTPUT" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' |
+	DYNAMIC=$(readelf -d "$OUTPUT")
+	UNEXPECTED=$(sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' <<<"$DYNAMIC" |
 		grep -vxE 'libc\.so\.6|libm\.so\.6|libdl\.so\.2|libpthread\.so\.0|librt\.so\.1|ld-linux-x86-64\.so\.2' || true)
 	if [[ -n $UNEXPECTED ]]; then
 		echo "$OUTPUT should need only glibc, but also needs:" >&2

@@ -1,9 +1,13 @@
-name: Prepare a release build
+name: Prepare a Linux build
 description: Installs the toolchain, bootstraps the pinned sources and restores or builds a Hermes variant
 
 inputs:
   hermes-variant:
     description: Hermes variant to restore or build; none when empty
+    required: false
+    default: ""
+  extra-packages:
+    description: Ubuntu packages to install beside the build toolchain
     required: false
     default: ""
 
@@ -19,14 +23,23 @@ runs:
         python-version: "3.12"
 
     - name: Restore npm download cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache@v5
       with:
         path: ~/.npm
         key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'packages/react-native-godot/package-lock.json', 'samples/view-text/package-lock.json', 'samples/game-ui/package-lock.json') }}
         restore-keys: |
           npm-${{ runner.os }}-
 
+    - name: Restore pip download cache
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ runner.os }}-${{ hashFiles('baseline.env', 'requirements-ci.txt') }}
+        restore-keys: |
+          pip-${{ runner.os }}-
+
     - name: Restore Godot source cache
+      id: godot-source-cache
       uses: actions/cache/restore@v5
       with:
         path: godot
@@ -36,6 +49,7 @@ runs:
       shell: bash
       env:
         DEBIAN_FRONTEND: noninteractive
+        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
       run: |
         APT_OPTIONS=(
           -o Acquire::Retries=3
@@ -44,17 +58,18 @@ runs:
           -o Acquire::ForceIPv4=true
         )
         sudo apt-get "${APT_OPTIONS[@]}" update
-        sudo apt-get "${APT_OPTIONS[@]}" install --yes cmake gcc-13 g++-13 llvm libreadline-dev ninja-build zip
+        # shellcheck disable=SC2086
+        sudo apt-get "${APT_OPTIONS[@]}" install --yes cmake gcc-13 g++-13 llvm libreadline-dev ninja-build zip $EXTRA_PACKAGES
         python -m pip install --requirement requirements-ci.txt
 
     - name: Restore Boost headers
-      uses: actions/cache/restore@v5
+      uses: actions/cache@v5
       with:
         path: modules/react_native_bindings/thirdparty/boost
         key: boost-${{ hashFiles('baseline.env') }}
 
     - name: Restore ICU source
-      uses: actions/cache/restore@v5
+      uses: actions/cache@v5
       with:
         path: modules/react_native_bindings/thirdparty/icu
         key: icu-source-${{ hashFiles('baseline.env') }}
@@ -62,6 +77,13 @@ runs:
     - name: Bootstrap pinned sources
       shell: bash
       run: scripts/bootstrap.sh
+
+    - name: Save Godot source cache
+      if: steps.godot-source-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: godot
+        key: ${{ steps.godot-source-cache.outputs.cache-primary-key }}
 
     - name: Load pinned versions
       shell: bash
@@ -97,7 +119,9 @@ runs:
       shell: bash
       env:
         VARIANT: ${{ inputs.hermes-variant }}
-      run: scripts/build_hermes.sh "$VARIANT"
+      run: |
+        set -o pipefail
+        scripts/build_hermes.sh "$VARIANT" 2>&1 | tee hermes-build.log
 
     - name: Save Hermes library cache
       if: inputs.hermes-variant != '' && steps.hermes-library-cache.outputs.cache-hit != 'true'

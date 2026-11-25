@@ -8,9 +8,9 @@ ARTIFACT_DIR="$REPO_ROOT/artifacts"
 ARCHIVE_NAME=react-native-godot-linux-x86_64.zip
 PACKAGE_NAME=react-native-godot-linux-x86_64
 
-mapfile -t GODOT_BINARIES < <(find "$GODOT_SOURCE_DIR/bin" -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*' -perm -u+x -print)
-if [[ ${#GODOT_BINARIES[@]} -ne 1 ]]; then
-	echo "Expected exactly one Godot editor executable, found ${#GODOT_BINARIES[@]}." >&2
+GODOT_BINARY="$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.x86_64.react_native"
+if [[ ! -x "$GODOT_BINARY" ]]; then
+	echo "Missing release editor: $GODOT_BINARY. Run scripts/build_godot.sh --release editor." >&2
 	exit 1
 fi
 
@@ -19,9 +19,9 @@ STAGING_ROOT=$(mktemp -d "$ARTIFACT_DIR/.linux-package.XXXXXX")
 trap 'rm -rf -- "$STAGING_ROOT"' EXIT
 PACKAGE_DIR="$STAGING_ROOT/$PACKAGE_NAME"
 mkdir "$PACKAGE_DIR"
-cp -p "${GODOT_BINARIES[0]}" "$PACKAGE_DIR/"
+cp -p "$GODOT_BINARY" "$PACKAGE_DIR/"
 
-if ! ldd "$PACKAGE_DIR/$(basename "${GODOT_BINARIES[0]}")" > "$STAGING_ROOT/ldd.log"; then
+if ! ldd "$PACKAGE_DIR/$(basename "$GODOT_BINARY")" > "$STAGING_ROOT/ldd.log"; then
 	cat "$STAGING_ROOT/ldd.log" >&2
 	echo "Could not inspect packaged shared-library dependencies." >&2
 	exit 1

@@ -75,9 +75,10 @@ scripts/run_consumer.sh
 
 `bootstrap.sh` creates or verifies the pinned `godot/` checkout, initializes the pinned
 React Native, folly, glog, fmt, double-conversion, fast_float and nlohmann/json submodules,
-downloads the Boost headers, and installs the AccessKit SDK that the pinned engine's
-`misc/scripts/install_accesskit.py` selects, reinstalling it when that version changes. `build_hermes.sh` builds the pinned Hermes submodule
-against React Native's JSI. `codegen.cjs` regenerates the committed React Native codegen
+downloads the Boost headers and the pinned ICU source, and installs the AccessKit SDK that the pinned engine's
+`misc/scripts/install_accesskit.py` selects, reinstalling it when that version changes. `build_hermes.sh` builds the pinned ICU and
+the pinned Hermes submodule against React Native's JSI as static libraries that link into Godot. Without an argument it builds the
+`linux-x86_64-debugger` variant that the development editor uses; [third-party provenance](documentation/third-party.md) lists the others. `codegen.cjs` regenerates the committed React Native codegen
 output in `modules/react_native_bindings/generated/`. `build_godot.sh` attaches `modules/` through
 Godot's `custom_modules` option, and with `RN_AUTOLINKING` the native modules of the
 [autolinked](documentation/autolinking.md) libraries too. The samples' smoke tests need
@@ -89,9 +90,15 @@ default concurrency of two Godot processes. `run_staged_game.sh` stages the game
 built by the smoke run into a temporary project outside the repository, imports it, and
 checks that all five of its roots mount without diagnostics. `run_consumer.sh` creates a
 consumer project with `react-native-godot-init` from `artifacts/react-native-godot.tgz`,
-which `package_linux_baseline.sh` and `package_npm.sh` build, or from the source tree when
-that file is missing. It runs the project from a bundle file, from the bundle file after
-failing to reach Metro, and from Metro.
+which `package_linux_baseline.sh`, `package_linux_templates.sh` and `package_npm.sh` build
+from the release builds, or from the source tree when that file is missing. It runs the
+project from a bundle file, from the bundle file after failing to reach Metro, and from
+Metro. `GODOT_EDITOR` selects another editor, and `RN_CONSUMER_TEMPLATES` names a templates
+`.tpz` that the project is also exported with, debug and release, and run with.
+
+Release builds use `scripts/build_godot.sh --release <editor|template_debug|template_release>`,
+which builds with `production=yes`. `template_release` needs `scripts/build_hermes.sh linux-x86_64`
+first.
 `run_visual_regression.sh` builds the fidelity bundle, imports the game sample, and renders
 each `samples/game-ui/smoke/visual/*.tscn` application under Xvfb with software OpenGL,
 comparing it with its golden PNG in `smoke/visual/goldens/`. Failing captures are written

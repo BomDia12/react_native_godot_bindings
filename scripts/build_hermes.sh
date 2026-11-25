@@ -27,14 +27,19 @@ if [[ $(git -C "$HERMES_SOURCE_DIR" rev-parse HEAD) != "$HERMES_COMMIT" ]]; then
 	exit 1
 fi
 
+icu_version() {
+	sed -n 's/^#define U_ICU_VERSION "\(.*\)"$/\1/p' "$1/unicode/uvernum.h" 2>/dev/null
+}
+
 build_icu() {
-	if [[ -f "$ICU_PREFIX/lib/libicuuc.a" ]]; then
+	if [[ -f "$ICU_PREFIX/lib/libicuuc.a" && $(icu_version "$ICU_PREFIX/include") == "$ICU_VERSION" ]]; then
 		return
 	fi
-	if [[ ! -x "$ICU_SOURCE_DIR/source/runConfigureICU" ]]; then
-		echo "ICU source is missing. Run scripts/bootstrap.sh." >&2
+	if [[ $(icu_version "$ICU_SOURCE_DIR/source/common") != "$ICU_VERSION" ]]; then
+		echo "ICU source does not match ICU_VERSION. Run scripts/bootstrap.sh." >&2
 		exit 1
 	fi
+	rm -rf "$ICU_PREFIX" "$ICU_BUILD_DIR"
 	mkdir -p "$ICU_BUILD_DIR"
 	(
 		cd "$ICU_BUILD_DIR"

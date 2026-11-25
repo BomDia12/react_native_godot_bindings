@@ -62,7 +62,7 @@ if [[ ! -f "$BOOST_DIR/boost/version.hpp" ]]; then
 fi
 
 ICU_DIR="$THIRDPARTY_DIR/icu"
-if [[ ! -x "$ICU_DIR/source/runConfigureICU" ]]; then
+if [[ $(sed -n 's/^#define U_ICU_VERSION "\(.*\)"$/\1/p' "$ICU_DIR/source/common/unicode/uvernum.h" 2>/dev/null) != "$ICU_VERSION" ]]; then
 	ICU_ARCHIVE=$(mktemp)
 	trap 'rm -f "${BOOST_ARCHIVE:-}" "$ICU_ARCHIVE"' EXIT
 	curl -sSLf -o "$ICU_ARCHIVE" "https://github.com/unicode-org/icu/releases/download/release-$ICU_VERSION/icu4c-$ICU_VERSION-sources.tgz"
@@ -70,6 +70,7 @@ if [[ ! -x "$ICU_DIR/source/runConfigureICU" ]]; then
 		echo "ICU archive does not match ICU_SHA256" >&2
 		exit 1
 	}
+	rm -rf "$ICU_DIR"
 	mkdir -p "$ICU_DIR"
 	tar -xzf "$ICU_ARCHIVE" -C "$ICU_DIR" --strip-components=1
 fi
