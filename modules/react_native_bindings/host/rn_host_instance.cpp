@@ -30,6 +30,7 @@
 #include "rn_animation_clock.h"
 #include "rn_dev_server.h"
 #include "rn_extension_registry.h"
+#include "rn_frame_callbacks.h"
 #include "rn_game_services.h"
 #include "rn_inspector_socket.h"
 #include "rn_log_box_surface.h"
@@ -38,6 +39,7 @@
 #include "core/config/project_settings.h"
 #include "core/debugger/engine_debugger.h"
 #include "core/io/file_access.h"
+#include "core/os/os.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
 
@@ -354,8 +356,12 @@ RNHostInstance::RNHostInstance(const Setup &p_setup) :
 			print_line(message);
 		}
 	};
+	frames = std::make_unique<RNFrameCallbacks>([this](std::function<void(jsi::Runtime &)> p_task) {
+		runtime.react_host->runOnRuntimeScheduler(std::move(p_task));
+	});
 	auto install_bindings = [this, blob_service = blobs](jsi::Runtime &p_runtime) {
 		runtime.hermes = jsi::castInterface<facebook::hermes::IHermes>(&p_runtime);
+		frames->install(p_runtime);
 		jsi::Object provider = jsi::Object::createFromHostObject(p_runtime, blob_service->collector_provider());
 		p_runtime.global().setProperty(p_runtime, "__blobCollectorProvider", provider.getProperty(p_runtime, "create"));
 	};
@@ -679,6 +685,7 @@ void RNHostInstance::process_frame() {
 	main_thread->drain();
 	if (!suspended) {
 		_run_animation_frame();
+		frames->process_frame(OS::get_singleton()->get_ticks_usec(), RNFrameClock::Display::current());
 	}
 	application->poll();
 	websockets->process_frame();

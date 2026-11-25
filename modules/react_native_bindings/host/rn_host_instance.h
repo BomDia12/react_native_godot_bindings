@@ -28,6 +28,7 @@ class RNDevServer;
 class RNGodotApplication;
 class RNGodotHostEvents;
 class RNHTTPService;
+class RNFrameCallbacks;
 class RNImageService;
 class RNLogBoxSurface;
 class RNMainThreadQueue;
@@ -75,6 +76,7 @@ private:
 	std::unique_ptr<RNDevServer> dev_server;
 	std::shared_ptr<facebook::react::RNSourceURL> source_url;
 	std::shared_ptr<RNLogBoxSurface> log_box;
+	std::unique_ptr<RNFrameCallbacks> frames;
 	std::mutex animation_mutex;
 	std::function<void()> animation_frame;
 	bool suspended = false;

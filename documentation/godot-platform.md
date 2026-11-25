@@ -174,8 +174,9 @@ mode changes and on window focus. `getRootState(rootTag)` and
 `onRootStateChanged(rootTag, callback)` read it outside components.
 
 While no root can process, because the tree is paused or their process mode disables
-them, the runtime is suspended. JS timers, and so `requestAnimationFrame`, keep their
-remaining delay and resume with it. Native-driver animations stop and resume where they
+them, the runtime is suspended. JS timers keep their remaining delay and resume with it.
+`requestAnimationFrame` callbacks wait, because no frame ticks while suspended, and run on the
+first frame after resuming. Native-driver animations stop and resume where they
 were. LayoutAnimation and JS-driven `Animated` timing read upstream's own clocks, so an
 animation that spans a pause ends at its wall-clock position on resume. JavaScript still
 runs: `ReactNativeHost.evaluate()`, scene bindings, network responses and other Godot events
@@ -598,8 +599,20 @@ component registry the Scheduler builds through it, installs the driver as the U
 animation delegate in `setUIManager`, and makes it the mounting override delegate of every
 surface that starts. `RNHostInstance::process_frame` ticks it before draining the main-thread
 queue, so interpolated mutations mount in the frame they are computed. Native `Animated`
-keeps its own per-frame callback. JS-driven animations follow upstream's C++
-`requestAnimationFrame`, which is `setTimeout(0)`.
+keeps its own per-frame callback. Both advance on every Godot frame, as Tweens and
+AnimationPlayers do.
+
+JS-driven animations run on `requestAnimationFrame`. Upstream's C++ `TimerManager` implements
+it as `setTimeout(0)`, which would run it as often as the JS thread loops, so the host
+replaces the global after upstream installs it. A frame clock decides on the main thread, once
+per Godot frame, whether the frame is a display frame: every frame when V-Sync paces the loop
+(`enabled` or `adaptive`, in a window that can draw), and otherwise, as headless or with
+mailbox or disabled V-Sync, frames that keep the screen's refresh rate on average (60 Hz when
+Godot can't read it), resuming from the current time after a stall. On a display frame one
+task runs, on the JS thread, the callbacks registered before it started, all with one
+timestamp in `performance.now()`'s time base. Callbacks registered during it wait for the next
+frame, and a busy JS thread skips frames instead of running a burst of them. A throwing
+callback doesn't stop the others; its error reaches the host as a timer's error does.
 
 ## Application services
 

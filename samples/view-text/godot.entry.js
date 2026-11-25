@@ -12,6 +12,7 @@ import './native_animated.entry';
 import './engine_integration.entry';
 import './game_ui.entry';
 import './upstream_components.entry';
+import './animation_frames.entry';
 
 const styles = StyleSheet.create({
   container: {
