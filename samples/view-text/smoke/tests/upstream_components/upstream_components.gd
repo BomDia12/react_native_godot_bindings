@@ -198,18 +198,21 @@ func check_without_feedback() -> bool:
 func check_virtualized_list() -> bool:
 	if not await show_case("lists", "virtualized"):
 		return false
-	if not await wait_until(func(): return int(await js("__godotUpstream.mounted.size")) >= 10, "VirtualizedList cells"):
+	# The window grows past the first initialNumToRender cells, which upstream
+	# keeps mounted for scrolling back to the top.
+	if not await wait_until(func(): return await js("__godotUpstream.mounted.has(15)"), "the VirtualizedList window to fill"):
 		return false
 	var at := center("virtualized")
+	var moved := "Math.max(...__godotUpstream.mounted) >= 200 && !__godotUpstream.mounted.has(15)"
 	for i in 400:
 		wheel_down(at)
 		await get_tree().process_frame
-		if await js("Math.max(...__godotUpstream.mounted) >= 200 && !__godotUpstream.mounted.has(0)"):
+		if await js(moved):
 			break
-	if not await js("Math.max(...__godotUpstream.mounted) >= 200 && !__godotUpstream.mounted.has(0)"):
+	if not await js(moved):
 		return fail("wheel scrolling did not move the VirtualizedList window: %s" % [await js("[...__godotUpstream.mounted]")])
 	var most := int(await js("__godotUpstream.maxMounted"))
-	if most <= 0 or most >= 100:
+	if most >= 100:
 		return fail("VirtualizedList mounted %d of 1000 cells at once" % most)
 	return true
 

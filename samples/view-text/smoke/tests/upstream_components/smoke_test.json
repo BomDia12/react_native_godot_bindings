@@ -3,7 +3,7 @@
   "project_dir": "samples/view-text",
   "scene": "res://smoke/tests/upstream_components/UpstreamComponents.tscn",
   "timeout_seconds": 90,
-  "allowlist": "documentation/expected-warnings.txt",
+  "allowlist": "documentation/expected-warnings-upstream-components.txt",
   "bundle": {
     "mode": "shared",
     "package_dir": "samples/view-text",
@@ -19,7 +19,7 @@
     "samples/view-text/babel.config.js",
     "samples/view-text/package.json",
     "samples/view-text/package-lock.json",
-    "documentation/expected-warnings.txt",
+    "documentation/expected-warnings-upstream-components.txt",
     "samples/view-text/engine_integration.entry.js",
     "samples/view-text/game_ui.entry.js",
     "samples/view-text/upstream_components.entry.js",
