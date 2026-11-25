@@ -1,0 +1,3 @@
+# The scene the editor runs intentionally renders a component that throws.
+^ERROR: \{ \[Error: Editor smoke error\]$
+^ERROR: React Native JS error: Error: Editor smoke error$

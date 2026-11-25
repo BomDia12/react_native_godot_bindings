@@ -1,0 +1,30 @@
+{
+  "id": "editor-tools",
+  "project_dir": "samples/game-ui",
+  "scene": "res://smoke/tests/editor_tools/editor_tools.gd",
+  "timeout_seconds": 180,
+  "editor": true,
+  "allowlist": "documentation/expected-warnings-editor-tools.txt",
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/game-ui",
+    "script": "build:gallery",
+    "output": "samples/game-ui/dist/godot.bundle.js"
+  },
+  "inputs": [
+    "documentation/expected-warnings-editor-tools.txt",
+    "samples/game-ui/addons/editor_smoke/plugin.cfg",
+    "samples/game-ui/addons/editor_smoke/plugin.gd",
+    "samples/game-ui/babel.config.js",
+    "samples/game-ui/contracts/EnemyHealthBar.tres",
+    "samples/game-ui/contracts/EnemyRoster.tres",
+    "samples/game-ui/gallery.entry.js",
+    "samples/game-ui/metro.config.js",
+    "samples/game-ui/package-lock.json",
+    "samples/game-ui/package.json",
+    "samples/game-ui/project.godot",
+    "samples/game-ui/smoke/tests/editor_tools/EditorRoot.tscn",
+    "samples/game-ui/smoke/tests/editor_tools/ThrowingRoot.tscn",
+    "samples/game-ui/smoke/tests/editor_tools/editor_tools.gd"
+  ]
+}

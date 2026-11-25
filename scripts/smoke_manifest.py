@@ -15,6 +15,7 @@ MANIFEST_FIELDS = {
     "bundle",
     "inputs",
 }
+OPTIONAL_FIELDS = {"fixture", "editor"}
 BUNDLE_FIELDS = {"mode", "package_dir", "script", "output"}
 FIXTURE_KINDS = {"local_network", "metro"}
 ID_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -51,6 +52,7 @@ class SmokeManifest:
     bundle: Bundle
     inputs: tuple[Path, ...]
     fixture: Fixture | None = None
+    editor: bool = False
 
 
 @dataclass(frozen=True)
@@ -127,7 +129,7 @@ def load_manifest(repo_root: Path, manifest_path: Path) -> SmokeManifest:
         raw = json.loads(absolute_manifest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ManifestError(f"cannot read {relative_manifest.as_posix()}: {error}") from error
-    data = _require_exact_fields(raw, MANIFEST_FIELDS | ({"fixture"} if isinstance(raw, dict) and "fixture" in raw else set()), "manifest")
+    data = _require_exact_fields(raw, MANIFEST_FIELDS | (OPTIONAL_FIELDS & set(raw) if isinstance(raw, dict) else set()), "manifest")
 
     test_id = data["id"]
     if not isinstance(test_id, str) or ID_PATTERN.fullmatch(test_id) is None:
@@ -146,6 +148,11 @@ def load_manifest(repo_root: Path, manifest_path: Path) -> SmokeManifest:
     scene = data["scene"]
     if not isinstance(scene, str) or not scene.startswith("res://"):
         raise ManifestError("scene must start with res://")
+    editor = data.get("editor", False)
+    if not isinstance(editor, bool):
+        raise ManifestError("editor must be a boolean")
+    if editor and not scene.endswith(".gd"):
+        raise ManifestError("an editor smoke's scene must be a .gd script")
     scene_relative = _relative_path(repo_root, scene.removeprefix("res://"), "scene")
     scene_path = project_dir / scene_relative
     _require_inside(repo_root, scene_path, project_dir, "scene")
@@ -205,6 +212,7 @@ def load_manifest(repo_root: Path, manifest_path: Path) -> SmokeManifest:
         bundle=Bundle(mode=mode, package_dir=package_dir, script=script, output=output),
         inputs=inputs,
         fixture=fixture,
+        editor=editor,
     )
 
 
