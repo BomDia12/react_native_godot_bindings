@@ -15,6 +15,7 @@
 #include "core/config/project_settings.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/io/tcp_server.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/object/message_queue.h"
@@ -713,6 +714,48 @@ TEST_CASE("[ReactNativeBindings][HTTP][SceneTree] requests submitted before the 
 	CHECK_FALSE(service->has_pending_work());
 	CHECK(failures == 1);
 	service->shutdown();
+	memdelete(service);
+}
+TEST_CASE("[ReactNativeBindings][HTTP][SceneTree] a draining developer-server download holds budget without overdrawing it") {
+	RNServiceSettings settings;
+	RNError error;
+	REQUIRE(RNServiceSettings::snapshot(settings, error));
+	RNHTTPService *service = memnew(RNHTTPService(settings));
+	SceneTree::get_singleton()->get_root()->add_child(service);
+	// A server that accepts connections and never answers keeps requests in flight.
+	Ref<TCPServer> server;
+	server.instantiate();
+	REQUIRE(server->listen(0, IPAddress("127.0.0.1")) == OK);
+	const String url = vformat("http://127.0.0.1:%d/", server->get_local_port());
+	const auto http = [service]() { return Dictionary(service->stats()); };
+	const int filling = int(settings.limit("network/http/max_buffered_bytes") / settings.limit("network/http/max_body_bytes"));
+	for (int i = 0; i < filling; ++i) {
+		RNHTTPRequest request;
+		request.url = url;
+		REQUIRE(service->submit(request, [](RNHTTPResponse) {}, error) != 0);
+	}
+	RNHTTPRequest download;
+	download.url = url;
+	download.tooling = true;
+	const uint64_t download_id = service->submit(download, [](RNHTTPResponse) {}, error);
+	REQUIRE(download_id != 0);
+	service->process_requests();
+	REQUIRE(int(http()["active"]) == filling + 1);
+
+	service->cancel(download_id);
+	MessageQueue::get_singleton()->flush();
+	CHECK(int(http()["draining"]) == 1);
+	RNHTTPRequest late;
+	late.url = url;
+	REQUIRE(service->submit(late, [](RNHTTPResponse) {}, error) != 0);
+	service->process_requests();
+	CHECK(int(http()["active"]) == filling);
+	CHECK(int(http()["queued"]) == 1);
+
+	server->stop();
+	ERR_PRINT_OFF;
+	service->shutdown();
+	ERR_PRINT_ON;
 	memdelete(service);
 }
 } //namespace TestRNServices

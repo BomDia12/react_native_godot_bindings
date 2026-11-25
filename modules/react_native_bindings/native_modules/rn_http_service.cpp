@@ -98,7 +98,7 @@ uint64_t RNHTTPService::submit(const RNHTTPRequest &p_request, std::function<voi
 			return 0;
 		}
 	}
-	if (requests.size() >= uint64_t(settings.limit("network/http/max_active_requests") + settings.limit("network/http/max_queued_requests")) || uint64_t(p_request.body.size()) > uint64_t(settings.limit("network/http/max_buffered_bytes")) - buffered) {
+	if (requests.size() >= uint64_t(settings.limit("network/http/max_active_requests") + settings.limit("network/http/max_queued_requests")) || uint64_t(p_request.body.size()) > _available_budget()) {
 		r_error = http_error("HTTP queue or upload budget exceeded", RNErrorCode::LIMIT);
 		return 0;
 	}
@@ -113,7 +113,7 @@ uint64_t RNHTTPService::submit(const RNHTTPRequest &p_request, std::function<voi
 	for (const Slot &slot : slots) {
 		available_slot = available_slot || slot.state == State::IDLE;
 	}
-	const bool immediate = waiting.empty() && available_slot && uint64_t(p_request.body.size()) + response_limit <= uint64_t(settings.limit("network/http/max_buffered_bytes")) - buffered;
+	const bool immediate = waiting.empty() && available_slot && uint64_t(p_request.body.size()) + response_limit <= _available_budget();
 	if (!immediate && waiting.size() >= uint64_t(settings.limit("network/http/max_queued_requests"))) {
 		r_error = http_error("HTTP FIFO is full", RNErrorCode::LIMIT);
 		return 0;
@@ -148,6 +148,10 @@ void RNHTTPService::settle(uint64_t p_request, RNHTTPResponse p_response) {
 // itself once the server answers. The slot and the request are released at
 // once; the response bytes the node may still receive stay in the buffer
 // budget until then, which also bounds how many nodes drain.
+uint64_t RNHTTPService::_available_budget() const {
+	const uint64_t budget = settings.limit("network/http/max_buffered_bytes");
+	return buffered >= budget ? 0 : budget - buffered;
+}
 void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 	Slot &slot = slots[p_slot];
 	if (slot.state == State::DRAINING) {
@@ -159,7 +163,8 @@ void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 		node->disconnect("request_completed", slot.callback);
 		node->connect("request_completed", callable_mp(this, &RNHTTPService::_retired_completed).bind(slot.node), CONNECT_ONE_SHOT | CONNECT_DEFERRED);
 		// Tooling responses have no limit or reservation, so a draining one
-		// holds the largest application response instead.
+		// holds max_body_bytes as its share of the budget, which can overcommit
+		// it until the node finishes.
 		const auto request = requests.find(slot.request);
 		const bool tooling = request != requests.end() && request->second.spec.tooling;
 		const uint64_t held = tooling ? uint64_t(settings.limit("network/http/max_body_bytes")) : slot.reservation;
@@ -324,7 +329,7 @@ void RNHTTPService::process_requests() {
 		if (draining) {
 			break;
 		}
-		if (found->second.spec.response_limit > uint64_t(settings.limit("network/http/max_buffered_bytes")) - buffered) {
+		if (found->second.spec.response_limit > _available_budget()) {
 			break;
 		}
 		size_t index = 0;

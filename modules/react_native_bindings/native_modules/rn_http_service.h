@@ -67,6 +67,7 @@ class RNHTTPService : public Node {
 	void settle(uint64_t p_request, RNHTTPResponse p_response);
 	void quarantine(size_t p_slot, bool p_in_flight);
 	void _completed(int p_result, int p_status, const PackedStringArray &p_headers, const PackedByteArray &p_body, int p_slot, int64_t p_sequence);
+	uint64_t _available_budget() const;
 	void _drained(int p_slot, int64_t p_sequence);
 	void _retired_completed(int p_result, int p_status, const PackedStringArray &p_headers, const PackedByteArray &p_body, ObjectID p_node);
 
