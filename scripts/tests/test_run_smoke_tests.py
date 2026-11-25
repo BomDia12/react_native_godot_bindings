@@ -18,14 +18,14 @@ class RunSmokeTestsTests(unittest.TestCase):
     def test_finds_only_editor_binary(self):
         with tempfile.TemporaryDirectory() as directory:
             godot_dir = Path(directory)
-            binary = self._create_binary(godot_dir, "godot.linuxbsd.editor.x86_64")
+            binary = self._create_binary(godot_dir, "godot.linuxbsd.editor.x86_64.react_native")
             self.assertEqual(find_godot_binary(godot_dir), binary)
 
     def test_prefers_dev_editor_when_release_editor_exists(self):
         with tempfile.TemporaryDirectory() as directory:
             godot_dir = Path(directory)
-            self._create_binary(godot_dir, "godot.linuxbsd.editor.x86_64")
-            dev_binary = self._create_binary(godot_dir, "godot.linuxbsd.editor.dev.x86_64")
+            self._create_binary(godot_dir, "godot.linuxbsd.editor.x86_64.react_native")
+            dev_binary = self._create_binary(godot_dir, "godot.linuxbsd.editor.dev.x86_64.react_native")
             self.assertEqual(find_godot_binary(godot_dir), dev_binary)
 
     def test_editor_smokes_run_their_script_inside_the_editor(self):

@@ -10,6 +10,10 @@ inputs:
     description: Ubuntu packages to install beside the build toolchain
     required: false
     default: ""
+  save-npm-cache:
+    description: Save the npm download cache; only a job that installs every project's packages should
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -22,8 +26,18 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Restore npm download cache
+    - name: Restore and save npm download cache
+      if: inputs.save-npm-cache == 'true'
       uses: actions/cache@v5
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'packages/react-native-godot/package-lock.json', 'samples/view-text/package-lock.json', 'samples/game-ui/package-lock.json') }}
+        restore-keys: |
+          npm-${{ runner.os }}-
+
+    - name: Restore npm download cache
+      if: inputs.save-npm-cache != 'true'
+      uses: actions/cache/restore@v5
       with:
         path: ~/.npm
         key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'packages/react-native-godot/package-lock.json', 'samples/view-text/package-lock.json', 'samples/game-ui/package-lock.json') }}
@@ -57,9 +71,9 @@ runs:
           -o Acquire::https::Timeout=30
           -o Acquire::ForceIPv4=true
         )
-        sudo apt-get "${APT_OPTIONS[@]}" update
+        sudo timeout 15m apt-get "${APT_OPTIONS[@]}" update
         # shellcheck disable=SC2086
-        sudo apt-get "${APT_OPTIONS[@]}" install --yes cmake gcc-13 g++-13 llvm libreadline-dev ninja-build zip $EXTRA_PACKAGES
+        sudo timeout 15m apt-get "${APT_OPTIONS[@]}" install --yes cmake gcc-13 g++-13 llvm libreadline-dev ninja-build zip $EXTRA_PACKAGES
         python -m pip install --requirement requirements-ci.txt
 
     - name: Restore Boost headers

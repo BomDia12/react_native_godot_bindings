@@ -95,16 +95,16 @@ from the release builds, or from the source tree when that file is missing. It r
 project from a bundle file, from the bundle file after failing to reach Metro, and from
 Metro. `GODOT_EDITOR` selects another editor, and `RN_CONSUMER_TEMPLATES` names a templates
 `.tpz` that the project is also exported with, debug and release, and run with.
-
-Release builds use `scripts/build_godot.sh --release <editor|template_debug|template_release>`,
-which builds with `production=yes`. `template_release` needs `scripts/build_hermes.sh linux-x86_64`
-first.
 `run_visual_regression.sh` builds the fidelity bundle, imports the game sample, and renders
 each `samples/game-ui/smoke/visual/*.tscn` application under Xvfb with software OpenGL,
 comparing it with its golden PNG in `smoke/visual/goldens/`. Failing captures are written
 to `artifacts/visual/`; `RN_VISUAL_UPDATE=1` rewrites the goldens instead. Like
 `run_component_display.sh`, `COMPONENT_DISPLAY_READY=1` runs on the current display
 without Xvfb.
+
+Release builds use `scripts/build_godot.sh --release <editor|template_debug|template_release>`,
+which builds with `production=yes`. `template_release` needs `scripts/build_hermes.sh linux-x86_64`
+first.
 
 The JavaScript platform is the `react-native-godot` package in `packages/react-native-godot/`.
 Samples depend on it through `file:../../packages/react-native-godot` and use it as a

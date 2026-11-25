@@ -22,6 +22,7 @@ jobs:
         with:
           hermes-variant: linux-x86_64-debugger
           extra-packages: clang-format xvfb xauth libgl1-mesa-dri
+          save-npm-cache: true
 
       - name: Restore SCons cache
         id: scons-cache
@@ -96,7 +97,7 @@ jobs:
 
       - name: Run module unit tests
         run: |
-          GODOT_BINARY=$(find godot/bin -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*' -perm -u+x -print -quit)
+          GODOT_BINARY=$(find godot/bin -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*.react_native' -perm -u+x -print -quit)
           "$GODOT_BINARY" --headless --test --test-case='*[ReactNativeBindings]*'
 
       - name: Run headless smoke tests

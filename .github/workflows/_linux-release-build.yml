@@ -53,7 +53,9 @@ jobs:
         with:
           name: linux-release-${{ matrix.target }}-failure
           if-no-files-found: ignore
-          path: godot-build.log
+          path: |
+            hermes-build.log
+            godot-build.log
 
   android:
     name: Link the Android arm64 template
@@ -77,7 +79,7 @@ jobs:
       - name: Build Hermes for Android
         run: |
           set -o pipefail
-          scripts/build_hermes.sh android-arm64 2>&1 | tee hermes-build.log
+          scripts/build_hermes.sh android-arm64 2>&1 | tee hermes-android-build.log
 
       - name: Build Godot for Android
         run: |
@@ -92,6 +94,7 @@ jobs:
           if-no-files-found: ignore
           path: |
             hermes-build.log
+            hermes-android-build.log
             godot-build.log
 
   package:
