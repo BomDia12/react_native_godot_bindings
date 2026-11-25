@@ -160,10 +160,11 @@ String rn_dynamic_unsupported_path(const Variant &p_value, const String &p_path)
 	}
 }
 
-Dictionary rn_plain_properties(const Dictionary &p_properties) {
+Dictionary rn_initial_properties(const Dictionary &p_properties) {
 	Dictionary properties = p_properties.duplicate();
 	for (const Variant &key : p_properties.keys()) {
-		const String path = rn_dynamic_unsupported_path(p_properties[key], key);
+		const bool string_key = key.get_type() == Variant::STRING || key.get_type() == Variant::STRING_NAME;
+		const String path = string_key ? rn_dynamic_unsupported_path(p_properties[key], key) : String(key);
 		if (!path.is_empty()) {
 			ERR_PRINT(vformat("The initial property %s can't be passed to React Native, so the surface starts without %s.", path, key));
 			properties.erase(key);

@@ -82,9 +82,9 @@ TEST_CASE("[ReactNativeBindings][ValueCodec] values that can't cross as plain pr
 }
 
 TEST_CASE("[ReactNativeBindings][ValueCodec] initial properties leave out values that can't cross") {
-	const Dictionary properties({ { "label", "normal" }, { "data", PackedByteArray({ 1, 2 }) } });
+	const Dictionary properties({ { "label", "normal" }, { "data", PackedByteArray({ 1, 2 }) }, { 1, "numbered" } });
 	ERR_PRINT_OFF;
-	const Dictionary plain = rn_plain_properties(properties);
+	const Dictionary plain = rn_initial_properties(properties);
 	ERR_PRINT_ON;
 	CHECK(plain == Dictionary({ { "label", "normal" } }));
 	CHECK(properties.has("data"));
