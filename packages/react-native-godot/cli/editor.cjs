@@ -42,7 +42,7 @@ function extractZip(archive, destination) {
   if (unzip.error?.code === 'ENOENT') {
     const python = spawnSync('python3', ['-m', 'zipfile', '-e', archive, destination], {stdio: 'inherit'});
     if (python.status !== 0) {
-      throw new Error('Extracting the Godot editor needs unzip or python3.');
+      throw new Error(`Extracting ${archive} needs unzip or python3.`);
     }
     return;
   }
@@ -114,4 +114,4 @@ async function resolveEditor({godot, project} = {}) {
   return downloadEditor(platform);
 }
 
-module.exports = {cacheRoot, downloadEditor, findEditorBinary, hostPlatform, readPlatform, resolveEditor};
+module.exports = {cacheRoot, downloadEditor, extractZip, findEditorBinary, hostPlatform, readPlatform, resolveEditor};

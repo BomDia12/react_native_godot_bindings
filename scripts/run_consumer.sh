@@ -2,14 +2,24 @@
 # Creates a consumer project the way a developer would, from the published
 # react-native-godot package when scripts/package_npm.sh has built it and from
 # the source tree otherwise, then runs it from a bundle file and from Metro.
+# GODOT_EDITOR picks the editor, which defaults to the development editor.
+# RN_CONSUMER_TEMPLATES names a templates .tpz that the project is also
+# exported and run with.
 set -euo pipefail
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
 GODOT_SOURCE_DIR=${GODOT_SOURCE_DIR:-"$REPO_ROOT/godot"}
-GODOT_BINARY=$(find "$GODOT_SOURCE_DIR/bin" -maxdepth 1 -type f -name 'godot.linuxbsd.editor.dev.*' -perm -u+x -print -quit)
-if [[ -z "$GODOT_BINARY" ]]; then
-	echo "Build the pinned dev editor before running the consumer check." >&2
+if [[ -n "${GODOT_EDITOR:-}" ]]; then
+	GODOT_BINARY=$(realpath "$GODOT_EDITOR")
+else
+	GODOT_BINARY=$(find "$GODOT_SOURCE_DIR/bin" -maxdepth 1 -type f -name 'godot.linuxbsd.editor.dev.*.react_native' -perm -u+x -print -quit)
+fi
+if [[ ! -x "$GODOT_BINARY" ]]; then
+	echo "Build the pinned dev editor or set GODOT_EDITOR before running the consumer check." >&2
 	exit 1
+fi
+if [[ -n "${RN_CONSUMER_TEMPLATES:-}" ]]; then
+	RN_CONSUMER_TEMPLATES=$(realpath "$RN_CONSUMER_TEMPLATES")
 fi
 LOG_DIR="$REPO_ROOT/artifacts/smoke-logs"
 PUBLISHED_PACKAGE="$REPO_ROOT/artifacts/react-native-godot.tgz"
@@ -102,6 +112,34 @@ set +e
 RUN_EXIT=$?
 set -e
 python3 "$SCRIPT_DIR/check_baseline_log.py" --log "$LOG_DIR/consumer-export-run.log" --allowlist "$REPO_ROOT/documentation/expected-warnings.txt" --exit-code "$RUN_EXIT" --test-id consumer
+
+# Export templates ignore --script, so the exported game starts the check as
+# its main loop. Editor runs don't read the .template override.
+if [[ -n "${RN_CONSUMER_TEMPLATES:-}" ]]; then
+	export XDG_DATA_HOME="$PACKAGE_DIR/data"
+	if ! (cd "$PROJECT_DIR/react_native" && npx react-native install-godot-templates --file "$RN_CONSUMER_TEMPLATES") > "$LOG_DIR/consumer-templates.log" 2>&1; then
+		echo "Installing the export templates failed; see $LOG_DIR/consumer-templates.log." >&2
+		exit 1
+	fi
+	sed -i '/^\[application\]$/a run/main_loop_type.template="ConsumerCheck"' "$PROJECT_DIR/project.godot"
+	for template in debug release; do
+		EXPORT_DIR="$PACKAGE_DIR/export-$template"
+		mkdir "$EXPORT_DIR"
+		if ! "$GODOT_BINARY" --headless --path "$PROJECT_DIR" "--export-$template" Linux "$EXPORT_DIR/game.x86_64" > "$LOG_DIR/consumer-export-$template.log" 2>&1; then
+			echo "The $template export failed; see $LOG_DIR/consumer-export-$template.log." >&2
+			exit 1
+		fi
+		if [[ $(ls "$EXPORT_DIR") != $'game.pck\ngame.x86_64' ]]; then
+			echo "The $template export should hold exactly game.x86_64 and game.pck; see $LOG_DIR/consumer-export-$template.log." >&2
+			exit 1
+		fi
+		set +e
+		(cd "$EXPORT_DIR" && timeout 300s ./game.x86_64 --headless --audio-driver Dummy) > "$LOG_DIR/consumer-export-$template-run.log" 2>&1
+		RUN_EXIT=$?
+		set -e
+		python3 "$SCRIPT_DIR/check_baseline_log.py" --log "$LOG_DIR/consumer-export-$template-run.log" --allowlist "$REPO_ROOT/documentation/expected-warnings.txt" --exit-code "$RUN_EXIT" --test-id consumer
+	done
+fi
 
 # An export whose bundle doesn't build fails.
 echo 'export default (;' >> "$PROJECT_DIR/react_native/index.js"

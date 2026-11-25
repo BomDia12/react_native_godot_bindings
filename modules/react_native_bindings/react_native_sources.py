@@ -103,7 +103,12 @@ FOLLY_DEFINES = [
     "FOLLY_HAVE_PTHREAD=1",
     "FOLLY_HAVE_XSI_STRERROR_R=1",
 ]
-REACT_NATIVE_DEFINES = FOLLY_DEFINES + ["HERMES_V1_ENABLED=1", "HERMES_ENABLE_DEBUGGER=1", 'LOG_TAG=\\"ReactNative\\"']
+
+
+def react_native_defines(debugger):
+    defines = FOLLY_DEFINES + ["HERMES_V1_ENABLED=1", 'LOG_TAG=\\"ReactNative\\"']
+    return defines + ["HERMES_ENABLE_DEBUGGER=1"] if debugger else defines
+
 
 # Tokens that the upstream Android build substitutes into glog's configure templates.
 GLOG_TOKENS = {

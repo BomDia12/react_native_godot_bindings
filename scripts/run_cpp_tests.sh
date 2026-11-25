@@ -5,7 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
 GODOT_SOURCE_DIR=${GODOT_SOURCE_DIR:-"$REPO_ROOT/godot"}
 
-mapfile -t GODOT_BINARIES < <(find "$GODOT_SOURCE_DIR/bin" -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*' -perm -u+x -print | sort)
+mapfile -t GODOT_BINARIES < <(find "$GODOT_SOURCE_DIR/bin" -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*.react_native' -perm -u+x -print | sort)
 DEV_BINARIES=()
 for binary in "${GODOT_BINARIES[@]}"; do
 	if [[ $binary == *.editor.dev.* ]]; then

@@ -35,10 +35,10 @@ Build and stage the standalone demo under the workspace's `godotProjects` direct
 ```sh
 python3 -m pip install -r requirements-ci.txt
 npm --prefix samples/game-ui ci
-GODOT_EDITOR="${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" npm --prefix samples/game-ui run build:godot
+GODOT_EDITOR="${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64.react_native" npm --prefix samples/game-ui run build:godot
 python3 scripts/stage_game_demo.py
-"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" --editor --path ../godotProjects/Phase6BGame --import
-"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" --path ../godotProjects/Phase6BGame
+"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64.react_native" --editor --path ../godotProjects/Phase6BGame --import
+"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64.react_native" --path ../godotProjects/Phase6BGame
 ```
 
 Play offline with **1/2/3** to damage enemies and **P** to pick up a potion. An optional
@@ -75,9 +75,10 @@ scripts/run_consumer.sh
 
 `bootstrap.sh` creates or verifies the pinned `godot/` checkout, initializes the pinned
 React Native, folly, glog, fmt, double-conversion, fast_float and nlohmann/json submodules,
-downloads the Boost headers, and installs the AccessKit SDK that the pinned engine's
-`misc/scripts/install_accesskit.py` selects, reinstalling it when that version changes. `build_hermes.sh` builds the pinned Hermes submodule
-against React Native's JSI. `codegen.cjs` regenerates the committed React Native codegen
+downloads the Boost headers and the pinned ICU source, and installs the AccessKit SDK that the pinned engine's
+`misc/scripts/install_accesskit.py` selects, reinstalling it when that version changes. `build_hermes.sh` builds the pinned ICU and
+the pinned Hermes submodule against React Native's JSI as static libraries that link into Godot. Without an argument it builds the
+`linux-x86_64-debugger` variant that the development editor uses; [third-party provenance](documentation/third-party.md) lists the others. `codegen.cjs` regenerates the committed React Native codegen
 output in `modules/react_native_bindings/generated/`. `build_godot.sh` attaches `modules/` through
 Godot's `custom_modules` option, and with `RN_AUTOLINKING` the native modules of the
 [autolinked](documentation/autolinking.md) libraries too. The samples' smoke tests need
@@ -89,15 +90,21 @@ default concurrency of two Godot processes. `run_staged_game.sh` stages the game
 built by the smoke run into a temporary project outside the repository, imports it, and
 checks that all five of its roots mount without diagnostics. `run_consumer.sh` creates a
 consumer project with `react-native-godot-init` from `artifacts/react-native-godot.tgz`,
-which `package_linux_baseline.sh` and `package_npm.sh` build, or from the source tree when
-that file is missing. It runs the project from a bundle file, from the bundle file after
-failing to reach Metro, and from Metro.
+which `package_linux_baseline.sh`, `package_linux_templates.sh` and `package_npm.sh` build
+from the release builds, or from the source tree when that file is missing. It runs the
+project from a bundle file, from the bundle file after failing to reach Metro, and from
+Metro. `GODOT_EDITOR` selects another editor, and `RN_CONSUMER_TEMPLATES` names a templates
+`.tpz` that the project is also exported with, debug and release, and run with.
 `run_visual_regression.sh` builds the fidelity bundle, imports the game sample, and renders
 each `samples/game-ui/smoke/visual/*.tscn` application under Xvfb with software OpenGL,
 comparing it with its golden PNG in `smoke/visual/goldens/`. Failing captures are written
 to `artifacts/visual/`; `RN_VISUAL_UPDATE=1` rewrites the goldens instead. Like
 `run_component_display.sh`, `COMPONENT_DISPLAY_READY=1` runs on the current display
 without Xvfb.
+
+Release builds use `scripts/build_godot.sh --release <editor|template_debug|template_release>`,
+which builds with `production=yes`. `template_release` needs `scripts/build_hermes.sh linux-x86_64`
+first.
 
 The JavaScript platform is the `react-native-godot` package in `packages/react-native-godot/`.
 Samples depend on it through `file:../../packages/react-native-godot` and use it as a
@@ -155,11 +162,15 @@ in Metro, reload from DevTools or call `DevSettings.reload()` to reload every ro
 `ReactNativeHost.reload()`. Press **j** in Metro or call `ReactNativeHost.open_debugger()`
 to open React Native DevTools.
 
-Successful merges to `main` replace the `baseline-linux-latest` rolling prerelease. Its
-Linux archive contains the Godot editor executable, `libhermesvm.so`, and `libjsi.so`,
-with a separate SHA-256 checksum asset. The same archive is also published as
-`react-native-godot-linux-x86_64-<commit>.zip`, which later prereleases keep, so that the
-`react-native-godot.tgz` of every commit can still download its editor.
+Successful merges to `main` replace the `baseline-linux-latest` rolling prerelease. It
+holds a Linux archive with the self-contained Godot editor executable, the export templates
+`react-native-godot-templates.tpz`, a SHA-256 checksum asset for each, and
+`react-native-godot.tgz`. The archive and templates are also published as
+`react-native-godot-linux-x86_64-<commit>.zip` and `react-native-godot-templates-<commit>.tpz`,
+which later prereleases keep, so that the `react-native-godot.tgz` of every commit can still
+download its editor and templates. The optimized editor and templates are built on `main`, on
+the scheduled baseline run and on manual runs, and a consumer project is exported and run
+with them before they are published.
 
 CI restores the SCons, Hermes and pinned-source caches that runs on `main` save. Pull
 requests can also restore the caches their own earlier runs saved, and closing a pull

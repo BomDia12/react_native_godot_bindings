@@ -70,8 +70,17 @@ builds the bundle file and runs the game from it instead. Arguments after `--` g
 for example `npx react-native run-godot -- --headless`.
 
 Exported games always load `react_native/bundle/path`; the editor builds it when it exports.
-Export templates that include this module are not published yet. The [editor](editor.md)
-describes the inspector, the **React Native** panel, debugging and exports.
+Install the Linux export templates that include this module once per machine, then export as
+usual from **Project > Export** or with `--export-debug` and `--export-release`:
+
+```sh
+npx react-native install-godot-templates
+```
+
+An exported game is one executable and its `.pck`, and needs only the system C library. It
+carries about 33 MB of Unicode data for JavaScript's internationalization support. The
+[editor](editor.md) describes the inspector, the **React Native** panel, debugging and
+exports.
 
 Add a `ReactNativeRootView` anywhere in a scene and set its `application_key` to a
 registered component. All roots share one runtime. [Godot platform](godot-platform.md)

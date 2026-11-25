@@ -152,7 +152,8 @@ internals that `rn_theme_metrics.h` reads. Upstream React Native's C++ and Herme
 the same binary, which ships as one executable per target.
 
 The cost is that a game needs an editor and export templates built with the module for each
-platform, which the release path gate and Phase 11 provide. A GDExtension would run on
+platform. Linux has both; other platforms are pending in the
+[platform matrix](compatibility/platforms.md). A GDExtension would run on
 official Godot binaries, but only through the API that ClassDB exposes, and it would need a
 shared library of its own for every target.
 

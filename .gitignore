@@ -22,4 +22,5 @@ __pycache__/
 
 /packages/react-native-godot/node_modules/
 /modules/react_native_bindings/thirdparty/boost/
+/modules/react_native_bindings/thirdparty/icu/
 /modules/react_native_bindings/thirdparty/configured/

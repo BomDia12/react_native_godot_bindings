@@ -34,7 +34,7 @@ class SmokeResult:
 def find_godot_binary(godot_source_dir: Path) -> Path:
     candidates = sorted(
         path
-        for path in (godot_source_dir / "bin").glob("godot.linuxbsd.editor.*")
+        for path in (godot_source_dir / "bin").glob("godot.linuxbsd.editor.*.react_native")
         if path.is_file() and os.access(path, os.X_OK)
     )
     dev_candidates = [path for path in candidates if ".editor.dev." in path.name]

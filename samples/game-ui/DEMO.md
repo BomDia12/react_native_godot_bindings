@@ -9,11 +9,11 @@ From the binding repository:
 ```sh
 python3 -m pip install -r requirements-ci.txt
 npm --prefix samples/game-ui ci
-GODOT_EDITOR="${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" npm --prefix samples/game-ui run build:godot
+GODOT_EDITOR="${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64.react_native" npm --prefix samples/game-ui run build:godot
 python3 scripts/stage_game_demo.py
 GODOT_SOURCE_DIR=${GODOT_SOURCE_DIR:-$PWD/godot}
-"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64" --editor --path ../godotProjects/Phase6BGame --import
-"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64" --path ../godotProjects/Phase6BGame
+"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64.react_native" --editor --path ../godotProjects/Phase6BGame --import
+"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64.react_native" --path ../godotProjects/Phase6BGame
 ```
 
 The column on the right is a fifth surface. It shows party health from Godot signals, a

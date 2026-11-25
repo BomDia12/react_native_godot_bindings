@@ -57,8 +57,8 @@ scripts/check_format.sh
 python3 -m unittest discover -s scripts/tests
 npm --prefix samples/view-text run test:godot
 npm --prefix samples/game-ui run test:godot
-godot/bin/godot.linuxbsd.editor.dev.x86_64 --headless --test --test-case='*[ReactNativeBindings]*'
-godot/bin/godot.linuxbsd.editor.dev.x86_64 --headless --test --test-case='*[TextEdit]*,*[RichTextLabel]*'
+godot/bin/godot.linuxbsd.editor.dev.x86_64.react_native --headless --test --test-case='*[ReactNativeBindings]*'
+godot/bin/godot.linuxbsd.editor.dev.x86_64.react_native --headless --test --test-case='*[TextEdit]*,*[RichTextLabel]*'
 scripts/run_baseline.sh
 scripts/run_component_display.sh
 ```

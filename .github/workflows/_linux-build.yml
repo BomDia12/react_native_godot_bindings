@@ -2,11 +2,6 @@ name: Linux build
 
 on:
   workflow_call:
-    inputs:
-      package_release:
-        description: Package the successful build for publication
-        required: true
-        type: boolean
 
 permissions:
   contents: read
@@ -23,56 +18,11 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/setup-node@v6
+      - uses: ./.github/actions/prepare-linux-build
         with:
-          node-version-file: .nvmrc
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Restore npm download cache
-        uses: actions/cache@v5
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'packages/react-native-godot/package-lock.json', 'samples/view-text/package-lock.json', 'samples/game-ui/package-lock.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-
-
-      - name: Restore pip download cache
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('baseline.env', 'requirements-ci.txt') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
-
-      - name: Restore Godot source cache
-        id: godot-source-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: godot
-          key: godot-source-${{ runner.os }}-${{ hashFiles('baseline.env', 'scripts/bootstrap.sh') }}
-
-      - name: Load pinned Hermes commit
-        run: grep '^HERMES_COMMIT=' baseline.env >> "$GITHUB_ENV"
-
-      - name: Restore Hermes library cache
-        id: hermes-library-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: modules/react_native_bindings/engines/build_release
-          key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh', 'baseline.env') }}
-
-      - name: Check Hermes libraries
-        id: hermes-libraries
-        run: |
-          HERMES_BUILD_DIR=modules/react_native_bindings/engines/build_release
-          if [[ -f "$HERMES_BUILD_DIR/lib/libhermesvm.so" && -f "$HERMES_BUILD_DIR/jsi/libjsi.so" ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
+          hermes-variant: linux-x86_64-debugger
+          extra-packages: clang-format xvfb xauth libgl1-mesa-dri
+          save-npm-cache: true
 
       - name: Restore SCons cache
         id: scons-cache
@@ -82,37 +32,6 @@ jobs:
           key: scons-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'requirements-ci.txt', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/config.py', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'samples/libraries/react-native-godot-example/godot/**', 'samples/libraries/react-native-godot-example/specs/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/react_native_sources.py', 'modules/react_native_bindings/react_platform/**', 'modules/react_native_bindings/generated/**', 'modules/react_native_bindings/host/**', 'modules/react_native_bindings/turbomodules/**', '.github/workflows/_linux-build.yml') }}
           restore-keys: |
             scons-${{ runner.os }}-gcc13-
-
-      - name: Install native toolchain
-        timeout-minutes: 15
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          APT_OPTIONS=(
-            -o Acquire::Retries=3
-            -o Acquire::http::Timeout=30
-            -o Acquire::https::Timeout=30
-            -o Acquire::ForceIPv4=true
-          )
-          sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install --yes clang-format cmake gcc-13 g++-13 llvm libicu-dev libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
-          python -m pip install --requirement requirements-ci.txt
-
-      - name: Restore Boost headers
-        uses: actions/cache@v5
-        with:
-          path: modules/react_native_bindings/thirdparty/boost
-          key: boost-${{ hashFiles('baseline.env') }}
-
-      - name: Bootstrap pinned sources
-        run: scripts/bootstrap.sh
-
-      - name: Save Godot source cache
-        if: steps.godot-source-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: godot
-          key: ${{ steps.godot-source-cache.outputs.cache-primary-key }}
 
       - name: Validate metadata and scripts
         run: |
@@ -131,19 +50,6 @@ jobs:
           npm --prefix samples/game-ui ci
           (cd samples/view-text && npx react-native autolink-godot)
           (cd samples/game-ui && npx react-native autolink-godot --check)
-
-      - name: Build Hermes
-        if: steps.hermes-libraries.outputs.available != 'true'
-        run: |
-          set -o pipefail
-          scripts/build_hermes.sh 2>&1 | tee hermes-build.log
-
-      - name: Save Hermes library cache
-        if: steps.hermes-library-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: modules/react_native_bindings/engines/build_release
-          key: ${{ steps.hermes-library-cache.outputs.cache-primary-key }}
 
       - name: Build Godot and module
         id: build
@@ -191,7 +97,7 @@ jobs:
 
       - name: Run module unit tests
         run: |
-          GODOT_BINARY=$(find godot/bin -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*' -perm -u+x -print -quit)
+          GODOT_BINARY=$(find godot/bin -maxdepth 1 -type f -name 'godot.linuxbsd.editor.*.react_native' -perm -u+x -print -quit)
           "$GODOT_BINARY" --headless --test --test-case='*[ReactNativeBindings]*'
 
       - name: Run headless smoke tests
@@ -209,25 +115,8 @@ jobs:
       - name: Run the staged game demo
         run: scripts/run_staged_game.sh
 
-      - name: Package Linux baseline
-        run: |
-          scripts/package_linux_baseline.sh
-          scripts/package_npm.sh
-
-      - name: Run a consumer project from the package
+      - name: Run a consumer project
         run: scripts/run_consumer.sh
-
-      - name: Upload release package
-        if: inputs.package_release
-        uses: actions/upload-artifact@v5
-        with:
-          name: linux-baseline-package
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            artifacts/react-native-godot-linux-x86_64.zip
-            artifacts/react-native-godot-linux-x86_64.zip.sha256
-            artifacts/react-native-godot.tgz
 
       - name: Upload failure diagnostics
         if: failure()

@@ -8,5 +8,5 @@
 | PLATFORM-WINDOWS | `Windows` | pending | Not built or tested. | none | none |
 | PLATFORM-MACOS | `macOS` | pending | Not built or tested. | none | none |
 | PLATFORM-IOS | `iOS` | pending | Not built or tested. | none | none |
-| PLATFORM-ANDROID | `Android` | pending | Godot Android export is not built or tested. | none | none |
+| PLATFORM-ANDROID | `Android` | partial | The arm64 `template_release` library compiles and links in CI with the module and static Hermes. Packaging, exporting and running it are pending. | [release workflow](../../.github/workflows/_linux-release-build.yml) | Android job exit status |
 | PLATFORM-WEB | `Web` | pending | Requires a separate platform strategy. | none | none |

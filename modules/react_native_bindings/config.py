@@ -7,7 +7,7 @@ def can_build(env, platform):
 
 
 def configure(env):
-    pass
+    env.add_module_version_string("react_native")
 
 
 def get_opts(platform):

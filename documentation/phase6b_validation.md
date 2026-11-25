@@ -120,11 +120,11 @@ npm --prefix samples/game-ui ci
 npm --prefix samples/game-ui run test:godot
 scripts/build_godot.sh -j2 accesskit=no module_mono_enabled=no
 scripts/run_cpp_tests.sh
-"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64" --headless --test --test-case='*[TextEdit]*,*[RichTextLabel]*'
+"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64.react_native" --headless --test --test-case='*[TextEdit]*,*[RichTextLabel]*'
 python3 scripts/run_smoke_tests.py
 scripts/run_component_display.sh
 python3 scripts/stage_game_demo.py
-"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64" --headless --editor --path ../godotProjects/Phase6BGame --import
+"$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64.react_native" --headless --editor --path ../godotProjects/Phase6BGame --import
 ```
 
 Install `requirements-ci.txt` in the Python environment used by the runner, or set

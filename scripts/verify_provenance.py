@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -30,6 +31,11 @@ def git_head(path: Path) -> str | None:
         text=True,
     )
     return result.stdout.strip() if result.returncode == 0 else None
+
+
+def android_function_result(detect_path: Path, function: str) -> str | None:
+    match = re.search(rf"def {function}\(\):\n\s+return \"?([^\"\n]+)\"?\n", detect_path.read_text(encoding="utf-8"))
+    return match.group(1) if match else None
 
 
 def check_tracked_file(relative_path: Path, failures: list[str]) -> None:
@@ -86,9 +92,24 @@ def main() -> int:
         if modified.returncode != 0:
             failures.append("Godot checkout has local changes; the module builds against the unmodified pinned commit")
 
-    for required in (hermes_dir / "LICENSE", thirdparty / "react-native/LICENSE", thirdparty / "boost/boost/version.hpp"):
+    for required in (
+        hermes_dir / "LICENSE",
+        thirdparty / "react-native/LICENSE",
+        thirdparty / "boost/boost/version.hpp",
+        thirdparty / "icu/LICENSE",
+    ):
         if not required.is_file():
             failures.append(f"missing provenance file: {required.relative_to(REPO_ROOT)}")
+
+    android_detect = godot_dir / "platform/android/detect.py"
+    if android_detect.is_file():
+        android_pins = {
+            "ANDROID_NDK_VERSION": android_function_result(android_detect, "get_ndk_version"),
+            "ANDROID_PLATFORM_API": android_function_result(android_detect, "get_min_target_api"),
+        }
+        for key, actual in android_pins.items():
+            if actual != baseline[key]:
+                failures.append(f"{key}: Godot's Android build uses {actual}, baseline.env pins {baseline[key]}")
 
     def check_lock(lock_path: Path, name: str, expected: str) -> None:
         lock = json.loads(lock_path.read_text(encoding="utf-8"))

@@ -1,0 +1,149 @@
+name: Linux release build
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Release builds use no SCons cache: their LTO objects would evict the
+# development build's caches from the repository's quota.
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - target: editor
+            hermes-variant: linux-x86_64-debugger
+          - target: template_debug
+            hermes-variant: linux-x86_64-debugger
+          - target: template_release
+            hermes-variant: linux-x86_64
+    env:
+      CC: gcc-13
+      CXX: g++-13
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/prepare-linux-build
+        with:
+          hermes-variant: ${{ matrix.hermes-variant }}
+
+      - name: Build Godot
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -o pipefail
+          scripts/build_godot.sh --release "$TARGET" -j"$(nproc)" 2>&1 | tee godot-build.log
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: godot-${{ matrix.target }}
+          retention-days: 1
+          if-no-files-found: error
+          path: godot/bin/godot.linuxbsd.${{ matrix.target }}.x86_64.react_native
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: linux-release-${{ matrix.target }}-failure
+          if-no-files-found: ignore
+          path: |
+            hermes-build.log
+            godot-build.log
+
+  android:
+    name: Link the Android arm64 template
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-13
+      CXX: g++-13
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      # The Android Hermes build imports this variant's host compilers.
+      - uses: ./.github/actions/prepare-linux-build
+        with:
+          hermes-variant: linux-x86_64-debugger
+
+      - name: Install the Android NDK
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ANDROID_NDK_VERSION" > /dev/null
+
+      - name: Build Hermes for Android
+        run: |
+          set -o pipefail
+          scripts/build_hermes.sh android-arm64 2>&1 | tee hermes-android-build.log
+
+      - name: Build Godot for Android
+        run: |
+          set -o pipefail
+          scripts/build_godot.sh --release template_release --android -j"$(nproc)" 2>&1 | tee godot-build.log
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: linux-release-android-failure
+          if-no-files-found: ignore
+          path: |
+            hermes-build.log
+            hermes-android-build.log
+            godot-build.log
+
+  package:
+    name: Package and export a consumer project
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/prepare-linux-build
+
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: godot-*
+          merge-multiple: true
+          path: godot/bin
+
+      - name: Package the editor, templates and npm package
+        run: |
+          chmod +x godot/bin/godot.linuxbsd.*.react_native
+          scripts/package_linux_baseline.sh
+          scripts/package_linux_templates.sh
+          scripts/package_npm.sh
+
+      - name: Export and run a consumer project with the packaged editor and templates
+        run: |
+          unzip -q artifacts/react-native-godot-linux-x86_64.zip -d "$RUNNER_TEMP/editor"
+          GODOT_EDITOR=$(find "$RUNNER_TEMP/editor" -type f -name 'godot.linuxbsd.editor.*' -print -quit) \
+          RN_CONSUMER_TEMPLATES="$PWD/artifacts/react-native-godot-templates.tpz" \
+            scripts/run_consumer.sh
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: linux-release-package
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            artifacts/react-native-godot-linux-x86_64.zip
+            artifacts/react-native-godot-linux-x86_64.zip.sha256
+            artifacts/react-native-godot-templates.tpz
+            artifacts/react-native-godot-templates.tpz.sha256
+            artifacts/react-native-godot.tgz
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: linux-release-package-failure
+          if-no-files-found: ignore
+          path: artifacts/smoke-logs/**
