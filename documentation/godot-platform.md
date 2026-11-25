@@ -390,8 +390,11 @@ Godot's threaded HTTPRequest can only stop a request by waiting for its response
 request that is cancelled or times out leaves its node behind: the request settles at once and
 its slot serves other requests, while the node finishes on its own thread and frees itself.
 Until then the bytes it may still receive stay in the pool's buffer budget, which bounds how
-many nodes drain at once. `get_service_stats().http.draining` counts them. The pool enforces
-request timeouts itself, because HTTPRequest's own timeout waits for its thread. Prefetch cannot be
+many nodes drain at once; a developer-server download, which has no response limit, holds
+`max_body_bytes`. `get_service_stats().http.draining` counts them. The pool enforces request
+timeouts itself, because HTTPRequest's own timeout waits for its thread, so a timeout fires
+on the first frame of the runtime after its deadline. A hard reload or quit still waits for
+requests in flight, because an HTTPRequest leaving the tree stops by joining its thread. Prefetch cannot be
 aborted, as in upstream's C++ image loader. The native image service requires the exact
 scheme, forward slashes, a nonempty relative path, and no `..` segment or embedded NUL.
 Percent characters remain literal. Missing staged files should be fixed by rebuilding

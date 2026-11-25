@@ -157,20 +157,26 @@ void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 	HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(slot.node));
 	if (p_in_flight && node) {
 		node->disconnect("request_completed", slot.callback);
-		node->connect("request_completed", callable_mp(this, &RNHTTPService::_retired_completed).bind(int64_t(slot.node)), CONNECT_ONE_SHOT | CONNECT_DEFERRED);
-		retired[int64_t(slot.node)] = slot.reservation;
+		node->connect("request_completed", callable_mp(this, &RNHTTPService::_retired_completed).bind(slot.node), CONNECT_ONE_SHOT | CONNECT_DEFERRED);
+		// Tooling responses have no limit or reservation, so a draining one
+		// holds the largest application response instead.
+		const auto request = requests.find(slot.request);
+		const bool tooling = request != requests.end() && request->second.spec.tooling;
+		const uint64_t held = tooling ? uint64_t(settings.limit("network/http/max_body_bytes")) : slot.reservation;
+		buffered += held - slot.reservation;
+		retired[slot.node] = held;
 		slot.reservation = 0;
 		slot.node = ObjectID();
 		slot.callback = Callable();
 	}
 	callable_mp(this, &RNHTTPService::_drained).call_deferred(int(p_slot), int64_t(slot.sequence));
 }
-void RNHTTPService::_retired_completed(int, int, const PackedStringArray &, const PackedByteArray &, int64_t p_node) {
+void RNHTTPService::_retired_completed(int, int, const PackedStringArray &, const PackedByteArray &, ObjectID p_node) {
 	if (const uint64_t *reservation = retired.getptr(p_node)) {
 		buffered -= *reservation;
 	}
 	retired.erase(p_node);
-	if (Node *node = Object::cast_to<Node>(ObjectDB::get_instance(ObjectID(uint64_t(p_node))))) {
+	if (Node *node = Object::cast_to<Node>(ObjectDB::get_instance(p_node))) {
 		remove_child(node);
 		memdelete(node);
 	}
@@ -439,8 +445,8 @@ void RNHTTPService::shutdown() {
 		slot.callback = Callable();
 		slot.state = State::IDLE;
 	}
-	for (const KeyValue<int64_t, uint64_t> &entry : retired) {
-		if (HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(ObjectID(uint64_t(entry.key))))) {
+	for (const KeyValue<ObjectID, uint64_t> &entry : retired) {
+		if (HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(entry.key))) {
 			node->cancel_request();
 			remove_child(node);
 			memdelete(node);
