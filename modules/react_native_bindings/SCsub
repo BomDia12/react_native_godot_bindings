@@ -116,9 +116,10 @@ env_upstream.Prepend(CPPPATH=react_native_sources.include_dirs() + [module_dir])
 env_upstream.Append(CXXFLAGS=["-isystem%s" % path for path in react_native_sources.hermes_include_dirs()])
 env_upstream.Append(CPPDEFINES=react_native_defines)
 env_upstream.Append(CXXFLAGS=["-std=c++20", "-fexceptions", "-frtti"], CCFLAGS=["-fexceptions"])
-# Upstream builds with libc++, whose headers provide the fixed-width integer types
-# that several React Native sources use without including <cstdint>.
-env_upstream.Append(CXXFLAGS=["-include", "cstdint"])
+# Several React Native sources use standard headers they don't include, which
+# upstream's toolchains happen to pull in: the fixed-width integer types of
+# <cstdint>, and the <mutex> that libc++ before NDK r29 included transitively.
+env_upstream.Append(CXXFLAGS=["-include", "cstdint", "-include", "mutex"])
 env_upstream.Append(CXXFLAGS=["-isystem%s" % path for path in autolinked_codegen])
 
 upstream_objects = []
