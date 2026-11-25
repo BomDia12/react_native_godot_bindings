@@ -15,6 +15,7 @@
     "samples/view-text/segments.entry.js",
     "samples/view-text/startup_segment.js",
     "samples/view-text/runtime_segment.js",
+    "samples/view-text/throwing_segment.js",
     "samples/view-text/metro.config.js",
     "samples/view-text/babel.config.js",
     "samples/view-text/package.json",

@@ -10,6 +10,7 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/io/json.h"
+#include "core/io/resource_importer.h"
 #include "core/os/os.h"
 #include "editor/file_system/editor_file_system.h"
 
@@ -75,7 +76,8 @@ void RNExportPlugin::_export_begin(const HashSet<String> &p_features, bool p_deb
 	EditorFileSystem::get_singleton()->update_files(files);
 	Vector<String> assets;
 	for (const String &file : files) {
-		if (file != bundle && !is_tooling_file(file, project_root, output_directory)) {
+		const bool importable = ResourceFormatImporter::get_singleton()->get_importer_by_file(file).is_valid();
+		if (importable && file != bundle && !is_tooling_file(file, project_root, output_directory)) {
 			assets.push_back(file);
 		}
 	}

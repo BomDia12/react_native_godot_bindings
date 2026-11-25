@@ -60,6 +60,15 @@ import 'react-native-godot-script-example';
 
 global.__consumerScore = () => getGodotModule('Scoreboard').call('add', 1);
 JS
+# A startup segment's component has to mount however the project runs: from a
+# bundle file, from Metro, and from an exported pack.
+cat > "$PROJECT_DIR/react_native/consumer_segment.js" <<'JS'
+import React from 'react';
+import {AppRegistry, Text} from 'react-native';
+
+AppRegistry.registerComponent('ConsumerSegment', () => () => <Text>Consumer segment</Text>);
+JS
+sed -i '/^\[react_native\]$/a bundle/segments=PackedStringArray("consumer_segment")' "$PROJECT_DIR/project.godot"
 # A component contract makes the build generate its props type, registry and
 # component, which the template must type-check with.
 mkdir -p "$PROJECT_DIR/react_native/contracts"
@@ -80,7 +89,7 @@ RN_CONSUMER_EXPECT_METRO=1 check consumer-metro "$REPO_ROOT/documentation/expect
 cp "$SCRIPT_DIR/consumer_export_presets.cfg" "$PROJECT_DIR/export_presets.cfg"
 "$GODOT_BINARY" --headless --path "$PROJECT_DIR" --export-pack Linux "$PACKAGE_DIR/game.pck" > "$LOG_DIR/consumer-export.log" 2>&1
 # Godot's command-line export succeeds when export plugins report errors.
-if grep -q "completed with warnings" "$LOG_DIR/consumer-export.log"; then
+if grep -qE "completed with warnings|BUG: File queued for import" "$LOG_DIR/consumer-export.log"; then
 	echo "The consumer export reported problems; see $LOG_DIR/consumer-export.log." >&2
 	exit 1
 fi
