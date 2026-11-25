@@ -163,6 +163,6 @@ with a separate SHA-256 checksum asset. The same archive is also published as
 
 CI restores the SCons, Hermes and pinned-source caches that runs on `main` save. Pull
 requests can also restore the caches their own earlier runs saved, and closing a pull
-request deletes them. A scheduled baseline run every three days keeps the `main` caches
-from expiring, and the run summary reports how many objects the build retrieved from the
-SCons cache.
+request into `main` deletes them. A scheduled baseline run every three days keeps the
+`main` caches from expiring, and the run summary reports how many targets the build
+retrieved from the SCons cache.

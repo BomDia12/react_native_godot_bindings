@@ -146,6 +146,7 @@ jobs:
           key: ${{ steps.hermes-library-cache.outputs.cache-primary-key }}
 
       - name: Build Godot and module
+        id: build
         env:
           RN_AUTOLINKING: samples/view-text/node_modules/.cache/react-native-godot/autolinking/autolinking.json
         run: |
@@ -172,19 +173,21 @@ jobs:
           {
             echo "SCons cache restored from: ${MATCHED_KEY:-nothing}"
             echo
-            echo "Objects retrieved from the cache: $(grep -c '^Retrieved ' godot-build.log || true)"
+            echo "Targets retrieved from the cache: $(grep -c '^Retrieved ' godot-build.log || true)"
             echo
             echo "Files compiled: $(grep -c 'Compiling ' godot-build.log || true)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Saved even when a later step fails, so the next run builds only what changed.
-      # A cancelled run would store a partial cache under a key later runs hit exactly.
+      # Saved even when the build or a later step fails, so the next run builds only
+      # what changed. A failed build's partial cache goes under a run-specific key:
+      # later runs still restore it through restore-keys, but never hit it exactly
+      # and skip saving the complete one.
       - name: Save SCons cache
-        if: ${{ !cancelled() && steps.scons-cache.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' && steps.scons-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
           path: .scons-cache
-          key: ${{ steps.scons-cache.outputs.cache-primary-key }}
+          key: ${{ steps.build.outcome == 'success' && steps.scons-cache.outputs.cache-primary-key || format('{0}-failed-{1}', steps.scons-cache.outputs.cache-primary-key, github.run_id) }}
 
       - name: Run module unit tests
         run: |

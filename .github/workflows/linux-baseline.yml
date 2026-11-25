@@ -6,8 +6,8 @@ on:
       - main
       - feature/phase8-*
       - feature/phase9-*
-  # Pull requests can only restore caches saved on main, and GitHub evicts caches
-  # that go unused for 7 days.
+  # Pull requests fall back to the caches saved on main, which GitHub evicts after
+  # 7 days without use.
   schedule:
     - cron: "0 6 */3 * *"
   workflow_dispatch:
