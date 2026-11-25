@@ -140,6 +140,21 @@ the bundle file for changes; a running game or an exported build doesn't. A bund
 missing when roots start leaves them empty, and the bundle-change signal that makes it
 available starts the runtime and every waiting root.
 
+### Why an engine module
+
+The bindings are a Godot engine module. `build_godot.sh` attaches them through SCons'
+`custom_modules` option, so they build into the unmodified pinned engine without patching
+it. A module compiles against the engine's own headers, so it subclasses scene classes with
+access to engine internals: shaping and drawing through `TextServer`, `Control` virtuals
+such as combined minimum sizes and accessibility hierarchies, and the `StyleBox` and `Theme`
+internals that `rn_theme_metrics.h` reads. Upstream React Native's C++ and Hermes link into
+the same binary, which ships as one executable per target.
+
+The cost is that a game needs an editor and export templates built with the module for each
+platform, which the release path gate and Phase 11 provide. A GDExtension would run on
+official Godot binaries, but only through the API that ClassDB exposes, and it would need a
+shared library of its own for every target.
+
 ## Roots in a scene
 
 A `ReactNativeRootView` is an ordinary `Control`, and works in containers, under themed
