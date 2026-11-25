@@ -1,5 +1,7 @@
 #include "rn_input_router.h"
 
+#include "rn_touch_table.h"
+
 #include "core/os/keyboard.h"
 #include "core/os/os.h"
 #include "scene/gui/control.h"
@@ -159,17 +161,17 @@ PointerEvent RNInputRouter::pointer(const Target &p_target, const Position &p_po
 TouchEvent RNInputRouter::touch_event(const Touch &p_changed, bool p_ended) const {
 	TouchEvent event;
 	event.changedTouches.insert(p_changed);
-	for (const KeyValue<int, Contact> &entry : touches) {
-		const Touch current = touch(entry.value.target, entry.value.position, entry.key, entry.value.pressure);
-		event.touches.insert(current);
-		if (current.target == p_changed.target) {
-			event.targetTouches.insert(current);
+	const auto add = [&event, &p_changed](const Touch &p_current) {
+		event.touches.insert(p_current);
+		if (p_current.target == p_changed.target) {
+			event.targetTouches.insert(p_current);
 		}
+	};
+	for (const KeyValue<int, RNTouchTable::Contact> &entry : table->touches) {
+		add(touch(entry.value.target, entry.value.position, entry.key, entry.value.pressure));
 	}
-	if (mouse_active.is_valid()) {
-		const Touch current = touch(mouse_active, mouse_position, MOUSE_TOUCH_ID, 0.5f);
-		event.touches.insert(current);
-		event.targetTouches.insert(current);
+	if (table->mouse.target.is_valid()) {
+		add(touch(table->mouse.target, table->mouse.position, MOUSE_TOUCH_ID, 0.5f));
 	}
 	if (p_ended) {
 		event.touches.erase(p_changed);
@@ -201,14 +203,26 @@ void RNInputRouter::_hover(const Target &p_target, const Position &p_position, c
 void RNInputRouter::_mouse_motion(const Ref<InputEventMouseMotion> &p_motion, const Target &p_target, const Position &p_position) {
 	mouse_position = p_position;
 	_hover(p_target, p_position, p_motion.ptr());
-	const Target &target = mouse_active.is_valid() ? mouse_active : p_target;
+	const Target active = _mouse_active();
+	const Target &target = active.is_valid() ? active : p_target;
 	if (!target.is_valid()) {
 		return;
 	}
 	target.emitter->onPointerMove(pointer(target, p_position, MOUSE_POINTER_ID, "mouse", -1, mouse_buttons, mouse_buttons ? 0.5f : 0, true, p_motion.ptr()));
-	if (mouse_active.is_valid() && !mouse_active.owns_activation) {
-		mouse_active.emitter->onTouchMove(touch_event(touch(mouse_active, p_position, MOUSE_TOUCH_ID, 0.5f), false));
+	if (active.is_valid()) {
+		table->mouse.position = p_position;
+		if (!active.owns_activation) {
+			active.emitter->onTouchMove(touch_event(touch(active, p_position, MOUSE_TOUCH_ID, 0.5f), false));
+		}
 	}
+}
+
+RNInputRouter::Target RNInputRouter::_mouse_active() const {
+	return table->mouse.root == root ? table->mouse.target : Target();
+}
+
+void RNInputRouter::_set_mouse_active(const Target &p_target, const Position &p_position) {
+	table->mouse = { p_target, p_position, 0.5f, p_target.is_valid() ? root : ObjectID() };
 }
 
 Control *RNInputRouter::_mouse_button(const Ref<InputEventMouseButton> &p_button, const Target &p_target, const Position &p_position) {
@@ -227,10 +241,11 @@ Control *RNInputRouter::_mouse_button(const Ref<InputEventMouseButton> &p_button
 		mouse_pressed = Target();
 	}
 	const bool primary_release = button == 0 && !p_button->is_pressed();
-	const Target target = primary_release && mouse_active.is_valid() ? mouse_active : p_target;
+	const Target active = _mouse_active();
+	const Target target = primary_release && active.is_valid() ? active : p_target;
 	if (!target.is_valid()) {
-		if (primary_release) {
-			mouse_active = Target();
+		if (primary_release && active.is_valid()) {
+			_set_mouse_active(Target(), p_position);
 		}
 		return nullptr;
 	}
@@ -249,7 +264,7 @@ Control *RNInputRouter::_mouse_button(const Ref<InputEventMouseButton> &p_button
 			}
 			return nullptr;
 		}
-		mouse_active = target;
+		_set_mouse_active(target, p_position);
 		if (target.owns_activation) {
 			return nullptr;
 		}
@@ -262,7 +277,9 @@ Control *RNInputRouter::_mouse_button(const Ref<InputEventMouseButton> &p_button
 		target.emitter->onPointerUp(event);
 		return nullptr;
 	}
-	mouse_active = Target();
+	if (active.is_valid()) {
+		_set_mouse_active(Target(), p_position);
+	}
 	if (p_button->is_canceled()) {
 		if (!target.owns_activation) {
 			target.emitter->onTouchCancel(touch_event(touch(target, p_position, MOUSE_TOUCH_ID, 0), true));
@@ -288,11 +305,11 @@ Control *RNInputRouter::_screen_touch(const Ref<InputEventScreenTouch> &p_touch,
 		if (!p_target.is_valid()) {
 			return nullptr;
 		}
-		if (touches.is_empty()) {
-			primary_touch = index;
+		if (table->touches.is_empty()) {
+			table->primary_touch = index;
 		}
-		touches[index] = { p_target, p_position, 0.5f };
-		p_target.emitter->onPointerDown(pointer(p_target, p_position, index, "touch", 0, 1, 0.5f, index == primary_touch, nullptr));
+		table->touches[index] = { p_target, p_position, 0.5f, root };
+		p_target.emitter->onPointerDown(pointer(p_target, p_position, index, "touch", 0, 1, 0.5f, index == table->primary_touch, nullptr));
 		if (p_target.owns_activation) {
 			return nullptr;
 		}
@@ -300,17 +317,15 @@ Control *RNInputRouter::_screen_touch(const Ref<InputEventScreenTouch> &p_touch,
 		return Object::cast_to<Control>(ObjectDB::get_instance(p_target.focus));
 	}
 
-	const Contact *contact = touches.getptr(index);
-	if (!contact) {
+	const RNTouchTable::Contact *contact = table->touches.getptr(index);
+	if (!contact || contact->root != root) {
 		return nullptr;
 	}
 	const Target target = contact->target;
-	const bool primary = index == primary_touch;
-	touches.erase(index);
-	// A pointer stays primary for its whole lifetime, so nothing becomes primary
-	// again until every contact is released.
+	const bool primary = index == table->primary_touch;
+	table->touches.erase(index);
 	if (primary) {
-		primary_touch = -1;
+		table->primary_touch = -1;
 	}
 	const PointerEvent event = pointer(target, p_position, index, "touch", 0, 0, 0, primary, nullptr);
 	const Touch ended = touch(target, p_position, index, 0);
@@ -329,15 +344,15 @@ Control *RNInputRouter::_screen_touch(const Ref<InputEventScreenTouch> &p_touch,
 }
 
 void RNInputRouter::_screen_drag(const Ref<InputEventScreenDrag> &p_drag, const Position &p_position) {
-	Contact *contact = touches.getptr(p_drag->get_index());
-	if (!contact) {
+	RNTouchTable::Contact *contact = table->touches.getptr(p_drag->get_index());
+	if (!contact || contact->root != root) {
 		return;
 	}
 	contact->position = p_position;
 	contact->pressure = p_drag->get_pressure() > 0 ? p_drag->get_pressure() : 0.5f;
 	const Target &target = contact->target;
 	const int index = p_drag->get_index();
-	target.emitter->onPointerMove(pointer(target, p_position, index, "touch", -1, 1, contact->pressure, index == primary_touch, nullptr));
+	target.emitter->onPointerMove(pointer(target, p_position, index, "touch", -1, 1, contact->pressure, index == table->primary_touch, nullptr));
 	if (!target.owns_activation) {
 		target.emitter->onTouchMove(touch_event(touch(target, p_position, index, contact->pressure), false));
 	}
@@ -395,6 +410,24 @@ void RNInputRouter::_cancel(const Target &p_target, const Position &p_position, 
 	p_target.emitter->onPointerCancel(pointer(p_target, p_position, p_pointer, p_type, 0, 0, 0, p_primary, nullptr));
 }
 
+void RNInputRouter::_cancel_touches(const std::function<bool(const Target &)> &p_matches) {
+	::Vector<int> ended;
+	for (const KeyValue<int, RNTouchTable::Contact> &entry : table->touches) {
+		if (entry.value.root == root && p_matches(entry.value.target)) {
+			ended.push_back(entry.key);
+		}
+	}
+	for (int index : ended) {
+		const RNTouchTable::Contact contact = table->touches[index];
+		const bool primary = index == table->primary_touch;
+		table->touches.erase(index);
+		if (primary) {
+			table->primary_touch = -1;
+		}
+		_cancel(contact.target, contact.position, index, index, "touch", primary);
+	}
+}
+
 void RNInputRouter::view_destroyed(Tag p_tag) {
 	if (hover.tag == p_tag) {
 		hover = Target();
@@ -402,38 +435,26 @@ void RNInputRouter::view_destroyed(Tag p_tag) {
 	if (mouse_pressed.tag == p_tag) {
 		mouse_pressed = Target();
 	}
-	if (mouse_active.tag == p_tag) {
-		const Target target = mouse_active;
-		mouse_active = Target();
+	if (const Target active = _mouse_active(); active.tag == p_tag) {
+		const Position position = table->mouse.position;
+		_set_mouse_active(Target(), position);
 		mouse_buttons = 0;
-		_cancel(target, mouse_position, MOUSE_TOUCH_ID, MOUSE_POINTER_ID, "mouse", true);
+		_cancel(active, position, MOUSE_TOUCH_ID, MOUSE_POINTER_ID, "mouse", true);
 	}
-	::Vector<int> ended;
-	for (const KeyValue<int, Contact> &entry : touches) {
-		if (entry.value.target.tag == p_tag) {
-			ended.push_back(entry.key);
-		}
-	}
-	for (int index : ended) {
-		const Contact contact = touches[index];
-		touches.erase(index);
-		_cancel(contact.target, contact.position, index, index, "touch", index == primary_touch);
-		if (index == primary_touch) {
-			primary_touch = -1;
-		}
-	}
+	_cancel_touches([p_tag](const Target &p_target) { return p_target.tag == p_tag; });
 }
 
 // Something outside React took the mouse mid-press, such as a popup menu the
 // press opened, so the release will never come back here.
 void RNInputRouter::cancel_mouse() {
-	const Target active = mouse_active;
+	const Target active = _mouse_active();
 	const Target pressed = mouse_pressed;
-	mouse_active = Target();
 	mouse_pressed = Target();
 	mouse_buttons = 0;
 	if (active.is_valid()) {
-		_cancel(active, mouse_position, MOUSE_TOUCH_ID, MOUSE_POINTER_ID, "mouse", true);
+		const Position position = table->mouse.position;
+		_set_mouse_active(Target(), position);
+		_cancel(active, position, MOUSE_TOUCH_ID, MOUSE_POINTER_ID, "mouse", true);
 	} else if (pressed.is_valid()) {
 		pressed.emitter->onPointerCancel(pointer(pressed, mouse_position, MOUSE_POINTER_ID, "mouse", 0, 0, 0, true, nullptr));
 	}
@@ -442,10 +463,5 @@ void RNInputRouter::cancel_mouse() {
 void RNInputRouter::cancel_all() {
 	_hover(Target(), mouse_position, nullptr);
 	cancel_mouse();
-	const HashMap<int, Contact> active(touches);
-	touches.clear();
-	for (const KeyValue<int, Contact> &entry : active) {
-		_cancel(entry.value.target, entry.value.position, entry.key, entry.key, "touch", entry.key == primary_touch);
-	}
-	primary_touch = -1;
+	_cancel_touches([](const Target &) { return true; });
 }

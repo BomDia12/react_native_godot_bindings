@@ -162,6 +162,14 @@ controls, in `SubViewport`s and in other windows.
   its initial props, converted like other Godot values. A property holding a value that
   can't be converted, such as an Object, an integer beyond `Number.MAX_SAFE_INTEGER` or a
   key that isn't a string, is reported as an error and left out.
+- **Touches across roots.** Roots share one application, as on other platforms:
+  `TouchEvent.touches` lists the contacts held in every root, `numberActiveTouches` counts
+  them, and only the application's first contact is the primary pointer. A root whose surface
+  stops cancels its own contacts and leaves the others'. React Native has one responder per
+  application and negotiates it from the views' common ancestor, which views in different
+  roots lack, so a touch in one root can't take the responder from a view in another, and,
+  because Fabric sends numeric touch targets that upstream's end check can't match to the
+  held responder, any touch end releases it.
 - **Editor preview.** With `editor_preview` off, the editor doesn't run the root and draws
   its application key instead. Running games ignore it.
 

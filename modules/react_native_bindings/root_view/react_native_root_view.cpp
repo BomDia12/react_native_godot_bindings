@@ -4,6 +4,7 @@
 #include "../editor/rn_contract_codegen.h"
 #include "../host/react_native_host.h"
 #include "../host/rn_service_settings.h"
+#include "../input/rn_touch_table.h"
 #include "../turbomodules/rn_godot_alerts.h"
 
 #include "core/config/engine.h"
@@ -19,7 +20,10 @@
 
 using namespace facebook::react;
 
-ReactNativeRootView::ReactNativeRootView() {
+// Without the host, as when ClassDB builds a default instance, a root keeps
+// its contacts to itself.
+ReactNativeRootView::ReactNativeRootView() :
+		input_router(ReactNativeHost::get_singleton() ? ReactNativeHost::get_singleton()->get_touch_table() : std::make_shared<RNTouchTable>(), get_instance_id()) {
 	container = memnew(Control);
 	container->set_name("ReactNativeMountContainer");
 	container->set_anchors_and_offsets_preset(PRESET_FULL_RECT);

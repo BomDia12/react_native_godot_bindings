@@ -5,8 +5,15 @@
 #include "core/input/input_event.h"
 #include "core/templates/hash_map.h"
 
+#include <functional>
+#include <memory>
+
+struct RNTouchTable;
+
 // Translates Godot input on the control Godot picked into React Native touch,
 // pointer and key events, sent through the target's upstream event emitter.
+// One router serves one root; the contacts it reports live in the
+// application's touch table.
 class RNInputRouter {
 public:
 	struct Target {
@@ -28,19 +35,13 @@ public:
 	};
 
 private:
-	struct Contact {
-		Target target;
-		Position position;
-		float pressure = 0.5f;
-	};
-
+	std::shared_ptr<RNTouchTable> table;
+	ObjectID root;
 	Target hover;
 	Target mouse_pressed;
-	Target mouse_active;
 	int mouse_buttons = 0;
+	// Where this root last saw the mouse, for its hover events.
 	Position mouse_position;
-	HashMap<int, Contact> touches;
-	int primary_touch = -1;
 
 	static facebook::react::Point point(const Point2 &p_point);
 	static Point2 offset_in(const Target &p_target, const Position &p_position);
@@ -54,8 +55,15 @@ private:
 	Control *_screen_touch(const Ref<InputEventScreenTouch> &p_touch, const Target &p_target, const Position &p_position);
 	void _screen_drag(const Ref<InputEventScreenDrag> &p_drag, const Position &p_position);
 	void _cancel(const Target &p_target, const Position &p_position, int p_touch, int p_pointer, const char *p_type, bool p_primary);
+	// The mouse contact, when this root holds it.
+	Target _mouse_active() const;
+	void _set_mouse_active(const Target &p_target, const Position &p_position);
+	void _cancel_touches(const std::function<bool(const Target &)> &p_matches);
 
 public:
+	RNInputRouter(std::shared_ptr<RNTouchTable> p_table, ObjectID p_root) :
+			table(std::move(p_table)), root(p_root) {}
+
 	static Target target_for(const RNComponentView *p_view, const Point2 &p_local);
 
 	// Returns the pressed view's focus control after a primary press.
