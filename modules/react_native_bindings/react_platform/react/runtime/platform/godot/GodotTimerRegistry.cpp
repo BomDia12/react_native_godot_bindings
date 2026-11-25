@@ -47,7 +47,8 @@ void GodotTimerRegistry::schedule(uint32_t timerId, Timer &timer, double delayMs
 		timer.remainingMs = delayMs;
 		return;
 	}
-	const auto delay = std::chrono::milliseconds(static_cast<int32_t>(delayMs));
+	// Casting a delay beyond INT32_MAX to int32_t is undefined; such a timer stays pending.
+	const auto delay = std::chrono::milliseconds(static_cast<int32_t>(std::min(delayMs, double(INT32_MAX))));
 	timer.tick = nextTick_++;
 	timer.due = Clock::now() + delay;
 	thread_.runAsync([this, timerId, tick = timer.tick] { fire(timerId, tick); }, delay);
