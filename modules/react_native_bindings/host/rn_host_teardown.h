@@ -3,6 +3,7 @@
 #include <react/renderer/core/ReactPrimitives.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -48,4 +49,5 @@ public:
 	~RNHostTeardown();
 
 	bool is_finished() const { return finished; }
+	bool join(std::chrono::milliseconds p_timeout);
 };

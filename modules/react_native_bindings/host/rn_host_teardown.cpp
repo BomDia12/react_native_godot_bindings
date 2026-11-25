@@ -32,7 +32,24 @@ RNHostTeardown::RNHostTeardown(RNHostRuntime &p_runtime, std::vector<SurfaceId> 
 }
 
 RNHostTeardown::~RNHostTeardown() {
+	if (thread.joinable()) {
+		thread.join();
+	}
+}
+
+// JavaScript blocked in native code can't be interrupted, so a runtime that
+// doesn't stop in time is left running on its detached thread.
+bool RNHostTeardown::join(std::chrono::milliseconds p_timeout) {
+	const auto deadline = std::chrono::steady_clock::now() + p_timeout;
+	while (!finished && std::chrono::steady_clock::now() < deadline) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	if (!finished) {
+		thread.detach();
+		return false;
+	}
 	thread.join();
+	return true;
 }
 
 void RNHostTeardown::_run() {

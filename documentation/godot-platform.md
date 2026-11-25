@@ -83,12 +83,12 @@ types and the `react-native` prop augmentations, and `types/` declares each subp
 `ReactNativeHost` is an engine singleton that runs one upstream `ReactHost`. JavaScript,
 React rendering, layout and text measurement run on its JS thread. Godot nodes and
 scene-owned resources are touched only on the main thread, which drains a task queue
-from `SceneTree.process_frame`. The main thread never waits on the JS thread. A
-synchronous TurboModule call that needs Godot blocks the JS thread until its main-thread
-task finishes; while the host shuts down, such calls fail with `E_CANCELLED`. A main-thread
-task that throws is reported as an error and skipped. JS timers use the steady clock and
-pause only while the runtime is suspended (see [Roots in a scene](#roots-in-a-scene)).
-Interval ticks that come due while JavaScript is busy are skipped, not queued.
+from `SceneTree.process_frame`. The main thread waits on the JS thread only when the game
+quits, for up to 10 s; a runtime still blocked in native code then is reported and left
+running. A synchronous TurboModule call that needs Godot blocks the JS thread until its
+main-thread task finishes; while the host shuts down, such calls fail with `E_CANCELLED`.
+A main-thread task that throws is reported as an error and skipped. JS timers use the
+steady clock and pause only while the runtime is suspended (see
 [Roots in a scene](#roots-in-a-scene)). Interval ticks that come due while JavaScript is
 busy are skipped, not queued.
 

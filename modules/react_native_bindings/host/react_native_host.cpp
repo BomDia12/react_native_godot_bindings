@@ -16,6 +16,8 @@
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
 
+#include <algorithm>
+#include <chrono>
 #include <mutex>
 
 using namespace facebook::react;
@@ -179,7 +181,7 @@ void ReactNativeHost::_retire() {
 void ReactNativeHost::_finish_retired() {
 	for (int i = retiring.size() - 1; i >= 0; --i) {
 		if (retiring[i]->is_finished()) {
-			retiring[i]->finish();
+			retiring[i]->finish({});
 			retiring.remove_at(i);
 		}
 	}
@@ -568,8 +570,14 @@ void ReactNativeHost::shutdown() {
 	}
 	scene_loads.clear();
 	RNResourceRequests::shutdown();
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 	for (const std::shared_ptr<RNHostInstance> &retired : retiring) {
-		retired->finish();
+		const auto left = std::max(deadline - std::chrono::steady_clock::now(), std::chrono::steady_clock::duration::zero());
+		if (!retired->finish(std::chrono::duration_cast<std::chrono::milliseconds>(left))) {
+			ERR_PRINT("A React Native runtime is still busy in native code after 10 s. The game quits without stopping it.");
+			// The detached teardown thread still uses the instance.
+			new std::shared_ptr<RNHostInstance>(retired);
+		}
 	}
 	retiring.clear();
 	async_storage.reset();

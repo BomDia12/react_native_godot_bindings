@@ -713,7 +713,11 @@ bool RNHostInstance::is_finished() const {
 	return teardown && teardown->is_finished();
 }
 
-void RNHostInstance::finish() {
+bool RNHostInstance::finish(std::chrono::milliseconds p_timeout) {
+	if (!teardown->join(p_timeout)) {
+		return false;
+	}
 	teardown.reset();
 	blobs->shutdown();
+	return true;
 }
