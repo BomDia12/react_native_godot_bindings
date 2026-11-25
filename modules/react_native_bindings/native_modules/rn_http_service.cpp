@@ -143,15 +143,15 @@ void RNHTTPService::settle(uint64_t p_request, RNHTTPResponse p_response) {
 		callback(std::move(p_response));
 	}
 }
+uint64_t RNHTTPService::_available_budget() const {
+	const uint64_t budget = settings.limit("network/http/max_buffered_bytes");
+	return buffered >= budget ? 0 : budget - buffered;
+}
 // HTTPRequest's cancel_request joins its thread, which blocks reading the
 // response, so the node of a request still in flight leaves its slot and frees
 // itself once the server answers. The slot and the request are released at
 // once; the response bytes the node may still receive stay in the buffer
 // budget until then, which also bounds how many nodes drain.
-uint64_t RNHTTPService::_available_budget() const {
-	const uint64_t budget = settings.limit("network/http/max_buffered_bytes");
-	return buffered >= budget ? 0 : budget - buffered;
-}
 void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 	Slot &slot = slots[p_slot];
 	if (slot.state == State::DRAINING) {
