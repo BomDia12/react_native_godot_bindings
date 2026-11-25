@@ -189,17 +189,17 @@ String js_error_text(const jsi::JSError &p_error) {
 	return String::utf8(p_error.getMessage().c_str()) + "\n" + String::utf8(p_error.getStack().c_str());
 }
 
-// Metro hands what a module throws to ErrorUtils instead of rethrowing it, and
-// upstream reports only a runtime's first fatal error. A handler of its own
-// keeps a failure with the segment that caused it, and a broken segment from
-// hiding the game's later errors. A handler the segment installs stays in place,
-// and ours forwards to the previous one once the segment has run, so a handler
-// that chains to it still reaches upstream.
 struct SegmentEvaluation {
 	bool running = true;
 	String thrown;
 };
 
+// Metro hands what a module throws to ErrorUtils instead of rethrowing it, and
+// upstream reports only a runtime's first fatal error. A handler of its own
+// keeps a failure with the segment that caused it, and a broken segment from
+// hiding the game's later errors. Other errors, and every error once the segment
+// has run, go to the previous handler, so a handler the segment installs and
+// chains to ours still reaches upstream.
 String evaluate_segment(jsi::Runtime &p_runtime, const std::shared_ptr<const jsi::Buffer> &p_script, const std::string &p_source_url) {
 	auto evaluation = std::make_shared<SegmentEvaluation>();
 	try {
@@ -208,11 +208,11 @@ String evaluate_segment(jsi::Runtime &p_runtime, const std::shared_ptr<const jsi
 		const jsi::Function set_handler = error_utils.getPropertyAsFunction(p_runtime, "setGlobalHandler");
 		const jsi::Value previous = get_handler.call(p_runtime);
 		const jsi::Function handle_error = jsi::Function::createFromHostFunction(p_runtime, jsi::PropNameID::forAscii(p_runtime, "handleSegmentError"), 3, [evaluation](jsi::Runtime &p_handler_runtime, const jsi::Value &, const jsi::Value *p_arguments, size_t p_count) {
-			if (!evaluation->running) {
+			const bool fatal = p_count > 2 && p_arguments[2].isBool() && p_arguments[2].getBool();
+			if (!evaluation->running || !fatal) {
 				return p_arguments[0].asObject(p_handler_runtime).asFunction(p_handler_runtime).call(p_handler_runtime, p_arguments + 1, p_count - 1);
 			}
-			jsi::Value error = p_count > 1 ? jsi::Value(p_handler_runtime, p_arguments[1]) : jsi::Value::undefined();
-			evaluation->thrown = js_error_text(jsi::JSError(p_handler_runtime, std::move(error)));
+			evaluation->thrown = js_error_text(jsi::JSError(p_handler_runtime, jsi::Value(p_handler_runtime, p_arguments[1])));
 			return jsi::Value::undefined();
 		});
 		// The previous handler is bound in JS instead of captured, since a

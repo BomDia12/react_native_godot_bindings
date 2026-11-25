@@ -1,9 +1,11 @@
 # The fixture intentionally loads a segment that doesn't exist, one built for another bundle,
-# one that throws and one that needs a module its bundle lacks, then reports an error after a
-# segment wraps the error handler.
+# one that throws and one that needs a module its bundle lacks, one that reports a non-fatal
+# error, and reports an error after a segment wraps the error handler.
 ^ERROR: React Native segment 'res://dist/segments/missing\.segment\.js' is missing\.$
 ^ERROR: React Native segment 'user://stale\.segment\.js' was built for another bundle; build it again against this one\.$
 ^ERROR: React Native segment 'res://dist/segments/throwing_segment\.segment\.js' failed: Godot segment smoke$
 ^ERROR: React Native segment 'user://unknown_module\.segment\.js' failed: Requiring unknown module "1234567"\.$
 ^ERROR: \[Error: Godot segment wrapped handler\]$
 ^ERROR: React Native JS error: Error: Godot segment wrapped handler$
+^ERROR: \[Error: Godot segment non-fatal\]$
+^ERROR: React Native JS error: Error: Godot segment non-fatal$

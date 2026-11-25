@@ -5,7 +5,8 @@ extends Node
 # and both are evaluated again, in order, after a hard reload. A segment whose
 # code throws, or that needs a module its bundle lacks, fails its load, reports
 # its own error even after another one failed, and doesn't load again. A
-# segment that wraps the error handler still lets later errors reach the host.
+# non-fatal error doesn't fail a load, and a segment that wraps the error
+# handler still lets later errors reach the host.
 
 const WAIT_MSEC := 20000
 const BUNDLE := "res://dist/segments/index.bundle.js"
@@ -82,6 +83,7 @@ func _run() -> void:
 	if await ReactNativeHost.load_segment("user://stale.segment.js"):
 		fail("a segment built for another bundle reported success")
 		return
+	await js("globalThis.__handlerBeforeSegments = ErrorUtils.getGlobalHandler()")
 	if not await segment_fails(BUNDLE.get_base_dir().path_join("throwing_segment.segment.js"), "Godot segment smoke"):
 		return
 	var unknown_module := FileAccess.open("user://unknown_module.segment.js", FileAccess.WRITE)
@@ -89,8 +91,17 @@ func _run() -> void:
 	unknown_module.close()
 	if not await segment_fails("user://unknown_module.segment.js", "Requiring unknown module"):
 		return
-	if await js("typeof ErrorUtils.getGlobalHandler() === 'function' && !ErrorUtils.getGlobalHandler().name.includes('handleSegmentError')") != true:
+	if await js("ErrorUtils.getGlobalHandler() === globalThis.__handlerBeforeSegments") != true:
 		fail("a failed segment left its error handler installed")
+		return
+	var reporting := FileAccess.open("user://reporting.segment.js", FileAccess.WRITE)
+	reporting.store_string("ErrorUtils.reportError(new Error('Godot segment non-fatal'));\nglobalThis.__reported = true;\n")
+	reporting.close()
+	if not await ReactNativeHost.load_segment("user://reporting.segment.js"):
+		fail("a segment reporting a non-fatal error failed its load")
+		return
+	if await js("globalThis.__reported") != true:
+		fail("the segment reporting a non-fatal error did not finish")
 		return
 	var wrapping := FileAccess.open("user://wrapping_handler.segment.js", FileAccess.WRITE)
 	wrapping.store_string("const previous = ErrorUtils.getGlobalHandler();\nErrorUtils.setGlobalHandler((error, isFatal) => { globalThis.__wrapped = true; previous(error, isFatal); });\n")
