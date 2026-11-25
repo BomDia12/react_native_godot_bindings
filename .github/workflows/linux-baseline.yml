@@ -23,5 +23,8 @@ jobs:
   baseline:
     name: Linux baseline
     uses: ./.github/workflows/_linux-build.yml
-    with:
-      package_release: false
+
+  release:
+    name: Linux release build
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/_linux-release-build.yml

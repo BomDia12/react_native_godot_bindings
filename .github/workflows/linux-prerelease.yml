@@ -13,15 +13,17 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build Linux prerelease
+  test:
+    name: Test Linux prerelease
     uses: ./.github/workflows/_linux-build.yml
-    with:
-      package_release: true
+
+  release:
+    name: Build Linux prerelease
+    uses: ./.github/workflows/_linux-release-build.yml
 
   publish:
     name: Replace Linux rolling prerelease
-    needs: build
+    needs: [test, release]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -29,6 +31,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: baseline-linux-latest
       ARCHIVE_NAME: react-native-godot-linux-x86_64.zip
+      TEMPLATES_NAME: react-native-godot-templates.tpz
     steps:
       - uses: actions/checkout@v6
         with:
@@ -36,16 +39,19 @@ jobs:
 
       - uses: actions/download-artifact@v6
         with:
-          name: linux-baseline-package
+          name: linux-release-package
           path: artifacts
 
-      # Each package records the editor archive of its own commit, so that
-      # archive stays on the release after later prereleases replace the rest.
-      - name: Name the commit's editor archive
+      # Each package records the editor archive and templates of its own commit,
+      # so they stay on the release after later prereleases replace the rest.
+      - name: Name the commit's editor archive and templates
         run: |
           COMMIT_ARCHIVE_NAME="react-native-godot-linux-x86_64-${GITHUB_SHA::12}.zip"
+          COMMIT_TEMPLATES_NAME="react-native-godot-templates-${GITHUB_SHA::12}.tpz"
           ln "artifacts/${ARCHIVE_NAME}" "artifacts/${COMMIT_ARCHIVE_NAME}"
+          ln "artifacts/${TEMPLATES_NAME}" "artifacts/${COMMIT_TEMPLATES_NAME}"
           echo "COMMIT_ARCHIVE_NAME=${COMMIT_ARCHIVE_NAME}" >> "$GITHUB_ENV"
+          echo "COMMIT_TEMPLATES_NAME=${COMMIT_TEMPLATES_NAME}" >> "$GITHUB_ENV"
 
       - name: Write release notes
         run: |
@@ -88,6 +94,9 @@ jobs:
               "artifacts/${ARCHIVE_NAME}" \
               "artifacts/${ARCHIVE_NAME}.sha256" \
               "artifacts/${COMMIT_ARCHIVE_NAME}" \
+              "artifacts/${TEMPLATES_NAME}" \
+              "artifacts/${TEMPLATES_NAME}.sha256" \
+              "artifacts/${COMMIT_TEMPLATES_NAME}" \
               artifacts/react-native-godot.tgz \
               --clobber
           else
@@ -95,6 +104,9 @@ jobs:
               "artifacts/${ARCHIVE_NAME}" \
               "artifacts/${ARCHIVE_NAME}.sha256" \
               "artifacts/${COMMIT_ARCHIVE_NAME}" \
+              "artifacts/${TEMPLATES_NAME}" \
+              "artifacts/${TEMPLATES_NAME}.sha256" \
+              "artifacts/${COMMIT_TEMPLATES_NAME}" \
               artifacts/react-native-godot.tgz \
               --target "$GITHUB_SHA" \
               --title "Linux baseline ${GITHUB_SHA::12}" \
@@ -116,15 +128,26 @@ jobs:
           grep -Fx "${ARCHIVE_NAME}.sha256" <<<"$ASSETS"
           grep -Fx react-native-godot.tgz <<<"$ASSETS"
           grep -Fx "$COMMIT_ARCHIVE_NAME" <<<"$ASSETS"
-          EDITOR_URL=$(tar -xzOf artifacts/react-native-godot.tgz package/godot-platform.json | jq -r '.editors["linux-x86_64"].url')
-          [[ "$EDITOR_URL" == "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${COMMIT_ARCHIVE_NAME}" ]]
+          grep -Fx "$TEMPLATES_NAME" <<<"$ASSETS"
+          grep -Fx "${TEMPLATES_NAME}.sha256" <<<"$ASSETS"
+          grep -Fx "$COMMIT_TEMPLATES_NAME" <<<"$ASSETS"
+          DOWNLOAD_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+          PLATFORM=$(tar -xzOf artifacts/react-native-godot.tgz package/godot-platform.json)
+          [[ $(jq -r '.editors["linux-x86_64"].url' <<<"$PLATFORM") == "${DOWNLOAD_URL}/${COMMIT_ARCHIVE_NAME}" ]]
+          [[ $(jq -r '.templates.url' <<<"$PLATFORM") == "${DOWNLOAD_URL}/${COMMIT_TEMPLATES_NAME}" ]]
           mkdir -p artifacts/published
           gh release download "$RELEASE_TAG" \
             --pattern "$ARCHIVE_NAME" \
             --pattern "${ARCHIVE_NAME}.sha256" \
             --pattern "$COMMIT_ARCHIVE_NAME" \
+            --pattern "$TEMPLATES_NAME" \
+            --pattern "${TEMPLATES_NAME}.sha256" \
+            --pattern "$COMMIT_TEMPLATES_NAME" \
             --dir artifacts/published
           cmp "artifacts/${ARCHIVE_NAME}.sha256" "artifacts/published/${ARCHIVE_NAME}.sha256"
           cmp "artifacts/published/${ARCHIVE_NAME}" "artifacts/published/${COMMIT_ARCHIVE_NAME}"
+          cmp "artifacts/${TEMPLATES_NAME}.sha256" "artifacts/published/${TEMPLATES_NAME}.sha256"
+          cmp "artifacts/published/${TEMPLATES_NAME}" "artifacts/published/${COMMIT_TEMPLATES_NAME}"
           cd artifacts/published
           sha256sum --check "${ARCHIVE_NAME}.sha256"
+          sha256sum --check "${TEMPLATES_NAME}.sha256"

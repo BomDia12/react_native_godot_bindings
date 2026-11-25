@@ -14,6 +14,8 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 | React Native core | `v0.87.1` commit `a59eff64fa907ed6e919fafe6cbd26d1d54c2de3`, including Yoga and JSI | Git submodule, provenance validation |
 | folly, glog, fmt, double-conversion, fast_float, nlohmann/json | React Native 0.87.1 pins | Git submodules, provenance validation |
 | Boost | `1.83.0` headers | `bootstrap.sh` SHA-256 check |
+| ICU | `78.3`, built static for Hermes on Linux | `bootstrap.sh` SHA-256 check |
+| Android NDK | `29.0.14206865`, platform API `24`, the pinned Godot commit's | Provenance validation against Godot's `platform/android/detect.py` |
 | AccessKit C SDK | `0.22.3`, selected by the pinned Godot commit | `bootstrap.sh` through Godot's `install_accesskit.py` |
 | Mesa | CI Ubuntu 24.04 `libgl1-mesa-dri`, llvmpipe under Xvfb, for the visual gate. The committed goldens were rendered with Mesa 26.2.5 llvmpipe, and `GameUIGallery` with CI's Mesa 25.2.8; CI compares them within tolerance | Visual regression goldens |
 | `@react-native-community/slider` | `5.2.2`, whose `RNCSlider` contract Godot implements | `react-native-godot` dev dependency, committed codegen output |
@@ -29,11 +31,13 @@ exact pins; toolchain entries describe the reproducible Linux CI environment.
 
 Each prerelease `react-native-godot.tgz` contains a `godot-platform.json` written by
 `scripts/package_npm.sh`. It records the repository commit, the Godot commit, the React
-Native version and the URL and SHA-256 of the editor archive built from the same commit,
-which the CLI downloads and verifies. That archive is the release's
-`react-native-godot-linux-x86_64-<commit>.zip` asset, which later prereleases keep. Its version is `0.1.0-preview.g<commit>`.
+Native version, and the URL and SHA-256 of the editor archive and export templates built
+from the same commit, which the CLI downloads and verifies. They are the release's
+`react-native-godot-linux-x86_64-<commit>.zip` and `react-native-godot-templates-<commit>.tpz`
+assets, which later prereleases keep. Its version is `0.1.0-preview.g<commit>`.
 
-Only the Linux editor and headless runtime path are currently tested. The Godot Metro
+Only the Linux editor, the headless runtime path and the Linux export templates are
+currently tested. The Godot Metro
 adapter map is pinned to the React Native 0.87.1 public module layout and must be reviewed
 with every React Native update. Other build/export targets remain pending in the
 compatibility matrix.

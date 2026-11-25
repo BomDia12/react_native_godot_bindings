@@ -90,6 +90,15 @@ const commands = [
       console.info('Built ' + editor);
     },
   },
+  {
+    name: 'install-godot-templates',
+    description: "Installs the export templates this package was built with into Godot's export_templates folder",
+    options: [{name: '--file <tpz>', description: 'Templates archive to install instead of downloading the released one'}],
+    func: async (_argv, _config, args) => {
+      const {installTemplates} = require('./templates.cjs');
+      console.info('Installed export templates in ' + (await installTemplates(args)));
+    },
+  },
 ];
 
 function projectConfig(projectRoot) {

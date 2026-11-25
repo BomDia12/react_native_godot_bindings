@@ -48,9 +48,7 @@ function buildGodotEditor(project, {source} = {}) {
   const destination = path.join(cacheRoot(), 'editors', manifest.hash);
   fs.rmSync(destination, {recursive: true, force: true});
   fs.mkdirSync(destination, {recursive: true});
-  for (const file of [editor, 'libhermesvm.so', 'libjsi.so']) {
-    fs.copyFileSync(path.join(binDir, file), path.join(destination, file));
-  }
+  fs.copyFileSync(path.join(binDir, editor), path.join(destination, editor));
   fs.chmodSync(path.join(destination, editor), 0o755);
   return path.join(destination, editor);
 }

@@ -35,10 +35,10 @@ Build and stage the standalone demo under the workspace's `godotProjects` direct
 ```sh
 python3 -m pip install -r requirements-ci.txt
 npm --prefix samples/game-ui ci
-GODOT_EDITOR="${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" npm --prefix samples/game-ui run build:godot
+GODOT_EDITOR="${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64.react_native" npm --prefix samples/game-ui run build:godot
 python3 scripts/stage_game_demo.py
-"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" --editor --path ../godotProjects/Phase6BGame --import
-"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64" --path ../godotProjects/Phase6BGame
+"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64.react_native" --editor --path ../godotProjects/Phase6BGame --import
+"${GODOT_SOURCE_DIR:-$PWD/godot}/bin/godot.linuxbsd.editor.dev.x86_64.react_native" --path ../godotProjects/Phase6BGame
 ```
 
 Play offline with **1/2/3** to damage enemies and **P** to pick up a potion. An optional
@@ -155,11 +155,15 @@ in Metro, reload from DevTools or call `DevSettings.reload()` to reload every ro
 `ReactNativeHost.reload()`. Press **j** in Metro or call `ReactNativeHost.open_debugger()`
 to open React Native DevTools.
 
-Successful merges to `main` replace the `baseline-linux-latest` rolling prerelease. Its
-Linux archive contains the Godot editor executable, `libhermesvm.so`, and `libjsi.so`,
-with a separate SHA-256 checksum asset. The same archive is also published as
-`react-native-godot-linux-x86_64-<commit>.zip`, which later prereleases keep, so that the
-`react-native-godot.tgz` of every commit can still download its editor.
+Successful merges to `main` replace the `baseline-linux-latest` rolling prerelease. It
+holds a Linux archive with the self-contained Godot editor executable, the export templates
+`react-native-godot-templates.tpz`, a SHA-256 checksum asset for each, and
+`react-native-godot.tgz`. The archive and templates are also published as
+`react-native-godot-linux-x86_64-<commit>.zip` and `react-native-godot-templates-<commit>.tpz`,
+which later prereleases keep, so that the `react-native-godot.tgz` of every commit can still
+download its editor and templates. The optimized editor and templates are built on `main`, on
+the scheduled baseline run and on manual runs, and a consumer project is exported and run
+with them before they are published.
 
 CI restores the SCons, Hermes and pinned-source caches that runs on `main` save. Pull
 requests can also restore the caches their own earlier runs saved, and closing a pull

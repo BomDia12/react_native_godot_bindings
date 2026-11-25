@@ -127,7 +127,7 @@ Native modules need an editor compiled with them. `react-native build-godot-edit
 clones the bindings at the commit the installed `react-native-godot` was released from
 into `~/.cache/react-native-godot/source/<commit>/`, and runs `bootstrap.sh`,
 `build_hermes.sh` and `build_godot.sh` with `RN_AUTOLINKING` set to the project's
-`autolinking.json`. It keeps the editor, `libhermesvm.so` and `libjsi.so` in
+`autolinking.json`. It keeps the editor, which needs no other library, in
 `~/.cache/react-native-godot/editors/<hash>/`. `--source <checkout>` builds from another
 bindings checkout. The command builds Linux editors only, and warnings don't fail it.
 Afterwards it links the project again with the new editor, which enables the plugins that
@@ -150,14 +150,17 @@ RN_AUTOLINKING=samples/view-text/node_modules/.cache/react-native-godot/autolink
 Exported games run on export templates, which hold the engine and its modules, so a
 library's native module reaches an exported game only through templates built with it.
 Build `template_debug` and `template_release` from the same bindings checkout, with the
-modules and option the editor build uses:
+project's `autolinking.json`:
 
 ```sh
-scons platform=linuxbsd target=template_release \
-	custom_modules=<bindings>/modules,<each directory in autolinking.json's "modules"> \
-	custom_modules_recursive=no react_native_autolinking=<path to autolinking.json>
+scripts/build_hermes.sh
+scripts/build_hermes.sh linux-x86_64
+RN_AUTOLINKING=<path to autolinking.json> scripts/build_godot.sh --release template_debug
+RN_AUTOLINKING=<path to autolinking.json> scripts/build_godot.sh --release template_release
 ```
 
-Then set them as the export preset's custom templates. An export warns when the project
+Then set `godot/bin/godot.linuxbsd.template_debug.x86_64.react_native` and
+`godot/bin/godot.linuxbsd.template_release.x86_64.react_native` as the export preset's
+custom templates. An export warns when the project
 links native modules and the preset uses the default templates. Libraries without native
 modules need nothing more: their addons are ordinary project files.

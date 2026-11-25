@@ -10,10 +10,12 @@ const path = require('node:path');
 const {spawnSync} = require('node:child_process');
 const {autolink, dependencyConfig, readManifest} = require('../cli/autolink.cjs');
 const {buildBundle, findEntry, segmentConfig, segmentPath} = require('../cli/build.cjs');
-const {downloadEditor, hostPlatform, resolveEditor} = require('../cli/editor.cjs');
+const editorModule = require('../cli/editor.cjs');
+const {downloadEditor, hostPlatform, resolveEditor} = editorModule;
 const {addMainScene, packageName, writeTemplate} = require('../cli/init.cjs');
 const {addProjectSettings, ignoreNodeModules, loadGodotProject, readProjectSettings} = require('../cli/project.cjs');
 const {importProject, runEditor} = require('../cli/run.cjs');
+const {installTemplates} = require('../cli/templates.cjs');
 
 function godotProject(settings) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-cli-'));
@@ -130,6 +132,72 @@ test('the prebuilt editor is downloaded once and checked against the package', a
     downloadEditor({bindingsCommit: 'second', editors: {[hostPlatform()]: {url, sha256: '0'.repeat(64)}}}),
     /changed since this package was built.*Update the vendored react-native-godot package, or pass --godot/,
   );
+});
+
+function templatesArchive(files) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-templates-'));
+  fs.mkdirSync(path.join(root, 'templates'));
+  for (const [name, contents] of Object.entries(files)) {
+    fs.writeFileSync(path.join(root, 'templates', name), contents);
+  }
+  const archive = path.join(root, 'templates.tpz');
+  assert.equal(spawnSync('python3', ['-m', 'zipfile', '-c', archive, path.join(root, 'templates')]).status, 0);
+  return archive;
+}
+
+function useDataHome(t) {
+  const dataHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-godot-data-'));
+  const previous = process.env.XDG_DATA_HOME;
+  process.env.XDG_DATA_HOME = dataHome;
+  t.after(() => (previous == null ? delete process.env.XDG_DATA_HOME : (process.env.XDG_DATA_HOME = previous)));
+  return path.join(dataHome, 'godot', 'export_templates');
+}
+
+test('export templates install from a file into the folder of their version', {skip: process.platform !== 'linux'}, async t => {
+  const templatesRoot = useDataHome(t);
+  const version = '4.7.2.stable.react_native';
+  fs.mkdirSync(path.join(templatesRoot, version), {recursive: true});
+  fs.writeFileSync(path.join(templatesRoot, version, 'stale'), '');
+  const archive = templatesArchive({'version.txt': version + '\n', 'linux_debug.x86_64': 'debug'});
+  assert.equal(await installTemplates({file: archive}), path.join(templatesRoot, version));
+  assert.deepEqual(fs.readdirSync(templatesRoot), [version]);
+  assert.deepEqual(fs.readdirSync(path.join(templatesRoot, version)).sort(), ['linux_debug.x86_64', 'version.txt']);
+  assert.equal(fs.readFileSync(path.join(templatesRoot, version, 'linux_debug.x86_64'), 'utf8'), 'debug');
+});
+
+test('released export templates are downloaded and checked against the package', {skip: process.platform !== 'linux'}, async t => {
+  const templatesRoot = useDataHome(t);
+  const archive = fs.readFileSync(templatesArchive({'version.txt': '4.7.2.stable.react_native'}));
+  const server = http.createServer((_request, response) => response.end(archive));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  t.after(() => server.closeAllConnections());
+  t.mock.method(console, 'info', () => {});
+  const url = `http://127.0.0.1:${server.address().port}/templates.tpz`;
+  const sha256 = crypto.createHash('sha256').update(archive).digest('hex');
+  t.mock.method(editorModule, 'readPlatform', () => ({templates: {url, sha256}}));
+  assert.equal(await installTemplates(), path.join(templatesRoot, '4.7.2.stable.react_native'));
+});
+
+test('export templates that changed since the package was built are refused', {skip: process.platform !== 'linux'}, async t => {
+  const templatesRoot = useDataHome(t);
+  const archive = fs.readFileSync(templatesArchive({'version.txt': '4.7.2.stable.react_native'}));
+  const server = http.createServer((_request, response) => response.end(archive));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  t.after(() => server.closeAllConnections());
+  t.mock.method(console, 'info', () => {});
+  const url = `http://127.0.0.1:${server.address().port}/templates.tpz`;
+  t.mock.method(editorModule, 'readPlatform', () => ({templates: {url, sha256: '0'.repeat(64)}}));
+  await assert.rejects(installTemplates(), /changed since this package was built.*pass --file <tpz>/);
+  assert.deepEqual(fs.readdirSync(templatesRoot), []);
+});
+
+test('an archive without version.txt is not installed', {skip: process.platform !== 'linux'}, async t => {
+  const templatesRoot = useDataHome(t);
+  const archive = templatesArchive({'linux_debug.x86_64': 'debug'});
+  await assert.rejects(installTemplates({file: archive}), /has no templates\/version\.txt/);
+  assert.deepEqual(fs.readdirSync(templatesRoot), []);
 });
 
 test('an editor that cannot start or import fails with a clear error', async () => {

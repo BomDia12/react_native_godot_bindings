@@ -1,3 +1,4 @@
+class_name ConsumerCheck
 extends SceneTree
 
 # Runs a consumer project's main scene and checks that its React root mounted,
@@ -10,8 +11,9 @@ const TEST_ID := "consumer"
 const WAIT_MSEC := 60000
 
 func _initialize() -> void:
-	var main_scene: PackedScene = load(ProjectSettings.get_setting("application/run/main_scene"))
-	root.add_child(main_scene.instantiate())
+	if current_scene == null:
+		var main_scene: PackedScene = load(ProjectSettings.get_setting("application/run/main_scene"))
+		root.add_child(main_scene.instantiate())
 	var segment_root := ReactNativeRootView.new()
 	segment_root.application_key = "ConsumerSegment"
 	root.add_child(segment_root)

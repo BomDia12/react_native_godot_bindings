@@ -14,22 +14,14 @@ if [[ ${#GODOT_BINARIES[@]} -ne 1 ]]; then
 	exit 1
 fi
 
-for library in libhermesvm.so libjsi.so; do
-	if [[ ! -f "$GODOT_SOURCE_DIR/bin/$library" ]]; then
-		echo "Missing runtime library: $GODOT_SOURCE_DIR/bin/$library" >&2
-		exit 1
-	fi
-done
-
 mkdir -p "$ARTIFACT_DIR"
 STAGING_ROOT=$(mktemp -d "$ARTIFACT_DIR/.linux-package.XXXXXX")
 trap 'rm -rf -- "$STAGING_ROOT"' EXIT
 PACKAGE_DIR="$STAGING_ROOT/$PACKAGE_NAME"
 mkdir "$PACKAGE_DIR"
 cp -p "${GODOT_BINARIES[0]}" "$PACKAGE_DIR/"
-cp -p "$GODOT_SOURCE_DIR/bin/libhermesvm.so" "$GODOT_SOURCE_DIR/bin/libjsi.so" "$PACKAGE_DIR/"
 
-if ! LD_LIBRARY_PATH="$PACKAGE_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$PACKAGE_DIR/$(basename "${GODOT_BINARIES[0]}")" > "$STAGING_ROOT/ldd.log"; then
+if ! ldd "$PACKAGE_DIR/$(basename "${GODOT_BINARIES[0]}")" > "$STAGING_ROOT/ldd.log"; then
 	cat "$STAGING_ROOT/ldd.log" >&2
 	echo "Could not inspect packaged shared-library dependencies." >&2
 	exit 1

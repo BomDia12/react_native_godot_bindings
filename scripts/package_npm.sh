@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
 # Packs react-native-godot for the rolling prerelease, recording the editor
-# archive built from the same commit so the CLI can download it. The archive's
-# per-commit name stays on the release after later prereleases replace the rest.
+# archive and export templates built from the same commit so the CLI can
+# download them. Their per-commit names stay on the release after later
+# prereleases replace the rest.
 set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
 ARTIFACT_DIR="$REPO_ROOT/artifacts"
 ARCHIVE_NAME=react-native-godot-linux-x86_64.zip
+TEMPLATES_NAME=react-native-godot-templates.tpz
 REPOSITORY_URL=${REPOSITORY_URL:-https://github.com/BomDia12/react_native_godot_bindings.git}
 RELEASE_URL=${RELEASE_URL:-https://github.com/BomDia12/react_native_godot_bindings/releases/download/baseline-linux-latest}
 source "$REPO_ROOT/baseline.env"
 
 if [[ ! -f "$ARTIFACT_DIR/$ARCHIVE_NAME.sha256" ]]; then
 	echo "Run scripts/package_linux_baseline.sh first." >&2
+	exit 1
+fi
+if [[ ! -f "$ARTIFACT_DIR/$TEMPLATES_NAME.sha256" ]]; then
+	echo "Run scripts/package_linux_templates.sh first." >&2
 	exit 1
 fi
 COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
@@ -23,6 +29,7 @@ trap 'rm -rf -- "$STAGING"' EXIT
 npm pack "$REPO_ROOT/packages/react-native-godot" --pack-destination "$STAGING" --silent > /dev/null
 tar -xzf "$STAGING"/react-native-godot-*.tgz -C "$STAGING"
 COMMIT="$COMMIT" REPOSITORY_URL="$REPOSITORY_URL" SHA256=$(cut -d' ' -f1 "$ARTIFACT_DIR/$ARCHIVE_NAME.sha256") URL="$RELEASE_URL/react-native-godot-linux-x86_64-${COMMIT::12}.zip" \
+TEMPLATES_SHA256=$(cut -d' ' -f1 "$ARTIFACT_DIR/$TEMPLATES_NAME.sha256") TEMPLATES_URL="$RELEASE_URL/react-native-godot-templates-${COMMIT::12}.tpz" \
 GODOT_COMMIT="$GODOT_COMMIT" REACT_NATIVE_VERSION="$REACT_NATIVE_VERSION" PACKAGE_DIR="$STAGING/package" node <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -37,6 +44,7 @@ const platform = {
   godotCommit: env.GODOT_COMMIT,
   reactNative: env.REACT_NATIVE_VERSION,
   editors: {'linux-x86_64': {url: env.URL, sha256: env.SHA256}},
+  templates: {url: env.TEMPLATES_URL, sha256: env.TEMPLATES_SHA256},
 };
 fs.writeFileSync(path.join(env.PACKAGE_DIR, 'godot-platform.json'), JSON.stringify(platform, null, 2) + '\n');
 NODE

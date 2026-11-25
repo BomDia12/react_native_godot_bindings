@@ -2,11 +2,6 @@ name: Linux build
 
 on:
   workflow_call:
-    inputs:
-      package_release:
-        description: Package the successful build for publication
-        required: true
-        type: boolean
 
 permissions:
   contents: read
@@ -61,18 +56,21 @@ jobs:
         id: hermes-library-cache
         uses: actions/cache/restore@v5
         with:
-          path: modules/react_native_bindings/engines/build_release
-          key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh', 'baseline.env') }}
+          path: |
+            modules/react_native_bindings/engines/build/linux-x86_64-debugger
+            modules/react_native_bindings/engines/build/icu-linux-x86_64
+          key: hermes-linux-x86_64-debugger-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh', 'baseline.env') }}
 
       - name: Check Hermes libraries
         id: hermes-libraries
         run: |
-          HERMES_BUILD_DIR=modules/react_native_bindings/engines/build_release
-          if [[ -f "$HERMES_BUILD_DIR/lib/libhermesvm.so" && -f "$HERMES_BUILD_DIR/jsi/libjsi.so" ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
+          BUILD_DIR=modules/react_native_bindings/engines/build
+          available=true
+          for archive in linux-x86_64-debugger/lib/libhermesvm_a.a linux-x86_64-debugger/jsi/libjsi.a \
+            icu-linux-x86_64/lib/libicui18n.a icu-linux-x86_64/lib/libicuuc.a icu-linux-x86_64/lib/libicudata.a; do
+            [[ -f "$BUILD_DIR/$archive" ]] || available=false
+          done
+          echo "available=$available" >> "$GITHUB_OUTPUT"
 
       - name: Restore SCons cache
         id: scons-cache
@@ -95,7 +93,7 @@ jobs:
             -o Acquire::ForceIPv4=true
           )
           sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install --yes clang-format cmake gcc-13 g++-13 llvm libicu-dev libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
+          sudo apt-get "${APT_OPTIONS[@]}" install --yes clang-format cmake gcc-13 g++-13 llvm libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
           python -m pip install --requirement requirements-ci.txt
 
       - name: Restore Boost headers
@@ -103,6 +101,12 @@ jobs:
         with:
           path: modules/react_native_bindings/thirdparty/boost
           key: boost-${{ hashFiles('baseline.env') }}
+
+      - name: Restore ICU source
+        uses: actions/cache@v5
+        with:
+          path: modules/react_native_bindings/thirdparty/icu
+          key: icu-source-${{ hashFiles('baseline.env') }}
 
       - name: Bootstrap pinned sources
         run: scripts/bootstrap.sh
@@ -142,7 +146,9 @@ jobs:
         if: steps.hermes-library-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
-          path: modules/react_native_bindings/engines/build_release
+          path: |
+            modules/react_native_bindings/engines/build/linux-x86_64-debugger
+            modules/react_native_bindings/engines/build/icu-linux-x86_64
           key: ${{ steps.hermes-library-cache.outputs.cache-primary-key }}
 
       - name: Build Godot and module
@@ -209,25 +215,8 @@ jobs:
       - name: Run the staged game demo
         run: scripts/run_staged_game.sh
 
-      - name: Package Linux baseline
-        run: |
-          scripts/package_linux_baseline.sh
-          scripts/package_npm.sh
-
-      - name: Run a consumer project from the package
+      - name: Run a consumer project
         run: scripts/run_consumer.sh
-
-      - name: Upload release package
-        if: inputs.package_release
-        uses: actions/upload-artifact@v5
-        with:
-          name: linux-baseline-package
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            artifacts/react-native-godot-linux-x86_64.zip
-            artifacts/react-native-godot-linux-x86_64.zip.sha256
-            artifacts/react-native-godot.tgz
 
       - name: Upload failure diagnostics
         if: failure()

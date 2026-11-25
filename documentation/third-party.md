@@ -9,10 +9,26 @@
 - Acquisition: pinned Git submodule
 - License: MIT at `modules/react_native_bindings/engines/hermes/LICENSE`
 - Modifications: none
-- Build: `scripts/build_hermes.sh`, Release shared `hermesvm` and `jsi`, Hades GC,
-  tests disabled
+- Build: `scripts/build_hermes.sh [variant]`, Release static `hermesvm_a` and `jsi`, Hades
+  GC, tests disabled, linked into the Godot binary. `linux-x86_64-debugger` (the default)
+  serves the editor and `template_debug`, `linux-x86_64` serves `template_release` without the
+  debugger, and `android-arm64` cross-compiles with the NDK and Unicode-lite. Variants build
+  into `engines/build/<variant>/`
 - Update: change the submodule revision and `baseline.env` together, then rebuild from
-  an empty `engines/build_release` directory
+  an empty `engines/build/` directory
+
+## ICU
+
+- Source: `https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz`
+- Version: `78.3`, pinned with `ICU_VERSION` and `ICU_SHA256` in `baseline.env`
+- Local destination: `modules/react_native_bindings/thirdparty/icu`
+- Acquisition: `scripts/bootstrap.sh` downloads and checks the archive
+- License: Unicode License V3 at `modules/react_native_bindings/thirdparty/icu/LICENSE`
+- Modifications: none
+- Build: `scripts/build_hermes.sh` builds static `icuuc`, `icui18n` and `icudata`, with the
+  full data, into `engines/build/icu-linux-x86_64/` for the Linux Hermes variants. Godot's own
+  ICU renames its symbols, so the two never collide
+- Update: change both pins together, then rebuild from an empty `engines/build/` directory
 
 ## Community library specs
 

@@ -1,0 +1,109 @@
+name: Prepare a release build
+description: Installs the toolchain, bootstraps the pinned sources and restores or builds a Hermes variant
+
+inputs:
+  hermes-variant:
+    description: Hermes variant to restore or build; none when empty
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v6
+      with:
+        node-version-file: .nvmrc
+
+    - uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+
+    - name: Restore npm download cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles('.nvmrc', 'packages/react-native-godot/package-lock.json', 'samples/view-text/package-lock.json', 'samples/game-ui/package-lock.json') }}
+        restore-keys: |
+          npm-${{ runner.os }}-
+
+    - name: Restore Godot source cache
+      uses: actions/cache/restore@v5
+      with:
+        path: godot
+        key: godot-source-${{ runner.os }}-${{ hashFiles('baseline.env', 'scripts/bootstrap.sh') }}
+
+    - name: Install native toolchain
+      shell: bash
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        APT_OPTIONS=(
+          -o Acquire::Retries=3
+          -o Acquire::http::Timeout=30
+          -o Acquire::https::Timeout=30
+          -o Acquire::ForceIPv4=true
+        )
+        sudo apt-get "${APT_OPTIONS[@]}" update
+        sudo apt-get "${APT_OPTIONS[@]}" install --yes cmake gcc-13 g++-13 llvm libreadline-dev ninja-build zip
+        python -m pip install --requirement requirements-ci.txt
+
+    - name: Restore Boost headers
+      uses: actions/cache/restore@v5
+      with:
+        path: modules/react_native_bindings/thirdparty/boost
+        key: boost-${{ hashFiles('baseline.env') }}
+
+    - name: Restore ICU source
+      uses: actions/cache/restore@v5
+      with:
+        path: modules/react_native_bindings/thirdparty/icu
+        key: icu-source-${{ hashFiles('baseline.env') }}
+
+    - name: Bootstrap pinned sources
+      shell: bash
+      run: scripts/bootstrap.sh
+
+    - name: Load pinned versions
+      shell: bash
+      run: grep -E '^(HERMES_COMMIT|ANDROID_NDK_VERSION)=' baseline.env >> "$GITHUB_ENV"
+
+    - name: Restore Hermes library cache
+      id: hermes-library-cache
+      if: inputs.hermes-variant != ''
+      uses: actions/cache/restore@v5
+      with:
+        path: |
+          modules/react_native_bindings/engines/build/${{ inputs.hermes-variant }}
+          modules/react_native_bindings/engines/build/icu-linux-x86_64
+        key: hermes-${{ inputs.hermes-variant }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh', 'baseline.env') }}
+
+    - name: Check Hermes libraries
+      id: hermes-libraries
+      if: inputs.hermes-variant != ''
+      shell: bash
+      env:
+        VARIANT: ${{ inputs.hermes-variant }}
+      run: |
+        BUILD_DIR=modules/react_native_bindings/engines/build
+        available=true
+        for archive in "$VARIANT/lib/libhermesvm_a.a" "$VARIANT/jsi/libjsi.a" \
+          icu-linux-x86_64/lib/libicui18n.a icu-linux-x86_64/lib/libicuuc.a icu-linux-x86_64/lib/libicudata.a; do
+          [[ -f "$BUILD_DIR/$archive" ]] || available=false
+        done
+        echo "available=$available" >> "$GITHUB_OUTPUT"
+
+    - name: Build Hermes
+      if: inputs.hermes-variant != '' && steps.hermes-libraries.outputs.available != 'true'
+      shell: bash
+      env:
+        VARIANT: ${{ inputs.hermes-variant }}
+      run: scripts/build_hermes.sh "$VARIANT"
+
+    - name: Save Hermes library cache
+      if: inputs.hermes-variant != '' && steps.hermes-library-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: |
+          modules/react_native_bindings/engines/build/${{ inputs.hermes-variant }}
+          modules/react_native_bindings/engines/build/icu-linux-x86_64
+        key: ${{ steps.hermes-library-cache.outputs.cache-primary-key }}
