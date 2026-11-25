@@ -24,6 +24,8 @@ public:
 	void onKeyUp(const GodotKeyEvent &event) const;
 	void onKeyboardClick() const;
 	void onGodotContextMenuAction(const std::string &id) const;
+	void onGodotDrop(const folly::dynamic &data, Float locationX, Float locationY, Float pageX, Float pageY) const;
+	void onGodotDragEnd(bool successful, Float pageX, Float pageY) const;
 };
 
 } // namespace facebook::react

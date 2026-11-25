@@ -1,7 +1,7 @@
 # Godot-owned game UI
 
 The game has three independent enemies and a 100-item inventory written in GDScript.
-Each enemy owns an RN surface; the inventory owns a fourth. All share one Hermes
+Each enemy owns an RN surface; the inventory owns a fourth, and the HUD a fifth. All share one Hermes
 runtime and bundle. Godot signals update React directly, including with no server.
 
 From the binding repository:
@@ -15,6 +15,10 @@ GODOT_SOURCE_DIR=${GODOT_SOURCE_DIR:-$PWD/godot}
 "$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64" --editor --path ../godotProjects/Phase6BGame --import
 "$GODOT_SOURCE_DIR/bin/godot.linuxbsd.editor.dev.x86_64" --path ../godotProjects/Phase6BGame
 ```
+
+The column on the right is a fifth surface. It shows party health from Godot signals, a
+minimap camera on the live world and sprite-framed slots you drag items between. Its settings
+change the volume, the language and the potion key, and restore them on the next start.
 
 Press **1**, **2**, or **3** to damage that enemy; **P** picks up a potion. Click inventory
 rows to use their items. The inventory shows FlatList/SectionList, local icons, native

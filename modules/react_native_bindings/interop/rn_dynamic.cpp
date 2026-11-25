@@ -1,5 +1,8 @@
 #include "rn_dynamic.h"
 
+#include "core/math/color.h"
+#include "core/math/vector2.h"
+#include "core/math/vector3.h"
 #include "core/variant/array.h"
 #include "core/variant/dictionary.h"
 
@@ -30,6 +33,42 @@ Variant rn_variant_from_dynamic(const folly::dynamic &p_value) {
 		default:
 			return Variant();
 	}
+}
+
+Variant rn_typed_variant_from_dynamic(const folly::dynamic &p_value) {
+	if (p_value.isArray()) {
+		Array array;
+		for (const folly::dynamic &item : p_value) {
+			array.push_back(rn_typed_variant_from_dynamic(item));
+		}
+		return array;
+	}
+	if (!p_value.isObject()) {
+		return rn_variant_from_dynamic(p_value);
+	}
+	const auto wrapper = p_value.find("$godot");
+	if (wrapper == p_value.items().end() || !wrapper->second.isString()) {
+		Dictionary dictionary;
+		for (const auto &[key, value] : p_value.items()) {
+			dictionary[String::utf8(key.asString().c_str())] = rn_typed_variant_from_dynamic(value);
+		}
+		return dictionary;
+	}
+	const auto number = [&p_value](const char *p_key, double p_default = 0) {
+		const folly::dynamic *found = p_value.get_ptr(p_key);
+		return found && found->isNumber() ? found->asDouble() : p_default;
+	};
+	const std::string type = wrapper->second.getString();
+	if (type == "Color") {
+		return Color(number("r"), number("g"), number("b"), number("a", 1));
+	}
+	if (type == "Vector2") {
+		return Vector2(number("x"), number("y"));
+	}
+	if (type == "Vector3") {
+		return Vector3(number("x"), number("y"), number("z"));
+	}
+	return rn_variant_from_dynamic(p_value);
 }
 
 folly::dynamic rn_dynamic_from_variant(const Variant &p_value) {

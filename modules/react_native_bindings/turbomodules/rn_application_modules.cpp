@@ -4,6 +4,7 @@
 #include "rn_js_promise.h"
 
 #include "core/config/engine.h"
+#include "core/config/project_settings.h"
 #include "core/os/os.h"
 #include "servers/display/display_server.h"
 
@@ -38,7 +39,7 @@ jsi::Object RNPlatformConstantsModule::getConstants(jsi::Runtime &rt) {
 #else
 	constexpr bool testing = false;
 #endif
-	const folly::dynamic constants = folly::dynamic::object("isTesting", testing)("reactNativeVersion", folly::dynamic::object("major", 0)("minor", 87)("patch", 1)("prerelease", nullptr))("Version", godot_version)("godotVersion", godot_version)("hostOS", OS::get_singleton()->get_name().utf8().get_data())("assetScale", asset_scale)("fastRefresh", fast_refresh);
+	const folly::dynamic constants = folly::dynamic::object("isTesting", testing)("reactNativeVersion", folly::dynamic::object("major", 0)("minor", 87)("patch", 1)("prerelease", nullptr))("Version", godot_version)("godotVersion", godot_version)("hostOS", OS::get_singleton()->get_name().utf8().get_data())("assetScale", asset_scale)("projectRoot", String(GLOBAL_GET("react_native/project/root")).utf8().get_data())("fastRefresh", fast_refresh);
 	return jsi::valueFromDynamic(rt, constants).asObject(rt);
 }
 

@@ -101,7 +101,7 @@ jobs:
             -o Acquire::ForceIPv4=true
           )
           sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache clang-format cmake gcc-13 g++-13 libicu-dev libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
+          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache clang-format cmake gcc-13 g++-13 llvm libicu-dev libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
           python -m pip install --requirement requirements-ci.txt
 
       - name: Restore Boost headers
@@ -170,7 +170,6 @@ jobs:
             module_raycast_enabled=no \
             module_lightmapper_rd_enabled=no \
             module_basis_universal_enabled=no \
-            module_theora_enabled=no \
             module_webrtc_enabled=no \
             module_mobile_vr_enabled=no \
             2>&1 | tee godot-build.log

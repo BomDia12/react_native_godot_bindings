@@ -1,7 +1,7 @@
 extends SceneTree
 
 const TEST_ID := "game-staged"
-const ROOT_COUNT := 4
+const ROOT_COUNT := 5
 const WAIT_MSEC := 30000
 
 func _initialize() -> void:

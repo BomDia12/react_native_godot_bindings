@@ -8,6 +8,14 @@ HostPlatformViewProps::HostPlatformViewProps(const PropsParserContext &context, 
 		BaseViewProps(context, sourceProps, rawProps, filterObjectKeys),
 		focusable(convertRawProp(context, rawProps, "focusable", sourceProps.focusable, {})),
 		godotContextMenu(convertRawProp(context, rawProps, "godotContextMenu", sourceProps.godotContextMenu, folly::dynamic::array())),
+		godotThemeType(convertRawProp(context, rawProps, "godotThemeType", sourceProps.godotThemeType, {})),
+		godotStyleBox(convertRawProp(context, rawProps, "godotStyleBox", sourceProps.godotStyleBox, {})),
+		godotMaterial(convertRawProp(context, rawProps, "godotMaterial", sourceProps.godotMaterial, {})),
+		godotShaderParameters(convertRawProp(context, rawProps, "godotShaderParameters", sourceProps.godotShaderParameters, nullptr)),
+		tooltip(convertRawProp(context, rawProps, "tooltip", sourceProps.tooltip, {})),
+		godotDragData(convertRawProp(context, rawProps, "godotDragData", sourceProps.godotDragData, nullptr)),
+		godotDragPreview(convertRawProp(context, rawProps, "godotDragPreview", sourceProps.godotDragPreview, nullptr)),
+		godotDropTypes(convertRawProp(context, rawProps, "godotDropTypes", sourceProps.godotDropTypes, nullptr)),
 		hasTVPreferredFocus(convertRawProp(context, rawProps, "hasTVPreferredFocus", sourceProps.hasTVPreferredFocus, {})),
 		nextFocusDown(convertRawProp(context, rawProps, "nextFocusDown", sourceProps.nextFocusDown, {})),
 		nextFocusForward(convertRawProp(context, rawProps, "nextFocusForward", sourceProps.nextFocusForward, {})),
@@ -24,6 +32,14 @@ void HostPlatformViewProps::setProp(const PropsParserContext &context, RawPropsP
 	switch (hash) {
 		RAW_SET_PROP_SWITCH_CASE_BASIC(focusable);
 		RAW_SET_PROP_SWITCH_CASE_BASIC(godotContextMenu);
+		RAW_SET_PROP_SWITCH_CASE_BASIC(godotThemeType);
+		RAW_SET_PROP_SWITCH_CASE_BASIC(godotStyleBox);
+		RAW_SET_PROP_SWITCH_CASE_BASIC(godotMaterial);
+		RAW_SET_PROP_SWITCH_CASE_BASIC(godotShaderParameters);
+		RAW_SET_PROP_SWITCH_CASE_BASIC(tooltip);
+		RAW_SET_PROP_SWITCH_CASE_BASIC(godotDragData);
+		RAW_SET_PROP_SWITCH_CASE_BASIC(godotDragPreview);
+		RAW_SET_PROP_SWITCH_CASE_BASIC(godotDropTypes);
 		RAW_SET_PROP_SWITCH_CASE_BASIC(hasTVPreferredFocus);
 		RAW_SET_PROP_SWITCH_CASE_BASIC(nextFocusDown);
 		RAW_SET_PROP_SWITCH_CASE_BASIC(nextFocusForward);

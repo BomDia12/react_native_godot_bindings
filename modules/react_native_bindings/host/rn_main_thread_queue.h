@@ -1,5 +1,6 @@
 #pragma once
 
+#include <condition_variable>
 #include <deque>
 #include <functional>
 #include <future>
@@ -13,6 +14,7 @@ class RNMainThreadQueue {
 	};
 
 	mutable std::mutex mutex;
+	std::condition_variable task_added;
 	std::deque<Task> tasks;
 	std::thread::id main_thread;
 	bool closed = false;

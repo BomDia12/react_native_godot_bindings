@@ -13,7 +13,84 @@
 
 
 namespace facebook::react {
+class GodotProgressBarEventEmitter : public ViewEventEmitter {
+ public:
+  using ViewEventEmitter::ViewEventEmitter;
+
+  
+  
+};
+class GodotRichTextEventEmitter : public ViewEventEmitter {
+ public:
+  using ViewEventEmitter::ViewEventEmitter;
+
+  struct OnMetaClick {
+      std::string meta;
+    };
+
+  struct OnMetaHoverStarted {
+      std::string meta;
+    };
+
+  struct OnMetaHoverEnded {
+      std::string meta;
+    };
+
+  struct OnRevealFinished {
+      
+    };
+  void onMetaClick(OnMetaClick value) const;
+
+  void onMetaHoverStarted(OnMetaHoverStarted value) const;
+
+  void onMetaHoverEnded(OnMetaHoverEnded value) const;
+
+  void onRevealFinished(OnRevealFinished value) const;
+};
 class GodotSceneEventEmitter : public ViewEventEmitter {
+ public:
+  using ViewEventEmitter::ViewEventEmitter;
+
+  struct OnLoad {
+      
+    };
+
+  struct OnError {
+      std::string message;
+    };
+  void onLoad(OnLoad value) const;
+
+  void onError(OnError value) const;
+};
+class GodotTextureProgressBarEventEmitter : public ViewEventEmitter {
+ public:
+  using ViewEventEmitter::ViewEventEmitter;
+
+  
+  
+};
+class GodotVideoEventEmitter : public ViewEventEmitter {
+ public:
+  using ViewEventEmitter::ViewEventEmitter;
+
+  struct OnLoad {
+      
+    };
+
+  struct OnEnd {
+      
+    };
+
+  struct OnError {
+      std::string message;
+    };
+  void onLoad(OnLoad value) const;
+
+  void onEnd(OnEnd value) const;
+
+  void onError(OnError value) const;
+};
+class GodotViewportViewEventEmitter : public ViewEventEmitter {
  public:
   using ViewEventEmitter::ViewEventEmitter;
 

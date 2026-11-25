@@ -44,6 +44,7 @@ class RNEffectHost : public SubViewportContainer {
 
 	void _update_blend();
 	void _update_clip();
+	void _inherit_theme();
 	void _enter_focus();
 	void _set_focus_paths();
 	void _inner_focus_changed(Control *p_control);
@@ -64,5 +65,6 @@ public:
 	// The viewport the painter and the view's children render in.
 	SubViewport *get_effect_viewport() const { return filtered_viewport ? filtered_viewport : viewport; }
 	// p_size is the view's size and p_margin how far its painting and filters reach past it.
-	void configure(const Size2 &p_size, real_t p_margin, const Vector<RNFilterStage> &p_stages, facebook::react::BlendMode p_blend);
+	// A valid p_material shades the rendered subtree, after its filters and before its blend.
+	void configure(const Size2 &p_size, real_t p_margin, const Vector<RNFilterStage> &p_stages, facebook::react::BlendMode p_blend, const Ref<ShaderMaterial> &p_material = Ref<ShaderMaterial>());
 };

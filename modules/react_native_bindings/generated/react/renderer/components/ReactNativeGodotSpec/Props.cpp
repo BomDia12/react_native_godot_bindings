@@ -9,11 +9,120 @@
  */
 
 #include <react/renderer/components/ReactNativeGodotSpec/Props.h>
+#include <react/renderer/components/image/conversions.h>
 #include <react/renderer/core/PropsParserContext.h>
 #include <react/renderer/core/propsConversions.h>
 
 namespace facebook::react {
 
+GodotProgressBarProps::GodotProgressBarProps(
+    const PropsParserContext &context,
+    const GodotProgressBarProps &sourceProps,
+    const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
+
+    value(convertRawProp(context, rawProps, "value", sourceProps.value, {0.0})),
+    minimumValue(convertRawProp(context, rawProps, "minimumValue", sourceProps.minimumValue, {0.0})),
+    maximumValue(convertRawProp(context, rawProps, "maximumValue", sourceProps.maximumValue, {100.0})),
+    step(convertRawProp(context, rawProps, "step", sourceProps.step, {0.0})),
+    fillMode(convertRawProp(context, rawProps, "fillMode", sourceProps.fillMode, {GodotProgressBarFillMode::BeginToEnd})),
+    showPercentage(convertRawProp(context, rawProps, "showPercentage", sourceProps.showPercentage, {false})) {}
+    
+#ifdef RN_SERIALIZABLE_STATE
+ComponentName GodotProgressBarProps::getDiffPropsImplementationTarget() const {
+  return "GodotProgressBar";
+}
+
+folly::dynamic GodotProgressBarProps::getDiffProps(
+    const Props* prevProps) const {
+  static const auto defaultProps = GodotProgressBarProps();
+  const GodotProgressBarProps* oldProps = prevProps == nullptr
+      ? &defaultProps
+      : static_cast<const GodotProgressBarProps*>(prevProps);
+  if (this == oldProps) {
+    return folly::dynamic::object();
+  }
+  folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+  
+  if ((value != oldProps->value) && !(std::isnan(value) && std::isnan(oldProps->value))) {
+    result["value"] = value;
+  }
+    
+  if ((minimumValue != oldProps->minimumValue) && !(std::isnan(minimumValue) && std::isnan(oldProps->minimumValue))) {
+    result["minimumValue"] = minimumValue;
+  }
+    
+  if ((maximumValue != oldProps->maximumValue) && !(std::isnan(maximumValue) && std::isnan(oldProps->maximumValue))) {
+    result["maximumValue"] = maximumValue;
+  }
+    
+  if ((step != oldProps->step) && !(std::isnan(step) && std::isnan(oldProps->step))) {
+    result["step"] = step;
+  }
+    
+  if (fillMode != oldProps->fillMode) {
+    result["fillMode"] = toDynamic(fillMode);
+  }
+    
+  if (showPercentage != oldProps->showPercentage) {
+    result["showPercentage"] = showPercentage;
+  }
+  return result;
+}
+#endif
+GodotRichTextProps::GodotRichTextProps(
+    const PropsParserContext &context,
+    const GodotRichTextProps &sourceProps,
+    const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
+
+    bbcode(convertRawProp(context, rawProps, "bbcode", sourceProps.bbcode, {})),
+    customEffects(convertRawProp(context, rawProps, "customEffects", sourceProps.customEffects, {})),
+    visibleRatio(convertRawProp(context, rawProps, "visibleRatio", sourceProps.visibleRatio, {1.0})),
+    visibleCharactersBehavior(convertRawProp(context, rawProps, "visibleCharactersBehavior", sourceProps.visibleCharactersBehavior, {GodotRichTextVisibleCharactersBehavior::CharsBeforeShaping})),
+    selectionEnabled(convertRawProp(context, rawProps, "selectionEnabled", sourceProps.selectionEnabled, {false})),
+    scrollActive(convertRawProp(context, rawProps, "scrollActive", sourceProps.scrollActive, {false})) {}
+    
+#ifdef RN_SERIALIZABLE_STATE
+ComponentName GodotRichTextProps::getDiffPropsImplementationTarget() const {
+  return "GodotRichText";
+}
+
+folly::dynamic GodotRichTextProps::getDiffProps(
+    const Props* prevProps) const {
+  static const auto defaultProps = GodotRichTextProps();
+  const GodotRichTextProps* oldProps = prevProps == nullptr
+      ? &defaultProps
+      : static_cast<const GodotRichTextProps*>(prevProps);
+  if (this == oldProps) {
+    return folly::dynamic::object();
+  }
+  folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+  
+  if (bbcode != oldProps->bbcode) {
+    result["bbcode"] = bbcode;
+  }
+    
+  if (customEffects != oldProps->customEffects) {
+    result["customEffects"] = toDynamic(customEffects);
+  }
+    
+  if ((visibleRatio != oldProps->visibleRatio) && !(std::isnan(visibleRatio) && std::isnan(oldProps->visibleRatio))) {
+    result["visibleRatio"] = visibleRatio;
+  }
+    
+  if (visibleCharactersBehavior != oldProps->visibleCharactersBehavior) {
+    result["visibleCharactersBehavior"] = toDynamic(visibleCharactersBehavior);
+  }
+    
+  if (selectionEnabled != oldProps->selectionEnabled) {
+    result["selectionEnabled"] = selectionEnabled;
+  }
+    
+  if (scrollActive != oldProps->scrollActive) {
+    result["scrollActive"] = scrollActive;
+  }
+  return result;
+}
+#endif
 GodotSceneProps::GodotSceneProps(
     const PropsParserContext &context,
     const GodotSceneProps &sourceProps,
@@ -39,6 +148,233 @@ folly::dynamic GodotSceneProps::getDiffProps(
   
   if (source != oldProps->source) {
     result["source"] = source;
+  }
+  return result;
+}
+#endif
+GodotTextureProgressBarProps::GodotTextureProgressBarProps(
+    const PropsParserContext &context,
+    const GodotTextureProgressBarProps &sourceProps,
+    const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
+
+    value(convertRawProp(context, rawProps, "value", sourceProps.value, {0.0})),
+    minimumValue(convertRawProp(context, rawProps, "minimumValue", sourceProps.minimumValue, {0.0})),
+    maximumValue(convertRawProp(context, rawProps, "maximumValue", sourceProps.maximumValue, {100.0})),
+    step(convertRawProp(context, rawProps, "step", sourceProps.step, {0.0})),
+    fillMode(convertRawProp(context, rawProps, "fillMode", sourceProps.fillMode, {GodotTextureProgressBarFillMode::LeftToRight})),
+    underTexture(convertRawProp(context, rawProps, "underTexture", sourceProps.underTexture, {})),
+    progressTexture(convertRawProp(context, rawProps, "progressTexture", sourceProps.progressTexture, {})),
+    overTexture(convertRawProp(context, rawProps, "overTexture", sourceProps.overTexture, {})),
+    underTint(convertRawProp(context, rawProps, "underTint", sourceProps.underTint, {})),
+    progressTint(convertRawProp(context, rawProps, "progressTint", sourceProps.progressTint, {})),
+    overTint(convertRawProp(context, rawProps, "overTint", sourceProps.overTint, {})),
+    radialInitialAngle(convertRawProp(context, rawProps, "radialInitialAngle", sourceProps.radialInitialAngle, {0.0})),
+    radialFillDegrees(convertRawProp(context, rawProps, "radialFillDegrees", sourceProps.radialFillDegrees, {360.0})),
+    radialCenterOffsetX(convertRawProp(context, rawProps, "radialCenterOffsetX", sourceProps.radialCenterOffsetX, {0.0})),
+    radialCenterOffsetY(convertRawProp(context, rawProps, "radialCenterOffsetY", sourceProps.radialCenterOffsetY, {0.0})),
+    nineSliceStretch(convertRawProp(context, rawProps, "nineSliceStretch", sourceProps.nineSliceStretch, {false})),
+    stretchMarginLeft(convertRawProp(context, rawProps, "stretchMarginLeft", sourceProps.stretchMarginLeft, {0})),
+    stretchMarginTop(convertRawProp(context, rawProps, "stretchMarginTop", sourceProps.stretchMarginTop, {0})),
+    stretchMarginRight(convertRawProp(context, rawProps, "stretchMarginRight", sourceProps.stretchMarginRight, {0})),
+    stretchMarginBottom(convertRawProp(context, rawProps, "stretchMarginBottom", sourceProps.stretchMarginBottom, {0})) {}
+    
+#ifdef RN_SERIALIZABLE_STATE
+ComponentName GodotTextureProgressBarProps::getDiffPropsImplementationTarget() const {
+  return "GodotTextureProgressBar";
+}
+
+folly::dynamic GodotTextureProgressBarProps::getDiffProps(
+    const Props* prevProps) const {
+  static const auto defaultProps = GodotTextureProgressBarProps();
+  const GodotTextureProgressBarProps* oldProps = prevProps == nullptr
+      ? &defaultProps
+      : static_cast<const GodotTextureProgressBarProps*>(prevProps);
+  if (this == oldProps) {
+    return folly::dynamic::object();
+  }
+  folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+  
+  if ((value != oldProps->value) && !(std::isnan(value) && std::isnan(oldProps->value))) {
+    result["value"] = value;
+  }
+    
+  if ((minimumValue != oldProps->minimumValue) && !(std::isnan(minimumValue) && std::isnan(oldProps->minimumValue))) {
+    result["minimumValue"] = minimumValue;
+  }
+    
+  if ((maximumValue != oldProps->maximumValue) && !(std::isnan(maximumValue) && std::isnan(oldProps->maximumValue))) {
+    result["maximumValue"] = maximumValue;
+  }
+    
+  if ((step != oldProps->step) && !(std::isnan(step) && std::isnan(oldProps->step))) {
+    result["step"] = step;
+  }
+    
+  if (fillMode != oldProps->fillMode) {
+    result["fillMode"] = toDynamic(fillMode);
+  }
+    
+  if (underTexture != oldProps->underTexture) {
+    result["underTexture"] = toDynamic(underTexture);
+  }
+    
+  if (progressTexture != oldProps->progressTexture) {
+    result["progressTexture"] = toDynamic(progressTexture);
+  }
+    
+  if (overTexture != oldProps->overTexture) {
+    result["overTexture"] = toDynamic(overTexture);
+  }
+    
+  if (underTint != oldProps->underTint) {
+    result["underTint"] = *underTint;
+  }
+    
+  if (progressTint != oldProps->progressTint) {
+    result["progressTint"] = *progressTint;
+  }
+    
+  if (overTint != oldProps->overTint) {
+    result["overTint"] = *overTint;
+  }
+    
+  if ((radialInitialAngle != oldProps->radialInitialAngle) && !(std::isnan(radialInitialAngle) && std::isnan(oldProps->radialInitialAngle))) {
+    result["radialInitialAngle"] = radialInitialAngle;
+  }
+    
+  if ((radialFillDegrees != oldProps->radialFillDegrees) && !(std::isnan(radialFillDegrees) && std::isnan(oldProps->radialFillDegrees))) {
+    result["radialFillDegrees"] = radialFillDegrees;
+  }
+    
+  if ((radialCenterOffsetX != oldProps->radialCenterOffsetX) && !(std::isnan(radialCenterOffsetX) && std::isnan(oldProps->radialCenterOffsetX))) {
+    result["radialCenterOffsetX"] = radialCenterOffsetX;
+  }
+    
+  if ((radialCenterOffsetY != oldProps->radialCenterOffsetY) && !(std::isnan(radialCenterOffsetY) && std::isnan(oldProps->radialCenterOffsetY))) {
+    result["radialCenterOffsetY"] = radialCenterOffsetY;
+  }
+    
+  if (nineSliceStretch != oldProps->nineSliceStretch) {
+    result["nineSliceStretch"] = nineSliceStretch;
+  }
+    
+  if (stretchMarginLeft != oldProps->stretchMarginLeft) {
+    result["stretchMarginLeft"] = stretchMarginLeft;
+  }
+    
+  if (stretchMarginTop != oldProps->stretchMarginTop) {
+    result["stretchMarginTop"] = stretchMarginTop;
+  }
+    
+  if (stretchMarginRight != oldProps->stretchMarginRight) {
+    result["stretchMarginRight"] = stretchMarginRight;
+  }
+    
+  if (stretchMarginBottom != oldProps->stretchMarginBottom) {
+    result["stretchMarginBottom"] = stretchMarginBottom;
+  }
+  return result;
+}
+#endif
+GodotVideoProps::GodotVideoProps(
+    const PropsParserContext &context,
+    const GodotVideoProps &sourceProps,
+    const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
+
+    source(convertRawProp(context, rawProps, "source", sourceProps.source, {})),
+    autoplay(convertRawProp(context, rawProps, "autoplay", sourceProps.autoplay, {false})),
+    paused(convertRawProp(context, rawProps, "paused", sourceProps.paused, {false})),
+    loop(convertRawProp(context, rawProps, "loop", sourceProps.loop, {false})),
+    volume(convertRawProp(context, rawProps, "volume", sourceProps.volume, {1.0})),
+    bus(convertRawProp(context, rawProps, "bus", sourceProps.bus, {std::string{"Master"}})),
+    expand(convertRawProp(context, rawProps, "expand", sourceProps.expand, {true})) {}
+    
+#ifdef RN_SERIALIZABLE_STATE
+ComponentName GodotVideoProps::getDiffPropsImplementationTarget() const {
+  return "GodotVideo";
+}
+
+folly::dynamic GodotVideoProps::getDiffProps(
+    const Props* prevProps) const {
+  static const auto defaultProps = GodotVideoProps();
+  const GodotVideoProps* oldProps = prevProps == nullptr
+      ? &defaultProps
+      : static_cast<const GodotVideoProps*>(prevProps);
+  if (this == oldProps) {
+    return folly::dynamic::object();
+  }
+  folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+  
+  if (source != oldProps->source) {
+    result["source"] = source;
+  }
+    
+  if (autoplay != oldProps->autoplay) {
+    result["autoplay"] = autoplay;
+  }
+    
+  if (paused != oldProps->paused) {
+    result["paused"] = paused;
+  }
+    
+  if (loop != oldProps->loop) {
+    result["loop"] = loop;
+  }
+    
+  if ((volume != oldProps->volume) && !(std::isnan(volume) && std::isnan(oldProps->volume))) {
+    result["volume"] = volume;
+  }
+    
+  if (bus != oldProps->bus) {
+    result["bus"] = bus;
+  }
+    
+  if (expand != oldProps->expand) {
+    result["expand"] = expand;
+  }
+  return result;
+}
+#endif
+GodotViewportViewProps::GodotViewportViewProps(
+    const PropsParserContext &context,
+    const GodotViewportViewProps &sourceProps,
+    const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
+
+    viewport(convertRawProp(context, rawProps, "viewport", sourceProps.viewport, {})),
+    resizeMode(convertRawProp(context, rawProps, "resizeMode", sourceProps.resizeMode, {GodotViewportViewResizeMode::Cover})),
+    matchSize(convertRawProp(context, rawProps, "matchSize", sourceProps.matchSize, {false})),
+    forwardInput(convertRawProp(context, rawProps, "forwardInput", sourceProps.forwardInput, {false})) {}
+    
+#ifdef RN_SERIALIZABLE_STATE
+ComponentName GodotViewportViewProps::getDiffPropsImplementationTarget() const {
+  return "GodotViewportView";
+}
+
+folly::dynamic GodotViewportViewProps::getDiffProps(
+    const Props* prevProps) const {
+  static const auto defaultProps = GodotViewportViewProps();
+  const GodotViewportViewProps* oldProps = prevProps == nullptr
+      ? &defaultProps
+      : static_cast<const GodotViewportViewProps*>(prevProps);
+  if (this == oldProps) {
+    return folly::dynamic::object();
+  }
+  folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+  
+  if (viewport != oldProps->viewport) {
+    result["viewport"] = viewport;
+  }
+    
+  if (resizeMode != oldProps->resizeMode) {
+    result["resizeMode"] = toDynamic(resizeMode);
+  }
+    
+  if (matchSize != oldProps->matchSize) {
+    result["matchSize"] = matchSize;
+  }
+    
+  if (forwardInput != oldProps->forwardInput) {
+    result["forwardInput"] = forwardInput;
   }
   return result;
 }

@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "files": ["consumer.tsx"]
+  "files": ["consumer.tsx", "game_ui.tsx"]
 }

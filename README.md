@@ -9,7 +9,7 @@ tracked module remains under `modules/react_native_bindings/`.
 The tested Linux path includes independent React surfaces, retained native controls,
 images, lists, editing and presentations, a JavaScript thread separate from Godot's main thread, pooled Godot
 HTTPRequest, WebSocketPeer and chunked Blob services. The [working game](samples/game-ui/DEMO.md)
-keeps enemy and inventory state in GDScript: signals update four RN surfaces directly,
+keeps enemy and inventory state in GDScript: signals update five RN surfaces directly,
 and declared RN commands mutate only their bound Godot target. Network scenarios feed
 updates into the same Godot authority.
 
@@ -87,7 +87,7 @@ declared headless smoke test. Shared manifests with the same package, npm script
 output use one dependency install and one bundle build. Set `SMOKE_JOBS` to change the
 default concurrency of two Godot processes. `run_staged_game.sh` stages the game demo
 built by the smoke run into a temporary project outside the repository, imports it, and
-checks that all four of its roots mount without diagnostics. `run_consumer.sh` creates a
+checks that all five of its roots mount without diagnostics. `run_consumer.sh` creates a
 consumer project with `react-native-godot-init` from `artifacts/react-native-godot.tgz`,
 which `package_linux_baseline.sh` and `package_npm.sh` build, or from the source tree when
 that file is missing. It runs the project from a bundle file, from the bundle file after

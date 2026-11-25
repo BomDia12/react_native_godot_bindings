@@ -30,11 +30,31 @@ export type GodotMouseEvent = {
 declare module 'react-native' {
   interface ViewProps {
     godotContextMenu?: readonly GodotContextMenuEntry[];
+    // A Theme type variation of Panel, whose StyleBox replaces the background and borders.
+    godotThemeType?: string;
+    // A StyleBox resource, which replaces the background and borders.
+    godotStyleBox?: string;
+    // A ShaderMaterial resource that shades this view and its children.
+    godotMaterial?: string;
+    godotShaderParameters?: Record<string, number | boolean | GodotColor | GodotVector2 | GodotVector3>;
+    tooltip?: string;
+    // What a drag from this view carries. Godot reads it when the drag starts.
+    godotDragData?: {type: string; [key: string]: unknown};
+    godotDragPreview?: ImageSourcePropType;
+    // The drag types this view accepts, matched against the drag data's `type`.
+    godotDropTypes?: readonly string[];
+    onGodotDrop?: (event: NativeSyntheticEvent<{data: {type: string; [key: string]: unknown}; locationX: number; locationY: number; pageX: number; pageY: number}>) => void;
+    onGodotDragEnd?: (event: NativeSyntheticEvent<{successful: boolean; pageX: number; pageY: number}>) => void;
     onGodotContextMenuAction?: (event: NativeSyntheticEvent<{id: string; target: number}>) => void;
     onMiddleClick?: (event: NativeSyntheticEvent<GodotMouseEvent>) => void;
     onMiddleClickCapture?: (event: NativeSyntheticEvent<GodotMouseEvent>) => void;
     onRightClick?: (event: NativeSyntheticEvent<GodotMouseEvent>) => void;
     onRightClickCapture?: (event: NativeSyntheticEvent<GodotMouseEvent>) => void;
+  }
+  interface TextProps {
+    // A Theme type variation of RichTextLabel, which sets the font, size and color
+    // that the style doesn't.
+    godotThemeType?: string;
   }
   interface PlatformStatic {
     OS: 'godot' | string;

@@ -34,6 +34,14 @@ void HostPlatformViewEventEmitter::onKeyboardClick() const {
 	dispatchEvent("click", folly::dynamic::object(), RawEvent::Category::Discrete);
 }
 
+void HostPlatformViewEventEmitter::onGodotDrop(const folly::dynamic &data, Float locationX, Float locationY, Float pageX, Float pageY) const {
+	dispatchEvent("godotDrop", folly::dynamic::object("data", data)("locationX", locationX)("locationY", locationY)("pageX", pageX)("pageY", pageY), RawEvent::Category::Discrete);
+}
+
+void HostPlatformViewEventEmitter::onGodotDragEnd(bool successful, Float pageX, Float pageY) const {
+	dispatchEvent("godotDragEnd", folly::dynamic::object("successful", successful)("pageX", pageX)("pageY", pageY), RawEvent::Category::Discrete);
+}
+
 void HostPlatformViewEventEmitter::onGodotContextMenuAction(const std::string &id) const {
 	dispatchEvent("godotContextMenuAction", folly::dynamic::object("id", id), RawEvent::Category::Discrete);
 }

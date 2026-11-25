@@ -4,6 +4,7 @@
 #include "../interop/rn_dynamic.h"
 #include "rn_accessibility_module.h"
 #include "rn_alert_modules.h"
+#include "rn_async_storage_module.h"
 #include "rn_dev_settings_module.h"
 #include "rn_godot_alerts.h"
 
@@ -11,6 +12,24 @@
 #include <react/io/ImageLoaderModule.h>
 
 namespace facebook::react {
+
+namespace {
+
+// These modules are the one callback their services hold, so every lookup in a
+// runtime shares one instance.
+template <typename Module>
+std::function<std::shared_ptr<TurboModule>(const std::shared_ptr<CallInvoker> &)> shared_game_module(const RNHostModuleContext &p_host, const std::shared_ptr<RNGameServicesHandle> &p_services) {
+	return [p_host, p_services, instance = std::make_shared<std::weak_ptr<Module>>()](const std::shared_ptr<CallInvoker> &p_invoker) -> std::shared_ptr<TurboModule> {
+		std::shared_ptr<Module> existing = instance->lock();
+		if (!existing) {
+			existing = Module::create(p_invoker, p_host, p_services);
+			*instance = existing;
+		}
+		return existing;
+	};
+}
+
+} // namespace
 
 TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context) {
 	auto factories = std::make_shared<std::map<std::string, RNTurboModuleFactory>>(std::move(context.extensions));
@@ -67,6 +86,10 @@ TurboModuleProvider rn_godot_turbo_module_provider(RNTurboModuleContext context)
 		return module;
 	});
 	add(RNAccessibilityManagerModule::kModuleName, [host, application](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAccessibilityManagerModule>(p_invoker, host, application); });
+	add(RNGodotInputModule::kModuleName, shared_game_module<RNGodotInputModule>(host, context.game_services));
+	add(RNGodotAudioModule::kModuleName, shared_game_module<RNGodotAudioModule>(host, context.game_services));
+	add(RNGodotTranslationModule::kModuleName, shared_game_module<RNGodotTranslationModule>(host, context.game_services));
+	add(RNAsyncStorageModule::kModuleName, [storage = context.async_storage](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNAsyncStorageModule>(p_invoker, storage); });
 	add(RNDevSettingsModule::kModuleName, [host](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<RNDevSettingsModule>(p_invoker, host); });
 	add(SourceCodeModule::kModuleName, [url = context.source_url](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<SourceCodeModule>(p_invoker, url->get()); });
 	add(ImageLoaderModule::kModuleName, [loader = std::weak_ptr<IImageLoader>(context.image_loader)](const std::shared_ptr<CallInvoker> &p_invoker) { return std::make_shared<ImageLoaderModule>(p_invoker, loader); });

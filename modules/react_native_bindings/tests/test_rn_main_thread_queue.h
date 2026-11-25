@@ -40,6 +40,24 @@ TEST_CASE("[ReactNativeBindings][MainThreadQueue] sync calls block their thread 
 	CHECK(value == 7);
 }
 
+TEST_CASE("[ReactNativeBindings][MainThreadQueue] one drain answers a loop of sync calls") {
+	RNMainThreadQueue queue;
+	std::atomic<int> answered = 0;
+	std::thread caller([&] {
+		for (int i = 0; i < 200; ++i) {
+			queue.run_sync([&] { answered.fetch_add(1); });
+		}
+	});
+	int most_in_one_drain = 0;
+	while (answered.load() < 200) {
+		const int before = answered.load();
+		queue.drain();
+		most_in_one_drain = MAX(most_in_one_drain, answered.load() - before);
+	}
+	caller.join();
+	CHECK(most_in_one_drain > 1);
+}
+
 TEST_CASE("[ReactNativeBindings][MainThreadQueue] close cancels blocked and new sync calls and discards posted work") {
 	RNMainThreadQueue queue;
 	std::atomic<bool> finished = false;

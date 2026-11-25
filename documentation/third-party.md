@@ -14,6 +14,20 @@
 - Update: change the submodule revision and `baseline.env` together, then rebuild from
   an empty `engines/build_release` directory
 
+## Community library specs
+
+`modules/react_native_bindings/generated/` holds C++ that React Native's codegen derives from
+the specs of two npm packages, which are `react-native-godot` dev dependencies. Applications
+install the packages themselves; no source of theirs ships with the module.
+
+| Package | Version | License |
+|---|---|---|
+| `@react-native-community/slider` | `5.2.2` | MIT |
+| `@react-native-async-storage/async-storage` | `3.1.1` | MIT |
+
+Update by changing the dev dependency, running `node packages/react-native-godot/scripts/codegen.cjs`
+and checking the contract in `rn_slider_component_view.cpp` and `rn_async_storage_module.cpp`.
+
 ## React Native core and its C++ dependencies
 
 Each library is a pinned shallow Git submodule under `modules/react_native_bindings/thirdparty/`

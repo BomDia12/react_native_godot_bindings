@@ -17,6 +17,9 @@ namespace facebook::react {
 void ReactNativeGodotSpec_registerComponentDescriptorsFromCodegen(
   std::shared_ptr<const ComponentDescriptorProviderRegistry> registry) {
 registry->add(concreteComponentDescriptorProvider<GodotSceneComponentDescriptor>());
+registry->add(concreteComponentDescriptorProvider<GodotTextureProgressBarComponentDescriptor>());
+registry->add(concreteComponentDescriptorProvider<GodotVideoComponentDescriptor>());
+registry->add(concreteComponentDescriptorProvider<GodotViewportViewComponentDescriptor>());
 }
 
 } // namespace facebook::react

@@ -1,5 +1,7 @@
 #include "rn_host_teardown.h"
 
+#include "../turbomodules/rn_async_storage_module.h"
+
 #include <jsi/hermes-interfaces.h>
 #include <react/runtime/ReactHost.h>
 #include <react/runtime/platform/godot/GodotTimerRegistry.h>
@@ -24,8 +26,8 @@ struct IdleMarker {
 RNHostRuntime::RNHostRuntime() = default;
 RNHostRuntime::~RNHostRuntime() = default;
 
-RNHostTeardown::RNHostTeardown(RNHostRuntime &p_runtime, std::vector<SurfaceId> p_surfaces) :
-		runtime(p_runtime), surfaces(std::move(p_surfaces)) {
+RNHostTeardown::RNHostTeardown(RNHostRuntime &p_runtime, std::vector<SurfaceId> p_surfaces, std::shared_ptr<RNAsyncStorageState> p_async_storage) :
+		runtime(p_runtime), surfaces(std::move(p_surfaces)), async_storage(std::move(p_async_storage)) {
 	thread = std::thread([this] { _run(); });
 }
 
@@ -42,6 +44,10 @@ void RNHostTeardown::_run() {
 		runtime.react_host->stopSurface(surface);
 		_wait_until_idle();
 	}
+	// JavaScript has stopped, so this finishes its storage calls, and the marker
+	// after it lets JavaScript receive their results while the runtime is alive.
+	async_storage->thread.wait_until_idle();
+	_wait_until_idle();
 	runtime.react_host.reset();
 	finished = true;
 }

@@ -48,7 +48,7 @@ function createGodotMetroConfig(projectRoot) {
     projectRoot: resolvedProjectRoot,
     watchFolders: Array.from(new Set([resolvedProjectRoot, packageRoot, ...linkedDependencyRoots(resolvedProjectRoot)])),
     resolver: {
-      assetExts: Array.from(new Set([...(defaults.resolver.assetExts ?? []), 'woff', 'woff2'])),
+      assetExts: Array.from(new Set([...(defaults.resolver.assetExts ?? []), 'woff', 'woff2', 'ogg', 'ogv'])),
       platforms: Array.from(
         new Set(['godot', ...(defaults.resolver.platforms ?? [])]),
       ),

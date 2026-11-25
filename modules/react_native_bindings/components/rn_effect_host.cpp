@@ -5,6 +5,7 @@
 
 #include "core/input/input.h"
 #include "core/object/callable_mp.h"
+#include "scene/main/window.h"
 #include "servers/rendering/rendering_server.h"
 
 using namespace facebook::react;
@@ -140,15 +141,16 @@ RNEffectHost::RNEffectHost() {
 	set_material(blend_material);
 }
 
-void RNEffectHost::configure(const Size2 &p_size, real_t p_margin, const ::Vector<RNFilterStage> &p_stages, BlendMode p_blend) {
+void RNEffectHost::configure(const Size2 &p_size, real_t p_margin, const ::Vector<RNFilterStage> &p_stages, BlendMode p_blend, const Ref<ShaderMaterial> &p_material) {
 	margin = p_margin;
 	set_position(-Vector2(margin, margin));
 	set_size(p_size + Vector2(margin, margin) * 2);
 	content->set_position(Vector2(margin, margin));
 	content->set_size(p_size);
 	stages = p_stages;
-	_use_filtered_viewport(!stages.is_empty());
+	_use_filtered_viewport(!stages.is_empty() || p_material.is_valid());
 	if (filtered) {
+		filtered->set_material(p_material.is_valid() ? p_material : filtered_material);
 		filtered->set_position(-Vector2(margin, margin));
 		filtered->set_size(p_size + Vector2(margin, margin) * 2);
 		painter->set_position(Vector2(margin, margin));
@@ -216,6 +218,19 @@ void RNEffectHost::_update_blend() {
 	// The compatibility renderer copies an item's rectangle without its
 	// transform, so the whole viewport is copied.
 	RS::get_singleton()->canvas_item_set_copy_to_backbuffer(get_canvas_item(), true, Rect2());
+}
+
+// Themes don't cross into a SubViewport, so the subtree gets the one around the host.
+void RNEffectHost::_inherit_theme() {
+	Ref<Theme> theme;
+	for (Node *node = get_parent(); node && theme.is_null(); node = node->get_parent()) {
+		if (const Control *control = Object::cast_to<Control>(node)) {
+			theme = control->get_theme();
+		} else if (const Window *ancestor_window = Object::cast_to<Window>(node)) {
+			theme = ancestor_window->get_theme();
+		}
+	}
+	painter->set_theme(theme);
 }
 
 void RNEffectHost::_update_clip() {
@@ -337,7 +352,13 @@ void RNEffectHost::_notification(int p_what) {
 		case NOTIFICATION_PREDELETE: {
 			_restore_focus_paths();
 		} break;
-		case NOTIFICATION_ENTER_TREE:
+		case NOTIFICATION_THEME_CHANGED: {
+			_inherit_theme();
+		} break;
+		case NOTIFICATION_ENTER_TREE: {
+			_inherit_theme();
+			_update_clip();
+		} break;
 		case NOTIFICATION_TRANSFORM_CHANGED:
 		case RN_NOTIFICATION_CLIP_CHANGED: {
 			_update_clip();

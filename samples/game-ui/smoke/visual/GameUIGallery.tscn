@@ -1,0 +1,27 @@
+[gd_scene load_steps=3 format=3]
+[ext_resource type="Script" path="res://smoke/visual_test.gd" id="1"]
+[ext_resource type="Theme" path="res://smoke/visual/assets/theme.tres" id="2"]
+[node name="GameUIGallery" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("2")
+script = ExtResource("1")
+application = "GameUIGallery"
+
+[node name="gallery_viewport" type="SubViewport" parent="."]
+size = Vector2i(96, 64)
+transparent_bg = false
+render_target_update_mode = 4
+
+[node name="Sky" type="ColorRect" parent="gallery_viewport"]
+offset_right = 96.0
+offset_bottom = 32.0
+color = Color(0.3, 0.6, 0.9, 1)
+
+[node name="Ground" type="ColorRect" parent="gallery_viewport"]
+offset_top = 32.0
+offset_right = 96.0
+offset_bottom = 64.0
+color = Color(0.3, 0.7, 0.3, 1)

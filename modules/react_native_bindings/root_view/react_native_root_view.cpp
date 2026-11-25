@@ -62,6 +62,8 @@ void ReactNativeRootView::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "contract_values", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_contract_values", "get_contract_values");
 	ADD_SIGNAL(MethodInfo("contract_changed", PropertyInfo(Variant::DICTIONARY, "values")));
 	ADD_SIGNAL(MethodInfo("message_received", PropertyInfo(Variant::STRING, "name"), PropertyInfo(Variant::NIL, "payload", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NIL_IS_VARIANT)));
+	ADD_SIGNAL(MethodInfo("godot_drag_started", PropertyInfo(Variant::NIL, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NIL_IS_VARIANT)));
+	ADD_SIGNAL(MethodInfo("godot_drag_ended", PropertyInfo(Variant::BOOL, "successful")));
 	ADD_SIGNAL(MethodInfo("scene_loaded", PropertyInfo(Variant::STRING, "native_id"), PropertyInfo(Variant::OBJECT, "instance", PROPERTY_HINT_RESOURCE_TYPE, "Node")));
 	BIND_ENUM_CONSTANT(FIT_CONTENT_NONE);
 	BIND_ENUM_CONSTANT(FIT_CONTENT_WIDTH);
@@ -98,6 +100,19 @@ void ReactNativeRootView::_notification(int p_what) {
 		case NOTIFICATION_THEME_CHANGED:
 		case NOTIFICATION_WM_DPI_CHANGE: {
 			_surface_changed();
+		} break;
+		case NOTIFICATION_DRAG_BEGIN: {
+			const Variant drag_data = get_viewport()->gui_get_drag_data();
+			// Godot takes over the press, so its release never reaches the pressed view.
+			if (input_router.is_mouse_pressed()) {
+				input_router.cancel_mouse();
+			}
+			emit_signal(SNAME("godot_drag_started"), drag_data);
+			host->root_drag_changed(this, drag_data);
+		} break;
+		case NOTIFICATION_DRAG_END: {
+			emit_signal(SNAME("godot_drag_ended"), is_drag_successful());
+			host->root_drag_changed(this, Variant());
 		} break;
 		case NOTIFICATION_VISIBILITY_CHANGED:
 		case NOTIFICATION_PAUSED:

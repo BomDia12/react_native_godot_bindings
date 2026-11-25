@@ -6,6 +6,7 @@ import GodotWindow from 'react-native-godot/GodotWindow';
 import {fontFamily} from 'react-native-godot/fonts';
 import 'react-native-godot/setup';
 import './communication.entry';
+import './hud.entry';
 import './godot/registry';
 
 import {runHTTPChecks, runSocketChecks, runLowFPSDownload} from './game/network';

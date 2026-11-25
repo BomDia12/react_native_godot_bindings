@@ -19,6 +19,17 @@ class RNViewControl : public Panel {
 	std::function<void()> menu_opening;
 	std::function<void(bool)> focus_changed;
 	Ref<RNStyleBox> style;
+	// With a Godot StyleBox or theme type painting the box, the outline is all
+	// that's left of the React Native paint.
+	Ref<RNStyleBox> outline;
+	Ref<StyleBox> skin;
+	bool skinned = false;
+	Dictionary drag_data;
+	Ref<Texture2D> drag_preview;
+	Array drop_types;
+	bool drag_source = false;
+	std::function<void(const Variant &, const Point2 &)> dropped;
+	std::function<void(bool)> drag_ended;
 	RNBoxShadows shadows;
 	RNAccessibility accessibility;
 	// A grouped view's children hang under this hidden element, as TabContainer
@@ -48,6 +59,16 @@ public:
 	// Paints the view box, or nothing when p_visible is false.
 	void set_paint(const RNStyleBox::Paint &p_paint, bool p_visible = true);
 	Ref<RNStyleBox> get_style() const { return style; }
+	// Paints the box with p_skin or else p_theme_type's panel StyleBox, in place of
+	// the React Native background and borders.
+	void set_skin(const Ref<StyleBox> &p_skin, const StringName &p_theme_type);
+	// Godot asks for these synchronously, so React declares them ahead of a drag.
+	void set_drag(const Dictionary &p_data, const Ref<Texture2D> &p_preview, const Array &p_drop_types);
+	void set_drag_callbacks(std::function<void(const Variant &, const Point2 &)> p_dropped, std::function<void(bool)> p_ended);
+	void copy_drag_callbacks_to(RNViewControl *p_other) const { p_other->set_drag_callbacks(dropped, drag_ended); }
+	Variant get_drag_data(const Point2 &p_point) override;
+	bool can_drop_data(const Point2 &p_point, const Variant &p_data) const override;
+	void drop_data(const Point2 &p_point, const Variant &p_data) override;
 	void set_accessibility(const RNAccessibility &p_accessibility);
 	bool is_accessibility_grouped() const { return accessibility.grouped; }
 	// An accessible view is one element, as on iOS and Android: its

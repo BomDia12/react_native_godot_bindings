@@ -1,7 +1,9 @@
 import contextlib
 import io
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -9,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from run_smoke_tests import SmokeResult, find_godot_binary, prepare_project_imports, summarize
+from run_smoke_tests import SmokeResult, find_godot_binary, prepare_project_imports, run_captured, summarize
 
 
 class RunSmokeTestsTests(unittest.TestCase):
@@ -38,7 +40,7 @@ class RunSmokeTestsTests(unittest.TestCase):
         self.assertIn("first failure", output.getvalue())
         self.assertIn("second failure", output.getvalue())
 
-    @mock.patch("run_smoke_tests.subprocess.run")
+    @mock.patch("run_smoke_tests.run_captured")
     def test_import_preparation_runs_once_per_project_and_writes_logs(self, run):
         run.return_value = mock.Mock(returncode=0, stdout="imported\n", stderr="")
         with tempfile.TemporaryDirectory() as directory:
@@ -55,7 +57,7 @@ class RunSmokeTestsTests(unittest.TestCase):
             self.assertTrue((log_dir / "import-sample.log").is_file())
             self.assertTrue((log_dir / "import-other.log").is_file())
 
-    @mock.patch("run_smoke_tests.subprocess.run")
+    @mock.patch("run_smoke_tests.run_captured")
     def test_import_preparation_rejects_import_errors(self, run):
         run.return_value = mock.Mock(returncode=0, stdout="ERROR: broken import\n", stderr="")
         with tempfile.TemporaryDirectory() as directory:
@@ -71,6 +73,14 @@ class RunSmokeTestsTests(unittest.TestCase):
         binary.touch()
         binary.chmod(0o755)
         return binary
+
+    def test_timeout_ends_children_that_hold_the_output_open(self) -> None:
+        script = "import subprocess, time; subprocess.Popen(['sleep', '60']); time.sleep(60)"
+        started = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired) as raised:
+            run_captured([sys.executable, "-c", script], 0.5)
+        self.assertLess(time.monotonic() - started, 30)
+        self.assertEqual(raised.exception.stdout, "")
 
 
 if __name__ == "__main__":

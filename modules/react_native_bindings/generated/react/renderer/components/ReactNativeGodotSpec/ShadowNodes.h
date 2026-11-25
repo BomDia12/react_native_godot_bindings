@@ -29,4 +29,37 @@ using GodotSceneShadowNode = ConcreteViewShadowNode<
     GodotSceneEventEmitter,
     GodotSceneState>;
 
+JSI_EXPORT extern const char GodotTextureProgressBarComponentName[];
+
+/*
+ * `ShadowNode` for <GodotTextureProgressBar> component.
+ */
+using GodotTextureProgressBarShadowNode = ConcreteViewShadowNode<
+    GodotTextureProgressBarComponentName,
+    GodotTextureProgressBarProps,
+    GodotTextureProgressBarEventEmitter,
+    GodotTextureProgressBarState>;
+
+JSI_EXPORT extern const char GodotVideoComponentName[];
+
+/*
+ * `ShadowNode` for <GodotVideo> component.
+ */
+using GodotVideoShadowNode = ConcreteViewShadowNode<
+    GodotVideoComponentName,
+    GodotVideoProps,
+    GodotVideoEventEmitter,
+    GodotVideoState>;
+
+JSI_EXPORT extern const char GodotViewportViewComponentName[];
+
+/*
+ * `ShadowNode` for <GodotViewportView> component.
+ */
+using GodotViewportViewShadowNode = ConcreteViewShadowNode<
+    GodotViewportViewComponentName,
+    GodotViewportViewProps,
+    GodotViewportViewEventEmitter,
+    GodotViewportViewState>;
+
 } // namespace facebook::react

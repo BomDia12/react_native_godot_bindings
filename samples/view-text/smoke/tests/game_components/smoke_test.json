@@ -1,0 +1,34 @@
+{
+  "id": "game-components",
+  "project_dir": "samples/view-text",
+  "scene": "res://smoke/tests/game_components/GameComponents.tscn",
+  "timeout_seconds": 90,
+  "allowlist": "documentation/expected-warnings.txt",
+  "bundle": {
+    "mode": "shared",
+    "package_dir": "samples/view-text",
+    "script": "build:godot",
+    "output": "samples/view-text/dist/godot.bundle.js"
+  },
+  "inputs": [
+    "samples/view-text/project.godot",
+    "samples/view-text/godot.entry.js",
+    "samples/view-text/interaction.entry.js",
+    "samples/view-text/transaction.entry.js",
+    "samples/view-text/metro.config.js",
+    "samples/view-text/babel.config.js",
+    "samples/view-text/package.json",
+    "samples/view-text/package-lock.json",
+    "documentation/expected-warnings.txt",
+    "samples/view-text/engine_integration.entry.js",
+    "samples/view-text/game_ui.entry.js",
+    "samples/view-text/smoke/tests/game_components/GameComponents.tscn",
+    "samples/view-text/smoke/tests/game_components/game_components.gd",
+    "samples/view-text/smoke/tests/game_components/theme.tres",
+    "samples/view-text/smoke/tests/game_components/clip.ogv",
+    "samples/view-text/smoke/tests/game_components/fill.png",
+    "samples/view-text/smoke/tests/game_components/under.png",
+    "samples/view-text/smoke/tests/game_components/wave_effect.gd",
+    "samples/view-text/smoke/tests/game_components/wave_effect.tres"
+  ]
+}
