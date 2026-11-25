@@ -2,7 +2,6 @@ __pycache__/
 /godot/
 /bin/
 /.scons-cache/
-/.ccache/
 /.phase6a/
 /artifacts/
 /modules/react_native_bindings/engines/build*/

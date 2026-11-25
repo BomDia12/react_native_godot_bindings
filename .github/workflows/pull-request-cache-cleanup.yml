@@ -1,0 +1,23 @@
+name: Pull request cache cleanup
+
+# pull_request_target gives fork pull requests a token that can delete caches.
+# It is safe here because the job never checks out or runs pull request code.
+on:
+  pull_request_target:
+    types:
+      - closed
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    name: Delete pull request caches
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      CACHE_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+    steps:
+      - name: Delete pull request caches
+        run: gh cache delete --all --ref "$CACHE_REF" --succeed-on-no-caches
