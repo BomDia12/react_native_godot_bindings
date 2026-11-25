@@ -17,6 +17,8 @@ struct RNHTTPRequest {
 	double timeout_ms = 0;
 	uint64_t response_limit = 0;
 	bool credentials = true;
+	// Developer tools download bundles of any size, outside max_body_bytes and max_buffered_bytes.
+	bool tooling = false;
 };
 struct RNHTTPResponse {
 	String url;

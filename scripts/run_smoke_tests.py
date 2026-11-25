@@ -150,6 +150,14 @@ def prepare_project_imports(
         print(f"Imported {project_dir.as_posix()} (log: {log_path.relative_to(repo_root).as_posix()})")
 
 
+def godot_command(repo_root: Path, godot_binary: Path, manifest: SmokeManifest) -> list[str]:
+    project = str(repo_root / manifest.project_dir)
+    if manifest.editor:
+        # The project's editor_smoke addon runs the script inside the editor.
+        return [str(godot_binary), "--headless", "--editor", "--path", project, "--", f"--editor-smoke={manifest.scene}"]
+    return [str(godot_binary), "--headless", "--path", project, manifest.scene]
+
+
 def run_test(
     repo_root: Path,
     godot_binary: Path,
@@ -158,13 +166,7 @@ def run_test(
     project_lock: threading.Lock,
 ) -> SmokeResult:
     log_path = log_dir / f"{manifest.id}.log"
-    command = [
-        str(godot_binary),
-        "--headless",
-        "--path",
-        str(repo_root / manifest.project_dir),
-        manifest.scene,
-    ]
+    command = godot_command(repo_root, godot_binary, manifest)
     timed_out = False
     # Two Godot processes in one project directory would race on its shared .godot import
     # cache, so tests are parallel across projects and serial within one.

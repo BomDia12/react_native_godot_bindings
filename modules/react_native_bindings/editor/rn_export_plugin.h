@@ -12,8 +12,10 @@ class RNExportPlugin : public EditorExportPlugin {
 
 	String output_directory;
 	String project_root;
+	bool failed = false;
 
 	bool _build(String &r_output);
+	void _fail(const String &p_message);
 
 	void _check_native_templates(bool p_debug);
 
@@ -23,6 +25,7 @@ protected:
 
 public:
 	String get_name() const override { return "ReactNative"; }
+	bool has_failed() const { return failed; }
 	// Files that only tools read: what a build writes beside the bundle, and
 	// the JavaScript project's own configuration, which Godot imports as JSON.
 	static bool is_tooling_file(const String &p_path, const String &p_project_root, const String &p_output_directory);

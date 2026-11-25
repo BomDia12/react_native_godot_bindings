@@ -3,6 +3,8 @@
 #include <react/renderer/core/ReactPrimitives.h>
 
 #include <atomic>
+#include <chrono>
+#include <future>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -30,14 +32,15 @@ struct RNHostRuntime {
 	~RNHostRuntime();
 };
 
-// Stops a runtime's surfaces and destroys it on a thread of its own, so the
-// main thread never waits for JavaScript. JavaScript that keeps the runtime
-// busy for more than a second is interrupted.
+// Stops a runtime's surfaces and destroys it on a thread of its own. The main
+// thread waits for it only when the game quits, and then for a bounded time.
+// JavaScript that keeps the runtime busy for more than a second is interrupted.
 class RNHostTeardown {
 	RNHostRuntime &runtime;
 	std::vector<facebook::react::SurfaceId> surfaces;
 	std::shared_ptr<RNAsyncStorageState> async_storage;
-	std::atomic<bool> finished = false;
+	std::promise<void> finishing;
+	std::future<void> finished = finishing.get_future();
 	std::thread thread;
 
 	void _run();
@@ -47,5 +50,6 @@ public:
 	RNHostTeardown(RNHostRuntime &p_runtime, std::vector<facebook::react::SurfaceId> p_surfaces, std::shared_ptr<RNAsyncStorageState> p_async_storage);
 	~RNHostTeardown();
 
-	bool is_finished() const { return finished; }
+	bool is_finished() const { return finished.wait_for(std::chrono::seconds(0)) == std::future_status::ready; }
+	bool join(std::chrono::milliseconds p_timeout);
 };

@@ -93,6 +93,9 @@ function Inventory() {
 }
 AppRegistry.registerComponent('EnemyPanel', () => EnemyPanel);
 AppRegistry.registerComponent('Inventory', () => Inventory);
+AppRegistry.registerComponent('EditorSmokeError', () => function EditorSmokeError() {
+  throw new Error('Editor smoke error');
+});
 
 global.__galleryAction = (action, value) => {
   if (action === 'switch-pointer-events') { fixture.setSwitchPointerEvents(value); }

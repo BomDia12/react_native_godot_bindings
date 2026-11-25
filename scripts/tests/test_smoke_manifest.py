@@ -85,6 +85,21 @@ class SmokeManifestTests(unittest.TestCase):
         with self.assertRaisesRegex(ManifestError, "traversal"):
             load_manifest(self.root, self.write_manifest(data))
 
+    def test_optional_editor_flag_requires_a_script(self):
+        self.assertFalse(load_manifest(self.root, self.write_manifest()).editor)
+        data = self.manifest_data()
+        data["editor"] = True
+        with self.assertRaisesRegex(ManifestError, ".gd script"):
+            load_manifest(self.root, self.write_manifest(data))
+        script = self.root / "samples/app/smoke/tests/one/tools.gd"
+        script.write_text("", encoding="utf-8")
+        data["scene"] = "res://smoke/tests/one/tools.gd"
+        data["inputs"].append("samples/app/smoke/tests/one/tools.gd")
+        self.assertTrue(load_manifest(self.root, self.write_manifest(data)).editor)
+        data["editor"] = "yes"
+        with self.assertRaisesRegex(ManifestError, "boolean"):
+            load_manifest(self.root, self.write_manifest(data))
+
     def test_rejects_missing_unknown_and_invalid_fields(self):
         missing = self.manifest_data()
         del missing["allowlist"]

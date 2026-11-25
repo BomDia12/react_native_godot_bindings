@@ -10,7 +10,10 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
+#include "core/os/os.h"
+#include "editor/doc/editor_help.h"
 #include "editor/editor_interface.h"
+#include "editor/editor_node.h"
 #include "editor/file_system/editor_file_system.h"
 #include "editor/script/script_editor_plugin.h"
 #include "editor/settings/editor_settings.h"
@@ -78,6 +81,10 @@ void ReactNativeEditorPlugin::_notification(int p_what) {
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			// Godot's command-line export exits successfully after export plugin errors.
+			if (export_plugin->has_failed() && EditorNode::is_cmdline_mode()) {
+				OS::get_singleton()->set_exit_code(EXIT_FAILURE);
+			}
 			ScriptEditor::get_singleton()->unregister_syntax_highlighter(highlighter);
 			disconnect(SNAME("resource_saved"), callable_mp(this, &ReactNativeEditorPlugin::_resource_saved));
 			EditorFileSystem *fs = EditorFileSystem::get_singleton();
@@ -118,7 +125,7 @@ void ReactNativeEditorPlugin::_generate_contracts_and_quit() {
 	if (!generated) {
 		ERR_PRINT(vformat("Generating React Native contracts failed: %s", error.describe()));
 	}
-	get_tree()->quit(generated ? 0 : 1);
+	_quit(generated ? 0 : 1);
 }
 
 // `godot --headless --editor --react-native-enable-plugins=a,b
@@ -144,7 +151,20 @@ void ReactNativeEditorPlugin::_set_plugins_and_quit() {
 	}
 	// The editor saves plugin and autoload changes on a timer that quitting skips.
 	ProjectSettings::get_singleton()->save();
-	get_tree()->quit(enabled ? 0 : 1);
+	_quit(enabled ? 0 : 1);
+}
+
+// EditorHelp's documentation thread defers work that needs EditorNode, so it has to
+// finish, and its deferred calls run, before the editor quits.
+void ReactNativeEditorPlugin::_quit(int p_exit_code) {
+	EditorHelp::get_doc_data();
+	get_tree()->connect(SNAME("process_frame"), callable_mp(this, &ReactNativeEditorPlugin::_quit_after_docs).bind(p_exit_code), CONNECT_ONE_SHOT);
+}
+
+// A stale documentation cache makes the first thread start a second one.
+void ReactNativeEditorPlugin::_quit_after_docs(int p_exit_code) {
+	EditorHelp::get_doc_data();
+	get_tree()->quit(p_exit_code);
 }
 
 void ReactNativeEditorPlugin::_update_monitored_path() {

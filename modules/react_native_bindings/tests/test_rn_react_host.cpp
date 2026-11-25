@@ -260,6 +260,45 @@ TEST_CASE("[ReactNativeBindings][ReactHost] teardown interrupts busy JavaScript 
 	CHECK(runtime.react_host == nullptr);
 }
 
+TEST_CASE("[ReactNativeBindings][ReactHost] teardown gives up on a runtime blocked in native code") {
+	RNHostRuntime runtime;
+	start_runtime(runtime, "user://rn_blocked_teardown_test.js", "globalThis.__loaded = 1;");
+	auto loaded = read_answer(*runtime.react_host, "__loaded");
+	REQUIRE(loaded.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+
+	auto blocked = std::make_shared<std::promise<void>>();
+	auto release = std::make_shared<std::promise<void>>();
+	runtime.react_host->runOnRuntimeScheduler([blocked, release](jsi::Runtime &) {
+		blocked->set_value();
+		release->get_future().wait();
+	});
+	blocked->get_future().wait();
+
+	RNHostTeardown teardown(runtime, {}, std::make_shared<RNAsyncStorageState>());
+	const auto started = std::chrono::steady_clock::now();
+	CHECK_FALSE(teardown.join(std::chrono::milliseconds(200)));
+	CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds(1));
+
+	release->set_value();
+	const auto released = std::chrono::steady_clock::now();
+	while (!teardown.is_finished()) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	CHECK(std::chrono::steady_clock::now() - released < std::chrono::seconds(10));
+}
+
+TEST_CASE("[ReactNativeBindings][ReactHost] timers beyond INT32_MAX milliseconds stay pending") {
+	RNHostRuntime runtime;
+	start_runtime(runtime, "user://rn_far_timer_test.js", "setTimeout(() => { globalThis.__fired = 1; }, 3000000000); globalThis.__loaded = 1;");
+	auto loaded = read_answer(*runtime.react_host, "__loaded");
+	REQUIRE(loaded.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	auto fired = read_answer(*runtime.react_host, "__fired");
+	REQUIRE(fired.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+	CHECK(fired.get() == -1);
+	runtime.timers->quit();
+}
+
 } // namespace TestRNReactHost
 
 void rn_force_link_react_host_tests() {}

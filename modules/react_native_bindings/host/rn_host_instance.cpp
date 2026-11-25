@@ -543,7 +543,7 @@ void RNHostInstance::start_surface(ReactNativeRootView *p_root, SurfaceId p_surf
 	LayoutConstraints constraints;
 	LayoutContext context;
 	layout_for(p_root, *application, constraints, context);
-	_on_js_thread_after_segments([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(p_root->get_surface_properties()), constraints, context] {
+	_on_js_thread_after_segments([host = runtime.react_host.get(), p_surface, key = std::string(p_root->get_application_key().utf8().get_data()), properties = rn_dynamic_from_variant(rn_initial_properties(p_root->get_surface_properties())), constraints, context] {
 		host->startSurface(p_surface, key, properties, constraints, context);
 	});
 }
@@ -705,7 +705,11 @@ bool RNHostInstance::is_finished() const {
 	return teardown && teardown->is_finished();
 }
 
-void RNHostInstance::finish() {
+bool RNHostInstance::finish(std::chrono::milliseconds p_timeout) {
+	if (!teardown->join(p_timeout)) {
+		return false;
+	}
 	teardown.reset();
 	blobs->shutdown();
+	return true;
 }

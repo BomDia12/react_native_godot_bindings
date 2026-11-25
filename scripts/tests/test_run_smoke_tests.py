@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from run_smoke_tests import SmokeResult, find_godot_binary, prepare_project_imports, run_captured, summarize
+from run_smoke_tests import SmokeResult, find_godot_binary, godot_command, prepare_project_imports, run_captured, summarize
 
 
 class RunSmokeTestsTests(unittest.TestCase):
@@ -27,6 +27,15 @@ class RunSmokeTestsTests(unittest.TestCase):
             self._create_binary(godot_dir, "godot.linuxbsd.editor.x86_64")
             dev_binary = self._create_binary(godot_dir, "godot.linuxbsd.editor.dev.x86_64")
             self.assertEqual(find_godot_binary(godot_dir), dev_binary)
+
+    def test_editor_smokes_run_their_script_inside_the_editor(self):
+        scene = mock.Mock(project_dir=Path("samples/app"), scene="res://smoke/one/Main.tscn", editor=False)
+        self.assertEqual(godot_command(Path("/repo"), Path("/godot"), scene), ["/godot", "--headless", "--path", "/repo/samples/app", "res://smoke/one/Main.tscn"])
+        editor = mock.Mock(project_dir=Path("samples/app"), scene="res://smoke/one/tools.gd", editor=True)
+        self.assertEqual(
+            godot_command(Path("/repo"), Path("/godot"), editor),
+            ["/godot", "--headless", "--editor", "--path", "/repo/samples/app", "--", "--editor-smoke=res://smoke/one/tools.gd"],
+        )
 
     def test_summary_reports_every_failure(self):
         results = [

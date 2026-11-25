@@ -25,7 +25,7 @@ window/size/viewport_height=768
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_script_example/plugin.cfg")
+enabled=PackedStringArray("res://addons/editor_smoke/plugin.cfg", "res://addons/godot_script_example/plugin.cfg")
 
 [react_native]
 

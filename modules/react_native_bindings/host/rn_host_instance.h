@@ -131,5 +131,5 @@ public:
 
 	void retire(std::vector<facebook::react::SurfaceId> p_surfaces);
 	bool is_finished() const;
-	void finish();
+	bool finish(std::chrono::milliseconds p_timeout);
 };

@@ -1,0 +1,2 @@
+# The fixture intentionally dispatches a scrollTo command with a null offset.
+^ERROR: A React Native main-thread task failed: .*$

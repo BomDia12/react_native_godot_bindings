@@ -17,6 +17,8 @@ func _init() -> void:
 	ProjectSettings.set_setting("react_native/dev_server/host", metro.host)
 	ProjectSettings.set_setting("react_native/dev_server/port", int(metro.port))
 	ProjectSettings.set_setting("react_native/dev_server/entry", metro.entry)
+	# Far below the Metro bundle's size, which developer server downloads ignore.
+	ProjectSettings.set_setting("react_native/network/http/max_body_bytes", 65536)
 
 func find_text(node: Node, prefix: String) -> RNTextControl:
 	if node is RNTextControl and node.get_text().begins_with(prefix):

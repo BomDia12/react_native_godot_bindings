@@ -74,6 +74,11 @@ sed -i '/^\[react_native\]$/a bundle/segments=PackedStringArray("consumer_segmen
 mkdir -p "$PROJECT_DIR/react_native/contracts"
 cp "$SCRIPT_DIR/consumer_contract.tres" "$PROJECT_DIR/react_native/contracts/Scoreboard.tres"
 (cd "$PROJECT_DIR/react_native" && npx react-native build-godot > "$LOG_DIR/consumer-build.log" 2>&1)
+# Contract generation and plugin toggling run the editor, which must quit cleanly.
+if grep -qE "ERROR:|A Thread object is being destroyed" "$LOG_DIR/consumer-autolink.log" "$LOG_DIR/consumer-build.log"; then
+	echo "The editor tooling runs reported errors; see $LOG_DIR/consumer-autolink.log and $LOG_DIR/consumer-build.log." >&2
+	exit 1
+fi
 if [[ ! -f "$PROJECT_DIR/react_native/components/Scoreboard.tsx" ]]; then
 	echo "The build did not generate the contract's component." >&2
 	exit 1
@@ -88,8 +93,7 @@ RN_CONSUMER_EXPECT_METRO=1 check consumer-metro "$REPO_ROOT/documentation/expect
 # JavaScript project.
 cp "$SCRIPT_DIR/consumer_export_presets.cfg" "$PROJECT_DIR/export_presets.cfg"
 "$GODOT_BINARY" --headless --path "$PROJECT_DIR" --export-pack Linux "$PACKAGE_DIR/game.pck" > "$LOG_DIR/consumer-export.log" 2>&1
-# Godot's command-line export succeeds when export plugins report errors.
-if grep -qE "completed with warnings|BUG: File queued for import" "$LOG_DIR/consumer-export.log"; then
+if grep -q "BUG: File queued for import" "$LOG_DIR/consumer-export.log"; then
 	echo "The consumer export reported problems; see $LOG_DIR/consumer-export.log." >&2
 	exit 1
 fi
@@ -98,3 +102,11 @@ set +e
 RUN_EXIT=$?
 set -e
 python3 "$SCRIPT_DIR/check_baseline_log.py" --log "$LOG_DIR/consumer-export-run.log" --allowlist "$REPO_ROOT/documentation/expected-warnings.txt" --exit-code "$RUN_EXIT" --test-id consumer
+
+# An export whose bundle doesn't build fails.
+echo 'export default (;' >> "$PROJECT_DIR/react_native/index.js"
+if "$GODOT_BINARY" --headless --path "$PROJECT_DIR" --export-pack Linux "$PACKAGE_DIR/broken.pck" > "$LOG_DIR/consumer-export-broken.log" 2>&1 \
+	|| ! grep -q "The React Native release bundle could not be built" "$LOG_DIR/consumer-export-broken.log"; then
+	echo "An export whose bundle failed to build didn't fail for that reason; see $LOG_DIR/consumer-export-broken.log." >&2
+	exit 1
+fi

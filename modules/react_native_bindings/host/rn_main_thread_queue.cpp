@@ -1,5 +1,8 @@
 #include "rn_main_thread_queue.h"
 
+#include "core/error/error_macros.h"
+#include "core/variant/variant.h"
+
 #include <algorithm>
 #include <chrono>
 
@@ -10,6 +13,18 @@ namespace {
 // one, which is the only time it waits, and never for longer than the budget.
 constexpr std::chrono::microseconds NEXT_SYNC_CALL_WAIT(200);
 constexpr std::chrono::milliseconds SYNC_CALLS_BUDGET(4);
+
+// Tasks read JavaScript values with accessors that throw, and nothing above the
+// queue catches them.
+bool run_task(const std::function<void()> &p_work) {
+	try {
+		p_work();
+		return true;
+	} catch (const std::exception &error) {
+		ERR_PRINT(vformat("A React Native main-thread task failed: %s", error.what()));
+		return false;
+	}
+}
 
 } // namespace
 
@@ -28,11 +43,7 @@ void RNMainThreadQueue::post(std::function<void()> p_work) {
 
 bool RNMainThreadQueue::run_sync(std::function<void()> p_work) {
 	if (is_main_thread()) {
-		if (is_closed()) {
-			return false;
-		}
-		p_work();
-		return true;
+		return !is_closed() && run_task(p_work);
 	}
 	auto completion = std::make_shared<std::promise<bool>>();
 	std::future<bool> completed = completion->get_future();
@@ -57,12 +68,9 @@ void RNMainThreadQueue::drain() {
 		}
 		bool answered_sync_call = false;
 		for (Task &task : pending) {
-			const bool open = !is_closed();
-			if (open) {
-				task.work();
-			}
+			const bool ran = !is_closed() && run_task(task.work);
 			if (task.completion) {
-				task.completion->set_value(open);
+				task.completion->set_value(ran);
 				answered_sync_call = true;
 			}
 		}

@@ -83,10 +83,12 @@ types and the `react-native` prop augmentations, and `types/` declares each subp
 `ReactNativeHost` is an engine singleton that runs one upstream `ReactHost`. JavaScript,
 React rendering, layout and text measurement run on its JS thread. Godot nodes and
 scene-owned resources are touched only on the main thread, which drains a task queue
-from `SceneTree.process_frame`. The main thread never waits on the JS thread. A
-synchronous TurboModule call that needs Godot blocks the JS thread until its main-thread
-task finishes; while the host shuts down, such calls fail with `E_CANCELLED`. JS timers
-use the steady clock and pause only while the runtime is suspended (see
+from `SceneTree.process_frame`. The main thread waits on the JS thread only when the game
+quits, for up to 10 s; a runtime still blocked in native code is then reported and left
+running. A synchronous TurboModule call that needs Godot blocks the JS thread until its
+main-thread task finishes; while the host shuts down, such calls fail with `E_CANCELLED`.
+A main-thread task that throws is reported as an error and skipped. JS timers use the
+steady clock and pause only while the runtime is suspended (see
 [Roots in a scene](#roots-in-a-scene)). Interval ticks that come due while JavaScript is
 busy are skipped, not queued.
 
@@ -157,7 +159,9 @@ controls, in `SubViewport`s and in other windows.
   `TextEdit`, `CheckButton` and `ProgressBar` metrics. React's default `fontSize` of 14
   still applies, as on other platforms.
 - **Initial properties.** `initial_properties` is a Dictionary passed to the component as
-  its initial props, converted like other Godot values.
+  its initial props, converted like other Godot values. A property holding a value that
+  can't be converted, such as an Object, an integer beyond `Number.MAX_SAFE_INTEGER` or a
+  key that isn't a string, is reported as an error and left out.
 - **Editor preview.** With `editor_preview` off, the editor doesn't run the root and draws
   its application key instead. Running games ignore it.
 
@@ -228,8 +232,9 @@ With `react_native/dev_server/enabled` on, each runtime downloads its bundle fro
 service, caches it under `user://react_native/cache/downloads/`, and loads it under its
 Metro URL; `ResourceLoader` resolves that URL to the cached copy. Surfaces that start
 meanwhile wait for the bundle. When the download fails, the runtime loads
-`react_native/bundle/path`. Export templates ignore the setting. The bundle must stay
-within `react_native/network/http/max_body_bytes`.
+`react_native/bundle/path`. Export templates ignore the setting. Bundle and segment
+downloads aren't limited by `react_native/network/http/max_body_bytes` or
+`max_buffered_bytes`.
 
 Upstream `ReactHost` stays out of dev mode, because its dev mode asks Metro for an Android
 bundle and reloads the runtime in place. Godot instead reuses upstream's pieces:
