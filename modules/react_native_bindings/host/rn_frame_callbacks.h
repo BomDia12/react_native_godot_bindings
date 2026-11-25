@@ -27,6 +27,8 @@ private:
 	RunOnJS run_on_js;
 	RNFrameClock clock;
 	std::atomic<bool> frame_pending = false;
+	// Whether a callback waits, which is the only time frames reach JavaScript.
+	std::atomic<bool> requested = false;
 	// Used on the JS thread.
 	std::weak_ptr<Queue> queue;
 

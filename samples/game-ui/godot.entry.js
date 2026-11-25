@@ -76,6 +76,8 @@ function GameInventory({rootTag}) {
   useEffect(() => {
     actions.set(rootTag, {
       command, queued, refresh, requestImage: setRequested,
+      parallelFetch: (base, count) => Promise.all(Array.from({length: count}, () => fetch(base + '/slow?seconds=1').then(response => response.text())))
+        .then(() => {observations.parallelFetch = true;}).catch(error => {observations.networkError = error.message;}),
       testAlert: (title = 'Inventory alert') => alert(title, 'Local policy', [{text: 'OK', onPress: () => record('inventory-alert-button')}], {cancelable: true}).then(() => record('alert-settled')).catch(error => {observations.alertError = error.code;}),
       ambientAlert: () => Alert.alert('Unattributed', 'Godot handler', [{text: 'OK', onPress: () => record('ambient-alert-button')}]),
       staleAlert: () => savedAlert?.(),

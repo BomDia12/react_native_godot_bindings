@@ -9,8 +9,6 @@
 
 class RNMainThreadQueue;
 
-bool rn_normalize_image_source(const facebook::react::ImageSource &p_source, RNImageSource &r_source, RNError &r_error);
-
 // The loads behind upstream image requests. RNImageService belongs to the main
 // thread, so every load and cancellation runs there.
 class RNImageRequests : public std::enable_shared_from_this<RNImageRequests> {
@@ -26,7 +24,8 @@ public:
 	};
 
 private:
-	std::shared_ptr<RNImageService> service;
+	// Weak, so the last owner of the service is the host, on the main thread.
+	std::weak_ptr<RNImageService> service;
 	std::shared_ptr<RNMainThreadQueue> main_thread;
 
 	void _on_main_thread(std::function<void()> p_work);

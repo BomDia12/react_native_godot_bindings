@@ -144,16 +144,30 @@ void RNHTTPService::settle(uint64_t p_request, RNHTTPResponse p_response) {
 	}
 }
 // HTTPRequest's cancel_request joins its thread, which blocks reading the
-// response, so a request still in flight drains on that thread instead and its
-// completion frees the slot.
+// response, so the node of a request still in flight leaves its slot and frees
+// itself once the server answers. The slot, its reservation and the request
+// are released at once.
 void RNHTTPService::quarantine(size_t p_slot, bool p_in_flight) {
 	Slot &slot = slots[p_slot];
 	if (slot.state == State::DRAINING) {
 		return;
 	}
 	slot.state = State::DRAINING;
-	if (!p_in_flight) {
-		callable_mp(this, &RNHTTPService::_drained).call_deferred(int(p_slot), int64_t(slot.sequence));
+	HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(slot.node));
+	if (p_in_flight && node) {
+		node->disconnect("request_completed", slot.callback);
+		node->connect("request_completed", callable_mp(this, &RNHTTPService::_retired_completed).bind(int64_t(slot.node)), CONNECT_ONE_SHOT | CONNECT_DEFERRED);
+		retired.insert(int64_t(slot.node));
+		slot.node = ObjectID();
+		slot.callback = Callable();
+	}
+	callable_mp(this, &RNHTTPService::_drained).call_deferred(int(p_slot), int64_t(slot.sequence));
+}
+void RNHTTPService::_retired_completed(int, int, const PackedStringArray &, const PackedByteArray &, int64_t p_node) {
+	retired.erase(p_node);
+	if (Node *node = Object::cast_to<Node>(ObjectDB::get_instance(ObjectID(uint64_t(p_node))))) {
+		remove_child(node);
+		memdelete(node);
 	}
 }
 void RNHTTPService::_drained(int p_slot, int64_t p_sequence) {
@@ -316,11 +330,7 @@ void RNHTTPService::_completed(int p_result, int p_status, const PackedStringArr
 		return;
 	}
 	Slot &slot = slots[p_slot];
-	if (slot.sequence != uint64_t(p_sequence)) {
-		return;
-	}
-	if (slot.state == State::DRAINING) {
-		callable_mp(this, &RNHTTPService::_drained).call_deferred(p_slot, p_sequence);
+	if (slot.sequence != uint64_t(p_sequence) || slot.state != State::LEASED) {
 		return;
 	}
 	auto found = requests.find(slot.request);
@@ -419,6 +429,14 @@ void RNHTTPService::shutdown() {
 		slot.callback = Callable();
 		slot.state = State::IDLE;
 	}
+	for (int64_t id : retired) {
+		if (HTTPRequest *node = Object::cast_to<HTTPRequest>(ObjectDB::get_instance(ObjectID(uint64_t(id))))) {
+			node->cancel_request();
+			remove_child(node);
+			memdelete(node);
+		}
+	}
+	retired.clear();
 	requests.clear();
 	waiting.clear();
 	buffered = 0;
@@ -438,7 +456,7 @@ Dictionary RNHTTPService::stats() const {
 	}
 	value["active"] = active;
 	value["idle"] = idle;
-	value["draining"] = draining;
+	value["draining"] = draining + int(retired.size());
 	value["queued"] = int(waiting.size());
 	value["bufferedBytes"] = int64_t(buffered);
 	value["started"] = int64_t(started);

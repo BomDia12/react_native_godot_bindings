@@ -1,7 +1,5 @@
 #include "rn_texture_sources.h"
 
-#include "../native_modules/rn_image_manager.h"
-
 using namespace facebook::react;
 
 RNTextureSources::RNTextureSources(std::shared_ptr<RNImageService> p_service, int p_slots, Applied p_applied, Failed p_failed) :

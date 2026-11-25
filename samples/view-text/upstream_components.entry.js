@@ -79,7 +79,7 @@ function Touchables() {
           pressRetentionOffset={60}
           onPressIn={record('without:pressIn')}
           onPress={record('without:press')}>
-          <View style={styles.box} />
+          <View style={styles.roundedBox} />
         </TouchableWithoutFeedback>
       </View>
     </View>
@@ -192,6 +192,8 @@ const styles = StyleSheet.create({
   column: {padding: 20, gap: 20},
   row: {flexDirection: 'row'},
   box: {width: 100, height: 60, backgroundColor: '#336699'},
+  // Its own rounded clip doesn't cut the hitSlop around it.
+  roundedBox: {width: 100, height: 60, borderRadius: 20, overflow: 'hidden', backgroundColor: '#336699'},
   fillBlue: {flex: 1, backgroundColor: '#0000ff'},
   slopRow: {paddingLeft: 100},
   list: {width: 300, height: 300},

@@ -85,6 +85,8 @@ func _run() -> void:
 
 	# Unmounting the right root cancels its contact only.
 	remove_child(right)
+	if not await wait_until(func(): return await has("right", "touchCancel") and await has("right", "pointerCancel"), "the right root's contact to be cancelled"):
+		return
 	right.queue_free()
 	drag(0, left_point + Vector2(10, 0), Vector2(10, 0))
 	if not await wait_until(func(): return await has("left", "touchMove"), "the left root's touch move"):

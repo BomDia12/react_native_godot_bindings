@@ -98,4 +98,10 @@ public:
 	uint64_t used_bytes() const { return budget->used; }
 	void clear_cache();
 };
+namespace facebook::react {
+class ImageSource;
+} // namespace facebook::react
+
+// Normalizes an upstream image source, its URI and headers, for the service.
+bool rn_normalize_image_source(const facebook::react::ImageSource &p_source, RNImageSource &r_source, RNError &r_error);
 void rn_register_image_settings();

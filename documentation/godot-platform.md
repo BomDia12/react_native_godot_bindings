@@ -386,8 +386,9 @@ divided by the `scale` of the source entry it came from. A source replaced or un
 it loads reports nothing and cancels its load. Every caller shares one decoded texture per URI
 and headers, whatever scale it asks for. HTTP images use the shared bounded HTTPRequest pool.
 Godot's threaded HTTPRequest can only stop a request by waiting for its response, so a
-cancelled request drains on its own thread without blocking the game and leaves the pool's
-active count at once. Prefetch cannot be
+cancelled request's node leaves the pool: the request settles as cancelled and its slot and
+memory reservation are free for other requests at once, while the node finishes on its own
+thread and frees itself. `get_service_stats().http.draining` counts these nodes. Prefetch cannot be
 aborted, as in upstream's C++ image loader. The native image service requires the exact
 scheme, forward slashes, a nonempty relative path, and no `..` segment or embedded NUL.
 Percent characters remain literal. Missing staged files should be fixed by rebuilding
@@ -650,9 +651,10 @@ replaces the global after upstream installs it. A frame clock decides on the mai
 per Godot frame, whether the frame is a display frame: every frame when V-Sync paces the loop
 (`enabled` or `adaptive`, in a window that can draw), and otherwise, as headless or with
 mailbox or disabled V-Sync, frames that keep the screen's refresh rate on average (60 Hz when
-Godot can't read it), resuming from the current time after a stall. On a display frame one
-task runs, on the JS thread, the callbacks registered before it started, all with one
-timestamp in `performance.now()`'s time base. Callbacks registered during it wait for the next
+Godot can't read it), resuming from the current time after a stall. On a display frame
+while callbacks wait, one task runs, on the JS thread, the callbacks registered before it
+started, all with the time it started in `performance.now()`'s time base. Without waiting
+callbacks, frames don't wake the JS thread. Callbacks registered during it wait for the next
 frame, and a busy JS thread skips frames instead of running a burst of them. A throwing
 callback doesn't stop the others; its error reaches the host as a timer's error does.
 

@@ -10,6 +10,8 @@
 #include "core/os/thread.h"
 #include "scene/resources/image_texture.h"
 
+#include <react/renderer/imagemanager/primitives.h>
+
 namespace {
 constexpr uint64_t WORKSPACE_BYTES = 32 * 1024 * 1024;
 RNImageResult failure(const String &p_code, const String &p_message) {
@@ -414,6 +416,18 @@ void RNImageService::clear_cache() {
 	live.clear();
 	cached_bytes = 0;
 }
+bool rn_normalize_image_source(const facebook::react::ImageSource &p_source, RNImageSource &r_source, RNError &r_error) {
+	Dictionary source;
+	source["uri"] = String::utf8(p_source.uri.c_str());
+	source["scale"] = p_source.scale;
+	Dictionary headers;
+	for (const auto &[name, value] : p_source.headers) {
+		headers[String::utf8(name.c_str())] = String::utf8(value.c_str());
+	}
+	source["headers"] = headers;
+	return RNImageService::normalize(source, r_source, r_error);
+}
+
 void rn_register_image_settings() {
 	for (const auto &entry : { std::pair<const char *, int64_t>("cache_bytes", 64 * 1024 * 1024), { "max_encoded_bytes", 8 * 1024 * 1024 }, { "max_decoded_bytes", 64 * 1024 * 1024 }, { "total_bytes", 256 * 1024 * 1024 }, { "max_concurrent_decodes", 2 } }) {
 		GLOBAL_DEF(PropertyInfo(Variant::INT, String("react_native/images/") + entry.first, PROPERTY_HINT_RANGE, String(entry.first) == "max_concurrent_decodes" ? "1,32,1" : "0,2147483647,1"), entry.second);
