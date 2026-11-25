@@ -180,14 +180,14 @@ jobs:
 
       # Saved even when the build or a later step fails, so the next run builds only
       # what changed. A failed build's partial cache goes under a run-specific key:
-      # later runs still restore it through restore-keys, but never hit it exactly
-      # and skip saving the complete one.
+      # later runs still restore it by prefix, but never hit it exactly and skip
+      # saving the complete one.
       - name: Save SCons cache
         if: ${{ !cancelled() && steps.build.outcome != 'skipped' && steps.scons-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
           path: .scons-cache
-          key: ${{ steps.build.outcome == 'success' && steps.scons-cache.outputs.cache-primary-key || format('{0}-failed-{1}', steps.scons-cache.outputs.cache-primary-key, github.run_id) }}
+          key: ${{ steps.build.outcome == 'success' && steps.scons-cache.outputs.cache-primary-key || format('{0}-failed-{1}-{2}', steps.scons-cache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
 
       - name: Run module unit tests
         run: |
