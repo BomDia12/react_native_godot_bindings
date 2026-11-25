@@ -75,7 +75,5 @@ maps, `.dependencies.json`, `.assets-manifest.json` and the JavaScript project's
 same release bundle; debug JavaScript in a game the editor runs. Export templates ignore
 the developer server.
 
-A failed build is reported as an export error, and the export then has no bundle. Godot
-doesn't let an export plugin stop an export: the export dialog shows it as failed, but
-`--export-release`, `--export-debug` and `--export-pack` print "completed with warnings"
-and exit successfully, so scripts that export should treat that message as a failure.
+A failed build or a missing segment is reported as an export error. Command-line exports
+then exit with a non-zero status.

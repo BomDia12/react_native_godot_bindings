@@ -88,8 +88,7 @@ RN_CONSUMER_EXPECT_METRO=1 check consumer-metro "$REPO_ROOT/documentation/expect
 # JavaScript project.
 cp "$SCRIPT_DIR/consumer_export_presets.cfg" "$PROJECT_DIR/export_presets.cfg"
 "$GODOT_BINARY" --headless --path "$PROJECT_DIR" --export-pack Linux "$PACKAGE_DIR/game.pck" > "$LOG_DIR/consumer-export.log" 2>&1
-# Godot's command-line export succeeds when export plugins report errors.
-if grep -qE "completed with warnings|BUG: File queued for import" "$LOG_DIR/consumer-export.log"; then
+if grep -q "BUG: File queued for import" "$LOG_DIR/consumer-export.log"; then
 	echo "The consumer export reported problems; see $LOG_DIR/consumer-export.log." >&2
 	exit 1
 fi
@@ -98,3 +97,10 @@ set +e
 RUN_EXIT=$?
 set -e
 python3 "$SCRIPT_DIR/check_baseline_log.py" --log "$LOG_DIR/consumer-export-run.log" --allowlist "$REPO_ROOT/documentation/expected-warnings.txt" --exit-code "$RUN_EXIT" --test-id consumer
+
+# An export whose bundle doesn't build fails.
+echo 'export default (;' >> "$PROJECT_DIR/react_native/index.js"
+if "$GODOT_BINARY" --headless --path "$PROJECT_DIR" --export-pack Linux "$PACKAGE_DIR/broken.pck" > "$LOG_DIR/consumer-export-broken.log" 2>&1; then
+	echo "An export whose bundle failed to build exited successfully; see $LOG_DIR/consumer-export-broken.log." >&2
+	exit 1
+fi

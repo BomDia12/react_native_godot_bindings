@@ -10,7 +10,9 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
+#include "core/os/os.h"
 #include "editor/editor_interface.h"
+#include "editor/editor_node.h"
 #include "editor/file_system/editor_file_system.h"
 #include "editor/script/script_editor_plugin.h"
 #include "editor/settings/editor_settings.h"
@@ -78,6 +80,10 @@ void ReactNativeEditorPlugin::_notification(int p_what) {
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			// Godot's command-line export exits successfully after export plugin errors.
+			if (export_plugin->has_failed() && EditorNode::is_cmdline_mode()) {
+				OS::get_singleton()->set_exit_code(EXIT_FAILURE);
+			}
 			ScriptEditor::get_singleton()->unregister_syntax_highlighter(highlighter);
 			disconnect(SNAME("resource_saved"), callable_mp(this, &ReactNativeEditorPlugin::_resource_saved));
 			EditorFileSystem *fs = EditorFileSystem::get_singleton();

@@ -53,7 +53,16 @@ bool RNExportPlugin::_build(String &r_output) {
 	return started == OK && exit_code == 0;
 }
 
+void RNExportPlugin::_fail(const String &p_message) {
+	failed = true;
+	ERR_PRINT(p_message);
+	if (get_export_platform().is_valid()) {
+		get_export_platform()->add_message(EditorExportPlatform::EXPORT_MESSAGE_ERROR, "React Native", p_message);
+	}
+}
+
 void RNExportPlugin::_export_begin(const HashSet<String> &p_features, bool p_debug, const String &p_path, int p_flags) {
+	failed = false;
 	const String bundle = GLOBAL_GET("react_native/bundle/path");
 	output_directory = bundle.get_base_dir();
 	project_root = GLOBAL_GET("react_native/project/root");
@@ -62,11 +71,7 @@ void RNExportPlugin::_export_begin(const HashSet<String> &p_features, bool p_deb
 	}
 	String output;
 	if (!_build(output)) {
-		const String message = vformat("The React Native release bundle could not be built:\n%s", output);
-		ERR_PRINT(message);
-		if (get_export_platform().is_valid()) {
-			get_export_platform()->add_message(EditorExportPlatform::EXPORT_MESSAGE_ERROR, "React Native", message);
-		}
+		_fail(vformat("The React Native release bundle could not be built:\n%s", output));
 		return;
 	}
 	// Export collects its files after this returns, so new assets must be
@@ -86,11 +91,7 @@ void RNExportPlugin::_export_begin(const HashSet<String> &p_features, bool p_deb
 	for (const String &entry : PackedStringArray(GLOBAL_GET("react_native/bundle/segments"))) {
 		const String segment = output_directory.path_join(entry.get_file() + ".segment.js");
 		if (!FileAccess::exists(segment)) {
-			const String message = vformat("The React Native segment %s was not built.", segment);
-			ERR_PRINT(message);
-			if (get_export_platform().is_valid()) {
-				get_export_platform()->add_message(EditorExportPlatform::EXPORT_MESSAGE_ERROR, "React Native", message);
-			}
+			_fail(vformat("The React Native segment %s was not built.", segment));
 			continue;
 		}
 		add_file(segment, FileAccess::get_file_as_bytes(segment), false);
