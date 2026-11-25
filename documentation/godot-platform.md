@@ -283,8 +283,10 @@ if await ReactNativeHost.load_segment("res://dist/shop.segment.js"):
 
 Segments that loaded are evaluated again, in the order they first loaded, after every hard
 reload. A segment that fails reports through `get_last_error()` and the debugger, doesn't
-load again after a reload, and the segments after it still load. Exports add the startup
-segments with the bundle, and report a segment that wasn't built.
+load again after a reload, and the segments after it still load. A segment may install its
+own `ErrorUtils` global handler, and one that chains to the previous handler still passes
+later errors on to `get_last_error()` and the debugger. Exports add the startup segments with
+the bundle, and report a segment that wasn't built.
 
 A `.js` file is not a resource, so exports leave out other segments, such as the ones
 `load_segment` loads. To ship them, add `*.segment.js` to the "Filters to export

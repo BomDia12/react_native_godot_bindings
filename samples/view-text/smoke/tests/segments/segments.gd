@@ -4,7 +4,8 @@ extends Node
 # before roots start, ReactNativeHost.load_segment adds another at runtime,
 # and both are evaluated again, in order, after a hard reload. A segment whose
 # code throws, or that needs a module its bundle lacks, fails its load, reports
-# its own error even after another one failed, and doesn't load again.
+# its own error even after another one failed, and doesn't load again. A
+# segment that wraps the error handler still lets later errors reach the host.
 
 const WAIT_MSEC := 20000
 const BUNDLE := "res://dist/segments/index.bundle.js"
@@ -88,8 +89,20 @@ func _run() -> void:
 	unknown_module.close()
 	if not await segment_fails("user://unknown_module.segment.js", "Requiring unknown module"):
 		return
-	if await js("typeof ErrorUtils.getGlobalHandler() === 'function' && ErrorUtils.getGlobalHandler().name !== 'handleSegmentError'") != true:
+	if await js("typeof ErrorUtils.getGlobalHandler() === 'function' && !ErrorUtils.getGlobalHandler().name.includes('handleSegmentError')") != true:
 		fail("a failed segment left its error handler installed")
+		return
+	var wrapping := FileAccess.open("user://wrapping_handler.segment.js", FileAccess.WRITE)
+	wrapping.store_string("const previous = ErrorUtils.getGlobalHandler();\nErrorUtils.setGlobalHandler((error, isFatal) => { globalThis.__wrapped = true; previous(error, isFatal); });\n")
+	wrapping.close()
+	if not await ReactNativeHost.load_segment("user://wrapping_handler.segment.js"):
+		fail("a segment wrapping the error handler reported failure")
+		return
+	await js("ErrorUtils.reportFatalError(new Error('Godot segment wrapped handler'))")
+	if not await wait_until(func(): return ReactNativeHost.get_last_error().contains("Godot segment wrapped handler"), "an error after a segment wrapped the handler"):
+		return
+	if await js("globalThis.__wrapped") != true:
+		fail("the segment's error handler did not run")
 		return
 
 	var generation := ReactNativeHost.get_generation()

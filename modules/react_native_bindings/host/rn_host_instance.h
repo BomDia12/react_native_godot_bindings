@@ -88,7 +88,11 @@ private:
 	String bundle_fingerprint;
 	bool script_loaded = false;
 	std::vector<Segment> waiting_segments;
-	std::vector<std::function<void()>> waiting_surface_work;
+	struct SurfaceWork {
+		std::function<void()> task;
+		facebook::react::SchedulerPriority priority;
+	};
+	std::vector<SurfaceWork> waiting_surface_work;
 	RNHostRuntime runtime;
 	std::unique_ptr<RNHostTeardown> teardown;
 

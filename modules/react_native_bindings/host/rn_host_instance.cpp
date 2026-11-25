@@ -192,20 +192,35 @@ String js_error_text(const jsi::JSError &p_error) {
 // Metro hands what a module throws to ErrorUtils instead of rethrowing it, and
 // upstream reports only a runtime's first fatal error. A handler of its own
 // keeps a failure with the segment that caused it, and a broken segment from
-// hiding the game's later errors. A handler the segment installs stays in place.
+// hiding the game's later errors. A handler the segment installs stays in place,
+// and ours forwards to the previous one once the segment has run, so a handler
+// that chains to it still reaches upstream.
+struct SegmentEvaluation {
+	bool running = true;
+	String thrown;
+};
+
 String evaluate_segment(jsi::Runtime &p_runtime, const std::shared_ptr<const jsi::Buffer> &p_script, const std::string &p_source_url) {
-	auto thrown = std::make_shared<String>();
+	auto evaluation = std::make_shared<SegmentEvaluation>();
 	try {
 		const jsi::Object error_utils = p_runtime.global().getPropertyAsObject(p_runtime, "ErrorUtils");
 		const jsi::Function get_handler = error_utils.getPropertyAsFunction(p_runtime, "getGlobalHandler");
 		const jsi::Function set_handler = error_utils.getPropertyAsFunction(p_runtime, "setGlobalHandler");
 		const jsi::Value previous = get_handler.call(p_runtime);
-		const jsi::Function handler = jsi::Function::createFromHostFunction(p_runtime, jsi::PropNameID::forAscii(p_runtime, "handleSegmentError"), 2, [thrown](jsi::Runtime &p_handler_runtime, const jsi::Value &, const jsi::Value *p_arguments, size_t) {
-			*thrown = js_error_text(jsi::JSError(p_handler_runtime, jsi::Value(p_handler_runtime, p_arguments[0])));
+		const jsi::Function handle_error = jsi::Function::createFromHostFunction(p_runtime, jsi::PropNameID::forAscii(p_runtime, "handleSegmentError"), 3, [evaluation](jsi::Runtime &p_handler_runtime, const jsi::Value &, const jsi::Value *p_arguments, size_t p_count) {
+			if (!evaluation->running) {
+				return p_arguments[0].asObject(p_handler_runtime).asFunction(p_handler_runtime).call(p_handler_runtime, p_arguments + 1, p_count - 1);
+			}
+			jsi::Value error = p_count > 1 ? jsi::Value(p_handler_runtime, p_arguments[1]) : jsi::Value::undefined();
+			evaluation->thrown = js_error_text(jsi::JSError(p_handler_runtime, std::move(error)));
 			return jsi::Value::undefined();
 		});
-		const auto restore_handler = [&] {
-			if (jsi::Value::strictEquals(p_runtime, get_handler.call(p_runtime), jsi::Value(p_runtime, handler))) {
+		// The previous handler is bound in JS instead of captured, since a
+		// jsi::Value a host function captures can outlive its runtime.
+		const jsi::Value handler = handle_error.getPropertyAsFunction(p_runtime, "bind").callWithThis(p_runtime, handle_error, jsi::Value::undefined(), previous);
+		const auto finish = [&] {
+			evaluation->running = false;
+			if (jsi::Value::strictEquals(p_runtime, get_handler.call(p_runtime), handler)) {
 				set_handler.call(p_runtime, previous);
 			}
 		};
@@ -213,16 +228,16 @@ String evaluate_segment(jsi::Runtime &p_runtime, const std::shared_ptr<const jsi
 		try {
 			p_runtime.evaluateJavaScript(p_script, p_source_url);
 		} catch (...) {
-			restore_handler();
+			finish();
 			throw;
 		}
-		restore_handler();
+		finish();
 	} catch (const jsi::JSError &p_error) {
 		return js_error_text(p_error);
 	} catch (const std::exception &p_error) {
 		return String::utf8(p_error.what());
 	}
-	return *thrown;
+	return evaluation->thrown;
 }
 
 String processed_error(const JsErrorHandler::ProcessedError &p_error) {
@@ -451,8 +466,8 @@ void RNHostInstance::_bundle_loaded(const std::vector<Segment> &p_startup) {
 		_evaluate_segment(segment);
 	}
 	waiting_segments.clear();
-	for (const std::function<void()> &work : waiting_surface_work) {
-		work();
+	for (SurfaceWork &work : waiting_surface_work) {
+		_on_js_thread(std::move(work.task), work.priority);
 	}
 	waiting_surface_work.clear();
 }
@@ -520,7 +535,7 @@ void RNHostInstance::_on_js_thread_after_segments(std::function<void()> p_task, 
 		_on_js_thread(std::move(p_task), p_priority);
 		return;
 	}
-	waiting_surface_work.push_back([this, task = std::move(p_task), p_priority] { _on_js_thread(task, p_priority); });
+	waiting_surface_work.push_back({ std::move(p_task), p_priority });
 }
 
 void RNHostInstance::start_surface(ReactNativeRootView *p_root, SurfaceId p_surface) {
