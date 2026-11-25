@@ -6,6 +6,15 @@ on:
       - main
       - feature/phase8-*
       - feature/phase9-*
+  # Pull requests can only restore caches saved on main, and GitHub evicts caches
+  # that go unused for 7 days.
+  schedule:
+    - cron: "0 6 */3 * *"
+  workflow_dispatch:
+
+concurrency:
+  group: linux-baseline-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

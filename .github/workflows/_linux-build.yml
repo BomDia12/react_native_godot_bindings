@@ -18,8 +18,6 @@ jobs:
     env:
       CC: gcc-13
       CXX: g++-13
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1G
     steps:
       - uses: actions/checkout@v6
         with:
@@ -65,8 +63,6 @@ jobs:
         with:
           path: modules/react_native_bindings/engines/build_release
           key: hermes-${{ runner.os }}-gcc13-${{ env.HERMES_COMMIT }}-${{ hashFiles('scripts/build_hermes.sh', 'baseline.env') }}
-          restore-keys: |
-            hermes-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', '.gitmodules', 'scripts/build_hermes.sh') }}
 
       - name: Check Hermes libraries
         id: hermes-libraries
@@ -78,16 +74,14 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Restore compiler caches
-        id: compiler-cache
+      - name: Restore SCons cache
+        id: scons-cache
         uses: actions/cache/restore@v5
         with:
-          path: |
-            .scons-cache
-            .ccache
-          key: compiler-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'requirements-ci.txt', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/config.py', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'samples/libraries/react-native-godot-example/godot/**', 'samples/libraries/react-native-godot-example/specs/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/react_native_sources.py', 'modules/react_native_bindings/react_platform/**', 'modules/react_native_bindings/generated/**', 'modules/react_native_bindings/host/**', 'modules/react_native_bindings/turbomodules/**', '.github/workflows/_linux-build.yml') }}
+          path: .scons-cache
+          key: scons-${{ runner.os }}-gcc13-${{ hashFiles('baseline.env', 'requirements-ci.txt', 'scripts/build_godot.sh', 'modules/react_native_bindings/SCsub', 'modules/react_native_bindings/config.py', 'modules/react_native_bindings/*.cpp', 'modules/react_native_bindings/*.h', 'modules/react_native_bindings/components/**', 'modules/react_native_bindings/editor/**', 'samples/libraries/react-native-godot-example/godot/**', 'samples/libraries/react-native-godot-example/specs/**', 'modules/react_native_bindings/input/**', 'modules/react_native_bindings/interop/**', 'modules/react_native_bindings/mounting/**', 'modules/react_native_bindings/native_modules/**', 'modules/react_native_bindings/root_view/**', 'modules/react_native_bindings/singletons/**', 'modules/react_native_bindings/tests/**', 'modules/react_native_bindings/react_native_sources.py', 'modules/react_native_bindings/react_platform/**', 'modules/react_native_bindings/generated/**', 'modules/react_native_bindings/host/**', 'modules/react_native_bindings/turbomodules/**', '.github/workflows/_linux-build.yml') }}
           restore-keys: |
-            compiler-${{ runner.os }}-gcc13-
+            scons-${{ runner.os }}-gcc13-
 
       - name: Install native toolchain
         timeout-minutes: 15
@@ -101,7 +95,7 @@ jobs:
             -o Acquire::ForceIPv4=true
           )
           sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install --yes ccache clang-format cmake gcc-13 g++-13 llvm libicu-dev libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
+          sudo apt-get "${APT_OPTIONS[@]}" install --yes clang-format cmake gcc-13 g++-13 llvm libicu-dev libreadline-dev ninja-build zip xvfb xauth libgl1-mesa-dri
           python -m pip install --requirement requirements-ci.txt
 
       - name: Restore Boost headers
@@ -155,14 +149,10 @@ jobs:
         env:
           RN_AUTOLINKING: samples/view-text/node_modules/.cache/react-native-godot/autolinking/autolinking.json
         run: |
-          ccache --zero-stats
           set -o pipefail
-          scripts/build_godot.sh -j2 \
-            cpp_compiler_launcher=ccache \
-            c_compiler_launcher=ccache \
+          scripts/build_godot.sh -j"$(nproc)" \
             cache_path=${{ github.workspace }}/.scons-cache \
             cache_limit=6 \
-            import_env_vars=CCACHE_DIR,CCACHE_MAXSIZE \
             module_mono_enabled=no \
             module_openxr_enabled=no \
             module_webxr_enabled=no \
@@ -174,19 +164,27 @@ jobs:
             module_mobile_vr_enabled=no \
             2>&1 | tee godot-build.log
 
-      - name: Show compiler cache statistics
-        if: always()
-        run: ccache --show-stats
+      - name: Summarize SCons cache use
+        if: always() && hashFiles('godot-build.log') != ''
+        env:
+          MATCHED_KEY: ${{ steps.scons-cache.outputs.cache-matched-key }}
+        run: |
+          {
+            echo "SCons cache restored from: ${MATCHED_KEY:-nothing}"
+            echo
+            echo "Objects retrieved from the cache: $(grep -c '^Retrieved ' godot-build.log || true)"
+            echo
+            echo "Files compiled: $(grep -c 'Compiling ' godot-build.log || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Saved even when a later step fails, so the next run builds only what changed.
-      - name: Save compiler caches
-        if: always() && steps.compiler-cache.outputs.cache-hit != 'true'
+      # A cancelled run would store a partial cache under a key later runs hit exactly.
+      - name: Save SCons cache
+        if: ${{ !cancelled() && steps.scons-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
-          path: |
-            .scons-cache
-            .ccache
-          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+          path: .scons-cache
+          key: ${{ steps.scons-cache.outputs.cache-primary-key }}
 
       - name: Run module unit tests
         run: |

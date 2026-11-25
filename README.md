@@ -160,3 +160,9 @@ Linux archive contains the Godot editor executable, `libhermesvm.so`, and `libjs
 with a separate SHA-256 checksum asset. The same archive is also published as
 `react-native-godot-linux-x86_64-<commit>.zip`, which later prereleases keep, so that the
 `react-native-godot.tgz` of every commit can still download its editor.
+
+CI restores the SCons, Hermes and pinned-source caches that runs on `main` save. Pull
+requests can also restore the caches their own earlier runs saved, and closing a pull
+request deletes them. A scheduled baseline run every three days keeps the `main` caches
+from expiring, and the run summary reports how many objects the build retrieved from the
+SCons cache.
